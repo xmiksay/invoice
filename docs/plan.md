@@ -31,12 +31,13 @@ no OAuth, no stock/task/cost-center links). Module layout follows the infra
 
 ## Phases
 
-Each phase is its own branch + PR into `master`. Phase 1 is split into five PRs:
+Each phase is its own branch + PR into `master`. Phase 1 is split into six PRs:
 - 1a settings + contacts + ARES (done)
 - 1b document core: `documents` table, invoice lines (item / text / subtotal with collapse, % discount), VAT recap + rounding, ČNB rates, issue (numbering, snapshots), cancel, payments, counter guard
 - 1c proforma → DDPP (auto on payment) → final invoice settlement, credit notes, catalog (items + groups)
 - 1d PDF via mdcast + design dir + QR + archive on issue
-- 1e received invoices + imports (PDF + metadata, ISDOC)
+- 1e received documents (all four types, VAT recap only) + original PDF upload + manual import of issued documents + categories + custom fields
+- 1f bulk ISDOC import (`.isdoc`/`.isdocx`, zip-in-zip, preview → confirm)
 
 ### Phase 1 — core
 Settings, contacts + ARES, all document types incl. DDPP and proforma settlement,
@@ -69,6 +70,13 @@ PDF decisions (1d):
 - Issuing fails (nothing changes) when mdcast is unavailable; an auto-issued DDPP does not block the payment — its PDF is rendered right after the payment, or on first download.
 - SPAYD QR only on invoices and proformas paid by bank transfer with an IBAN and a positive payable amount (any currency).
 - `INVOICE__MDCAST_URL` defaults to `https://mdcast.nexial.cz`.
+
+Received & import decisions (1e/1f):
+- Received documents mirror the issued types (invoice, credit note, proforma, DDPP), each with its own internal number series; no draft — saved = recorded, editable and deletable at any time. Links between a received proforma, its DDPP and the final invoice are informational only (amounts as on the supplier's documents).
+- Received metadata: supplier number, received date (ČNB rate date), VAT deductible flag, category, note, custom fields. Original PDF optional, can be uploaded/replaced later.
+- Categories: one list with kind expense/income. Custom fields defined in Settings (text/number/date/bool/select, for issued/received/both), stored in `custom_fields jsonb`.
+- Manual import of issued documents: any of the four types, full line editor with its own number, issued without number allocation or PDF render; the original PDF can be uploaded. Imported documents never get our rendered PDF.
+- ISDOC (1f): direction by the supplier IČO vs. company IČO; lines stored, recap/totals taken verbatim from the ISDOC; preview → confirm; duplicates skipped; "mark as paid" option (payment of the full amount on the due date, default on).
 
 ### Phase 2 — interchange
 ISDOC export, CSV/XLSX bulk import (fixed documented template, sample downloadable
