@@ -1,6 +1,11 @@
-//! Documents: issued invoices (1b) — lines, VAT recap, issue, cancel, payments.
+//! Documents: invoices, proformas, DDPPs, credit notes — lines, VAT recap,
+//! issue, cancel, payments, advance settlement.
 
+pub mod advance;
 pub mod compute;
+pub mod credit;
+pub mod ddpp;
+pub mod defaults;
 pub mod entity;
 pub mod handlers;
 pub mod line;
@@ -29,6 +34,8 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/cancel", post(actions::cancel))
         .route("/{id}/mark-sent", post(actions::mark_sent))
         .route("/{id}/internal-note", put(actions::internal_note))
+        .route("/{id}/settle", post(actions::settle))
+        .route("/{id}/credit-note", post(actions::credit_note))
         .route("/{id}/payments", get(payments::list).post(payments::create))
         .route("/{id}/payments/{payment_id}", delete(payments::delete))
 }

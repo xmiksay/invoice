@@ -23,10 +23,12 @@ const summary = (overrides: Partial<DocumentSummary>): DocumentSummary => ({
   payable: "100.5",
   paid: "0",
   sentAt: null,
+  sign: 1,
+  relatedDocumentId: null,
   ...overrides,
 });
 
-async function mountList() {
+async function mountList(path = "/invoices") {
   const pinia = createPinia();
   setActivePinia(pinia);
   const stub = { template: "<div />" };
@@ -38,7 +40,7 @@ async function mountList() {
       { path: "/invoices/:id", name: "invoice-detail", component: stub },
     ],
   });
-  await router.push("/invoices");
+  await router.push(path);
   const w = mount({ template: "<RouterView />" }, { global: { plugins: [pinia, i18n, router] } });
   await flushPromises();
   return w;
@@ -79,5 +81,35 @@ describe("InvoicesListView", () => {
     expect(fetch.mock.calls.length).toBe(before);
     await vi.advanceTimersByTimeAsync(300);
     expect(String(fetch.mock.calls.at(-1)?.[0])).toContain("q=acme");
+  });
+
+  it("doc-type tabs drive the docType filter and the new-document button", async () => {
+    const fetch = mockFetchRoutes({ "GET /api/documents": { items: [], total: 0 } });
+    const w = await mountList();
+    expect(w.find('[data-test="new-document"]').text()).toBe("New invoice");
+    expect(w.find('[data-test="tab-invoice"]').attributes("aria-current")).toBe("page");
+
+    await w.find('[data-test="tab-proforma"]').trigger("click");
+    await flushPromises();
+    expect(String(fetch.mock.calls.at(-1)?.[0])).toBe("/api/documents?direction=issued&docType=proforma&limit=50&offset=0");
+    expect(w.find("h1").text()).toBe("Proforma invoices");
+    expect(w.find('[data-test="new-document"]').text()).toBe("New proforma invoice");
+    expect(w.find('[data-test="new-document"]').attributes("href")).toBe("/invoices/new?docType=proforma");
+
+    await w.find('[data-test="tab-advance_tax_doc"]').trigger("click");
+    await flushPromises();
+    expect(String(fetch.mock.calls.at(-1)?.[0])).toContain("docType=advance_tax_doc");
+    expect(w.find('[data-test="new-document"]').exists()).toBe(false);
+  });
+
+  it("credit notes show negated amounts and a badge", async () => {
+    const fetch = mockFetchRoutes({
+      "GET /api/documents": { items: [summary({ docType: "credit_note", sign: -1, currency: "CZK", payable: "1210.00", overdue: false })], total: 1 },
+    });
+    const w = await mountList("/invoices?type=credit_note");
+    expect(String(fetch.mock.calls[0]?.[0])).toContain("docType=credit_note");
+    const row = w.find('[data-test="invoice-row"]');
+    expect(row.text()).toMatch(/-CZK\s1,210\.00/);
+    expect(row.find('[data-test="credit-note-badge"]').exists()).toBe(true);
   });
 });

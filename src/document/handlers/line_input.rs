@@ -6,7 +6,9 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::document::line::{ItemData, LineData, MAX_INPUT, VatMode};
+use uuid::Uuid;
+
+use crate::document::line::{AdvanceData, ItemData, LineData, MAX_INPUT, VatMode};
 use crate::error::FieldErrors;
 use crate::settings::handlers::vat_rates::parse_rate;
 use crate::validation::{self as v, Check};
@@ -15,11 +17,12 @@ pub const MAX_LINES: usize = 1000;
 
 /// One request line. `kind` selects which fields apply:
 /// `item` (description, quantity, unit, unitPrice, discountPct, vatRate),
-/// `text` (description), `subtotal` (description, refs, collapse).
+/// `text` (description), `subtotal` (description, refs, collapse),
+/// `advance` (advanceDocumentId; description and amounts come from the server).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", default)]
 pub struct LineInput {
-    /// `item` | `text` | `subtotal`.
+    /// `item` | `text` | `subtotal` | `advance`.
     pub kind: String,
     pub description: String,
     /// Decimal string, at most 4 dp, non-zero.
@@ -34,6 +37,8 @@ pub struct LineInput {
     /// 1-based positions of the lines a subtotal sums.
     pub refs: Vec<i32>,
     pub collapse: bool,
+    /// `advance`: the DDPP (or settled proforma) to deduct.
+    pub advance_document_id: Option<Uuid>,
 }
 
 /// A decimal string with at most `dp` decimal places and `|x| < max`.
@@ -157,6 +162,16 @@ fn validate_line(
             refs: l.refs,
             collapse: l.collapse,
         },
+        "advance" => LineData::Advance(AdvanceData {
+            document_id: e
+                .check(
+                    &f("advanceDocumentId"),
+                    l.advance_document_id.ok_or("required"),
+                )
+                .unwrap_or_default(),
+            description: String::new(),
+            recap: Vec::new(),
+        }),
         _ => {
             e.add(&f("kind"), "invalid");
             LineData::Text {

@@ -5,22 +5,24 @@ use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use super::dto::{Payment, PaymentInput};
+use super::input::exchange_rate;
 use super::line_input::decimal;
 use crate::app::AppState;
-use crate::document::entity::payment;
 use crate::document::line::MAX_AMOUNT;
-use crate::document::repo::payments::{self as repo, NewPayment};
+use crate::document::repo::payments::{self as repo, NewPayment, WithAdvance};
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::{ApiJson, ApiPath};
+use crate::time::today;
 use crate::validation as v;
 
-impl From<payment::Model> for Payment {
-    fn from(m: payment::Model) -> Self {
+impl From<WithAdvance> for Payment {
+    fn from((m, advance): WithAdvance) -> Self {
         Self {
             id: m.id,
             date: m.date,
             amount: crate::document::compute::round2(m.amount),
             note: m.note,
+            advance_document_id: advance,
             created_at: m.created_at,
         }
     }
@@ -43,11 +45,15 @@ impl PaymentInput {
         let note = e
             .check("note", v::opt_text(self.note.as_deref(), 500))
             .flatten();
+        let exchange_rate = e
+            .check("exchangeRate", exchange_rate(self.exchange_rate.as_deref()))
+            .flatten();
         e.into_result()?;
         Ok(NewPayment {
             date: date.unwrap_or_default(),
             amount: amount.unwrap_or_default(),
             note,
+            exchange_rate,
         })
     }
 }
@@ -78,8 +84,8 @@ pub async fn list(
     responses(
         (status = 201, body = Payment),
         (status = 404, body = ErrorBody),
-        (status = 409, description = "`invalid_state` (not issued)", body = ErrorBody),
-        (status = 422, description = "Validation failed", body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not issued, or a DDPP)", body = ErrorBody),
+        (status = 422, description = "Validation failed; `exchangeRate: required` when a DDPP needs a rate ČNB cannot give", body = ErrorBody),
     )
 )]
 pub async fn create(
@@ -87,7 +93,7 @@ pub async fn create(
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<PaymentInput>,
 ) -> Result<(StatusCode, Json<Payment>), AppError> {
-    let row = repo::create(&state.db, id, input.validate()?).await?;
+    let row = repo::create(&state.db, &state.cnb, id, input.validate()?, today()).await?;
     Ok((StatusCode::CREATED, Json(row.into())))
 }
 
@@ -100,7 +106,7 @@ pub async fn create(
     responses(
         (status = 204),
         (status = 404, body = ErrorBody),
-        (status = 409, description = "`invalid_state` (not issued)", body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not issued) / `advance_settled` (its DDPP is deducted by an issued invoice)", body = ErrorBody),
     )
 )]
 pub async fn delete(

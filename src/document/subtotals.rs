@@ -2,8 +2,8 @@
 //!
 //! A subtotal references other lines by 1-based position, possibly other
 //! subtotals. Rules: every ref points at an existing item or subtotal line
-//! other than itself, no duplicate refs, no reference cycles, and every
-//! (transitively) referenced item shares one VAT rate. A subtotal's rate is
+//! other than itself (never a text or advance line), no duplicate refs, no
+//! reference cycles, and every (transitively) referenced item shares one VAT rate. A subtotal's rate is
 //! that shared rate; its base is the sum of the referenced bases.
 
 use rust_decimal::Decimal;
@@ -44,7 +44,7 @@ fn resolve_one(
             out[idx] = Some((item.vat_rate, base));
             return Ok(out[idx]);
         }
-        LineData::Text { .. } => return Ok(None),
+        LineData::Text { .. } | LineData::Advance(_) => return Ok(None),
         LineData::Subtotal { refs, .. } => refs,
     };
     match state[idx] {

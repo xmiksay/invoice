@@ -1,6 +1,7 @@
 use chrono::{NaiveDate, Utc};
 
 use super::*;
+use crate::document::handlers::compute_input::{ComputeCtx, ComputeInput};
 
 fn date(m: u32, d: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(2026, m, d).expect("date")
@@ -34,6 +35,8 @@ fn ctx(apply_defaults: bool, contact: Option<contact::Model>) -> Context {
         company: company(true),
         contact,
         default_vat_rate: Some(Decimal::from(21)),
+        existing: None,
+        advances: HashMap::new(),
     }
 }
 
@@ -154,18 +157,112 @@ fn compute_input_defaults() {
         }],
         ..Default::default()
     };
-    let (lines, ev) = input
-        .clone()
-        .validate(true, Some(Decimal::from(21)))
-        .expect("valid");
+    let mut cctx = ComputeCtx {
+        vat_payer: true,
+        default_rate: Some(Decimal::from(21)),
+        default_locale: "cs".into(),
+        existing: None,
+        advances: HashMap::new(),
+    };
+    let (lines, ev) = input.clone().validate(&cctx).expect("valid");
     assert_eq!(lines.len(), 1);
     assert_eq!(ev.totals.vat, "4.20".parse().expect("d"));
-    let (_, ev) = input
-        .validate(false, Some(Decimal::from(21)))
-        .expect("valid");
+    cctx.vat_payer = false;
+    let (_, ev) = input.validate(&cctx).expect("valid");
     assert_eq!(
         ev.totals.vat,
         Decimal::ZERO,
         "non-payer company → 0 % lines"
     );
+}
+
+fn existing(doc_type: DocType) -> Existing {
+    Existing {
+        id: Uuid::from_u128(42),
+        doc_type,
+        related_document_id: Some(Uuid::from_u128(41)),
+        contact_id: None,
+        vat_mode: VatMode::Standard,
+        currency: "EUR".into(),
+        locale: "cs".into(),
+        exchange_rate: Some("25.5".parse().expect("d")),
+    }
+}
+
+#[test]
+fn proforma_has_no_tax_point_date() {
+    let input = DocumentInput {
+        doc_type: Some("proforma".into()),
+        ..Default::default()
+    };
+    let (d, _) = input.clone().validate(&ctx(true, None)).expect("valid");
+    assert_eq!((d.doc_type, d.tax_point_date), (DocType::Proforma, None));
+    let input = DocumentInput {
+        tax_point_date: Some(date(10, 8)),
+        ..input
+    };
+    let mut expected = FieldErrors::new();
+    expected.add("taxPointDate", "invalid");
+    assert_eq!(
+        fields(input.validate(&ctx(true, None)).expect_err("e")),
+        expected
+    );
+}
+
+#[test]
+fn doc_type_rules() {
+    let mut expected = FieldErrors::new();
+    expected.add("docType", "invalid");
+    for t in ["credit_note", "advance_tax_doc", "bogus"] {
+        let input = DocumentInput {
+            doc_type: Some(t.into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            fields(input.validate(&ctx(true, None)).expect_err("e")),
+            expected,
+            "{t}"
+        );
+    }
+    // Update: omitted keeps the draft's type; another type is refused.
+    let mut c = ctx(true, None);
+    c.existing = Some(existing(DocType::Proforma));
+    let input = DocumentInput {
+        currency: Some("EUR".into()),
+        ..Default::default()
+    };
+    let (d, _) = input.clone().validate(&c).expect("valid");
+    assert_eq!(d.doc_type, DocType::Proforma);
+    assert_eq!(d.related_document_id, Some(Uuid::from_u128(41)));
+    let other = DocumentInput {
+        doc_type: Some("invoice".into()),
+        ..input
+    };
+    assert_eq!(fields(other.validate(&c).expect_err("e")), expected);
+}
+
+#[test]
+fn credit_note_keeps_the_original_rate_and_currency() {
+    let mut c = ctx(true, None);
+    c.existing = Some(existing(DocType::CreditNote));
+    let input = DocumentInput {
+        currency: Some("EUR".into()),
+        exchange_rate: Some("30".into()),
+        correction_reason: Some(" Vrácení zboží ".into()),
+        ..Default::default()
+    };
+    let (d, _) = input.clone().validate(&c).expect("valid");
+    assert_eq!(d.exchange_rate, Some("25.5".parse().expect("d")));
+    assert_eq!(d.correction_reason.as_deref(), Some("Vrácení zboží"));
+    let usd = DocumentInput {
+        currency: Some("USD".into()),
+        vat_mode: Some("exempt".into()),
+        correction_reason: Some("x".repeat(501)),
+        ..input
+    };
+    let mut expected = FieldErrors::new();
+    expected.add("currency", "invalid");
+    expected.add("vatMode", "invalid");
+    expected.add("correctionReason", "too_long");
+    assert_eq!(fields(usd.validate(&c).expect_err("e")), expected);
 }

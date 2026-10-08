@@ -7,6 +7,8 @@ defineProps<{
   paymentState: PaymentState | null;
   overdue: boolean;
   sentAt?: string | null;
+  /** -1 marks a credit note. */
+  sign?: 1 | -1;
 }>();
 
 const { t } = useI18n();
@@ -26,6 +28,9 @@ const PAYMENT_CLASS: Record<PaymentState, string> = {
 
 <template>
   <span class="inline-flex flex-wrap gap-1">
+    <span v-if="sign === -1" class="badge !bg-rose-100 !text-rose-800 dark:!bg-rose-900/50 dark:!text-rose-300" data-test="credit-note-badge">
+      {{ t("documents.docTypes.credit_note") }}
+    </span>
     <span class="badge" :class="STATUS_CLASS[status]" data-test="status-badge">{{ t(`documents.status.${status}`) }}</span>
     <span v-if="paymentState" class="badge" :class="PAYMENT_CLASS[paymentState]" data-test="payment-badge">
       {{ t(`documents.paymentState.${paymentState}`) }}

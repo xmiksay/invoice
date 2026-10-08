@@ -1,0 +1,15 @@
+{
+  "title": "Kontakty",
+  "new": "Nový kontakt",
+  "newTitle": "Nový kontakt",
+  "editTitle": "Upravit kontakt",
+  "backToList": "Zpět na kontakty",
+  "searchPlaceholder": "Hledat podle názvu, IČO, DIČ nebo obce",
+  "noResults": "Nic nenalezeno.",
+  "empty": "Zatím žádné kontakty.",
+  "confirmDelete": "Opravdu smazat kontakt „{name}“?",
+  "defaultDueDays": "Výchozí splatnost (dny)",
+  "defaultCurrency": "Výchozí měna",
+  "defaultLocale": "Jazyk dokladů",
+  "note": "Poznámka"
+}

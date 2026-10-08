@@ -41,6 +41,11 @@ export const documentsApi = {
   markSent: (id: string) => request<Document>(`${item(id)}/mark-sent`, { method: "POST", body: {} }),
   setInternalNote: (id: string, internalNote: string | null) =>
     request<Document>(`${item(id)}/internal-note`, { method: "PUT", body: { internalNote } }),
+  /** Draft final invoice from an issued proforma. */
+  settle: (id: string) => request<Document>(`${item(id)}/settle`, { method: "POST" }),
+  /** Credit-note draft for an issued invoice. */
+  creditNote: (id: string, correctionReason: string | null) =>
+    request<Document>(`${item(id)}/credit-note`, { method: "POST", body: correctionReason ? { correctionReason } : {} }),
   payments: (id: string) => request<Payment[]>(`${item(id)}/payments`),
   addPayment: (id: string, input: PaymentInput) =>
     request<Payment>(`${item(id)}/payments`, { method: "POST", body: input }),

@@ -24,6 +24,9 @@ const props = defineProps<{
 const { t, locale } = useI18n();
 
 const isCzk = computed(() => model.value.currency === "CZK");
+const isProforma = computed(() => model.value.docType === "proforma");
+/** A credit note keeps its invoice's currency and rate. */
+const isCreditNote = computed(() => model.value.docType === "credit_note");
 const accounts = computed(() => props.bankAccounts.filter((a) => a.currency === model.value.currency));
 const accountLabel = (a: BankAccount) => [a.label, a.accountNumber ?? a.iban].filter(Boolean).join(" — ");
 
@@ -52,7 +55,7 @@ const cls = (field: string) => ({ "input-error": props.errors[field] });
     <FormField :label="t('documents.fields.issueDate')" for="doc-issueDate" :error="errors.issueDate">
       <input id="doc-issueDate" v-model="model.issueDate" type="date" class="input" :class="cls('issueDate')" />
     </FormField>
-    <FormField :label="t('documents.fields.taxPointDate')" for="doc-taxPointDate" :error="errors.taxPointDate">
+    <FormField v-if="!isProforma" :label="t('documents.fields.taxPointDate')" for="doc-taxPointDate" :error="errors.taxPointDate">
       <input id="doc-taxPointDate" v-model="model.taxPointDate" type="date" class="input" :class="cls('taxPointDate')" />
     </FormField>
     <FormField :label="t('documents.fields.dueDate')" for="doc-dueDate" :error="errors.dueDate">
@@ -60,15 +63,22 @@ const cls = (field: string) => ({ "input-error": props.errors[field] });
     </FormField>
 
     <FormField :label="t('documents.fields.currency')" for="doc-currency" :error="errors.currency">
-      <input id="doc-currency" :value="model.currency" maxlength="3" class="input uppercase" :class="cls('currency')" autocomplete="off" @change="onCurrency" />
+      <input id="doc-currency" :value="model.currency" maxlength="3" class="input uppercase" :class="cls('currency')" autocomplete="off" :disabled="isCreditNote" @change="onCurrency" />
     </FormField>
-    <div v-if="!isCzk" class="space-y-1 sm:col-span-2">
+    <div v-if="!isCzk && isCreditNote" class="space-y-1 sm:col-span-2" data-test="original-rate">
+      <span class="text-sm font-medium">{{ t("documents.fields.exchangeRate") }}</span>
+      <p class="py-2 text-sm">
+        {{ model.exchangeRate ? formatNumber(model.exchangeRate, locale, 6) : "—" }}
+        <span class="text-xs text-gray-600 dark:text-gray-400">({{ t("documents.editor.originalRate") }})</span>
+      </p>
+    </div>
+    <div v-else-if="!isCzk" class="space-y-1 sm:col-span-2">
       <FormField :label="t('documents.editor.manualRate')" for="doc-exchangeRate" :error="errors.exchangeRate" :hint="t('documents.editor.manualRateHint')">
         <input id="doc-exchangeRate" v-model="model.exchangeRate" inputmode="decimal" class="input" :class="cls('exchangeRate')" autocomplete="off" />
       </FormField>
       <p v-if="indicativeNote" class="text-xs text-gray-600 dark:text-gray-400" data-test="indicative-rate">{{ indicativeNote }}</p>
     </div>
-    <div class="flex flex-col justify-end pb-2" :class="{ 'sm:col-span-2': isCzk, 'sm:col-span-3': !isCzk }">
+    <div class="flex flex-col justify-end pb-2" :class="{ 'sm:col-span-2': isCzk && !isProforma, 'sm:col-span-3': !isCzk || isProforma }">
       <label class="flex items-center gap-2 text-sm" :class="{ 'opacity-60': !isCzk }">
         <input id="doc-roundTotal" v-model="model.roundTotal" type="checkbox" class="size-4" :disabled="!isCzk" />
         {{ t("documents.fields.roundTotal") }}
@@ -78,7 +88,7 @@ const cls = (field: string) => ({ "input-error": props.errors[field] });
     </div>
 
     <FormField :label="t('documents.fields.vatMode')" for="doc-vatMode" :error="errors.vatMode">
-      <select id="doc-vatMode" v-model="model.vatMode" class="input">
+      <select id="doc-vatMode" v-model="model.vatMode" class="input" :disabled="isCreditNote">
         <option v-for="m in VAT_MODES" :key="m" :value="m">{{ t(`documents.vatMode.${m}`) }}</option>
       </select>
     </FormField>

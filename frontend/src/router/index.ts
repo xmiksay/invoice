@@ -57,6 +57,23 @@ const routes = [
     component: () => import("@/features/contacts/views/ContactEditView.vue"),
   },
   {
+    path: "/catalog",
+    component: () => import("@/features/catalog/views/CatalogView.vue"),
+    children: [
+      { path: "", redirect: { name: "catalog-items" } },
+      {
+        path: "items",
+        name: "catalog-items",
+        component: () => import("@/features/catalog/views/CatalogItemsTab.vue"),
+      },
+      {
+        path: "groups",
+        name: "catalog-groups",
+        component: () => import("@/features/catalog/views/CatalogGroupsTab.vue"),
+      },
+    ],
+  },
+  {
     path: "/settings",
     component: () => import("@/features/settings/views/SettingsView.vue"),
     children: [

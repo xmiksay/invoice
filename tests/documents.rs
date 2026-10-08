@@ -106,7 +106,7 @@ async fn create_validates_with_line_indexes() {
         Method::POST,
         "/api/documents",
         Some(json!({
-            "docType": "proforma",
+            "docType": "credit_note",
             "contactId": "00000000-0000-0000-0000-000000000001",
             "currency": "EURO",
             "vatMode": "bogus",

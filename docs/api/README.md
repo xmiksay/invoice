@@ -1,0 +1,27 @@
+# API contract
+
+All routes under `/api`, Bearer auth (already enforced). JSON camelCase on the wire
+(`#[serde(rename_all = "camelCase")]`). Money/rates are decimals serialized as STRINGS
+(e.g. `"21"`, `"12.5"`) to avoid float loss. IDs are UUID strings. Dates `YYYY-MM-DD`.
+
+## Errors
+- 404 `{"code":"not_found"}`
+- 422 `{"code":"validation","fields":{"<field>":"<reason_code>"}}` — reason codes:
+  `required`, `invalid`, `too_long`, `duplicate`, `invalid_ico`, `invalid_pattern`.
+  Field names are the camelCase wire names; for list items use `items.0.rate` style if ever needed.
+- 409 `{"code":"conflict"}` for unique violations not attributable to one field.
+- ARES: 404 `{"code":"ares_not_found"}`, 502 `{"code":"ares_unavailable"}`, 422 `{"code":"validation","fields":{"ico":"invalid_ico"}}`.
+
+
+Later phases add more codes (`document_locked`, `invalid_state`, `cnb_unavailable`, `advance_settled`, …) — see each part.
+422 field keys for list items use the 0-based array index: `lines.0.unitPrice`, `members.2.itemId`.
+
+## Parts
+| File | Scope |
+|---|---|
+| [settings-contacts.md](settings-contacts.md) | company, bank accounts, VAT rates, number series, contacts, ARES (1a) |
+| [documents.md](documents.md) | documents core: lines, computation, lifecycle, payments, ČNB (1b) |
+| [advances-credit-catalog.md](advances-credit-catalog.md) | proforma, DDPP, settlement, credit notes, catalog (1c) |
+
+Each part ends with a "Clarifications (as implemented)" section — the authoritative record of behaviour beyond the
+original contract. Keep every file under 400 lines; add a new part rather than growing one past the cap.

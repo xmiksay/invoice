@@ -36,3 +36,16 @@ export function remainingAmount(payable: string, paid: string): string {
   const rest = Math.max(0, cents(payable) - cents(paid));
   return (rest / 100).toFixed(2);
 }
+
+/** Negates a decimal string exactly (no float round-trip); "0.00" stays unsigned. */
+export function negate(amount: string): string {
+  const v = amount.trim();
+  if (v.startsWith("-")) return v.slice(1);
+  return /^[0.]*$/.test(v.replace(/^\+/, "")) ? v : `-${v.replace(/^\+/, "")}`;
+}
+
+/** Applies a document's sign (credit notes are stored positive, shown negative). */
+export const signed = (amount: string, sign: 1 | -1): string => (sign === -1 ? negate(amount) : amount);
+
+/** True for a decimal string below zero. */
+export const isNegative = (amount: string | null | undefined): boolean => !!amount && Number(amount) < 0;

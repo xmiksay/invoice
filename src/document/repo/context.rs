@@ -4,17 +4,41 @@ use rust_decimal::Decimal;
 use sea_orm::{ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use uuid::Uuid;
 
+use anyhow::Context as _;
+
+use super::advance_sources;
 use crate::contact::entity::contact;
-use crate::document::handlers::input::{Context, DocumentData};
+use crate::document::defaults;
+use crate::document::entity::document;
+use crate::document::handlers::input::{Context, DocumentData, Existing};
+use crate::document::line::VatMode;
 use crate::error::AppError;
+use crate::settings::doc_type::DocType;
 use crate::settings::entity::{bank_account, vat_rate};
 use crate::settings::repo::company;
+
+/// What validation needs to know about a stored draft.
+pub fn existing(doc: &document::Model) -> Result<Existing, AppError> {
+    Ok(Existing {
+        id: doc.id,
+        doc_type: DocType::parse(&doc.doc_type)
+            .with_context(|| format!("document {} has unknown type", doc.id))?,
+        related_document_id: doc.related_document_id,
+        contact_id: doc.contact_id,
+        vat_mode: VatMode::parse(&doc.vat_mode)
+            .with_context(|| format!("document {} has unknown vat mode", doc.id))?,
+        currency: doc.currency.clone(),
+        locale: doc.locale.clone(),
+        exchange_rate: doc.exchange_rate,
+    })
+}
 
 pub async fn load(
     db: &DatabaseConnection,
     contact_id: Option<Uuid>,
-    apply_defaults: bool,
     today: chrono::NaiveDate,
+    existing: Option<Existing>,
+    advance_ids: &[Uuid],
 ) -> Result<Context, AppError> {
     let contact = match contact_id {
         Some(id) => contact::Entity::find_by_id(id).one(db).await?,
@@ -22,10 +46,13 @@ pub async fn load(
     };
     Ok(Context {
         today,
-        apply_defaults,
+        // POST fills defaults; PUT (an existing draft) replaces every field.
+        apply_defaults: existing.is_none(),
         company: company::get(db).await?,
         contact,
         default_vat_rate: default_vat_rate(db).await?,
+        existing,
+        advances: advance_sources::load(db, advance_ids).await?,
     })
 }
 
@@ -67,4 +94,18 @@ pub async fn resolve_bank(
         }
         None => Ok(()),
     }
+}
+
+/// `from` + the (contact ?? company) default due days, for server-created drafts.
+pub async fn due_date(
+    db: &DatabaseConnection,
+    contact_id: Option<Uuid>,
+    from: chrono::NaiveDate,
+) -> Result<chrono::NaiveDate, AppError> {
+    let contact = match contact_id {
+        Some(id) => contact::Entity::find_by_id(id).one(db).await?,
+        None => None,
+    };
+    let company = company::get(db).await?;
+    Ok(defaults::due_date(contact.as_ref(), &company, from))
 }

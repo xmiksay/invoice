@@ -1,0 +1,70 @@
+{
+  "title": "Settings",
+  "tabs": {
+    "company": "Company",
+    "bankAccounts": "Bank accounts",
+    "vatRates": "VAT rates",
+    "numberSeries": "Number series"
+  },
+  "company": {
+    "vatPayer": "VAT payer",
+    "web": "Website",
+    "registration": "Registry entry",
+    "registrationHint": "E.g. Natural person registered in the Trade Register.",
+    "defaultDueDays": "Default due days",
+    "defaultLocale": "Default document language"
+  },
+  "bankAccounts": {
+    "add": "Add account",
+    "edit": "Edit account",
+    "label": "Label",
+    "currency": "Currency",
+    "account": "Account",
+    "accountNumber": "Account number",
+    "accountNumberHint": "E.g. 19-123456789/0100. Fill in the account number or the IBAN.",
+    "iban": "IBAN",
+    "bic": "BIC / SWIFT",
+    "isDefault": "Default for currency",
+    "defaultFor": "Default {currency}",
+    "confirmDelete": "Really delete account “{name}”?",
+    "empty": "No bank accounts yet."
+  },
+  "vatRates": {
+    "add": "Add rate",
+    "edit": "Edit rate",
+    "rate": "Rate (%)",
+    "label": "Name",
+    "position": "Order",
+    "isDefault": "Default",
+    "active": "Active",
+    "setDefault": "Make {rate} % the default",
+    "toggleActive": "Rate {rate} % active",
+    "confirmDelete": "Really delete rate {rate} % ({label})?",
+    "empty": "No VAT rates.",
+    "defaultMustBeActive": "The default rate must be active."
+  },
+  "numberSeries": {
+    "docTypes": {
+      "invoice": "Invoice",
+      "credit_note": "Credit note",
+      "proforma": "Proforma invoice",
+      "advance_tax_doc": "Tax document for advance payment",
+      "received": "Received invoices"
+    },
+    "pattern": "Pattern",
+    "preview": "Next number preview",
+    "serverPreview": "Next number (server)",
+    "counters": "Counters per year",
+    "year": "Year",
+    "lastNumber": "Last number",
+    "lastNumberFor": "Last number for {year}",
+    "invalidCounter": "The year must have 4 digits and the last number must be a non-negative integer.",
+    "helpTitle": "How to write a pattern",
+    "helpRules": "Exactly one year token (four- or two-digit) and exactly one counter (1–9 N characters = number of digits). Other characters: ASCII letters, digits and / _ -. At most 40 characters. Each series needs a distinct pattern. The counter resets every year.",
+    "tokens": {
+      "yyyy": "four-digit year (2026)",
+      "yy": "two-digit year (26)",
+      "n": "sequence number padded with zeros (0001)"
+    }
+  }
+}

@@ -54,6 +54,11 @@ const num = (v: string) => formatNumber(v, locale.value);
               Σ {{ line.refs.join(", ") }}
               <span v-if="line.collapse" class="badge ml-1">{{ t("documents.line.collapsed") }}</span>
             </div>
+            <ul v-if="line.kind === 'advance'" class="text-xs text-gray-500" data-test="advance-recap">
+              <li v-for="r in line.recap" :key="r.vatRate">
+                {{ t("documents.line.advanceRecap", { rate: num(r.vatRate), base: money(r.base), vat: money(r.vat) }) }}
+              </li>
+            </ul>
             <div v-if="line.kind === 'item'" class="text-xs text-gray-500 sm:hidden">
               {{ num(line.quantity) }} {{ line.unit }} × {{ money(line.unitPrice) }} · {{ num(line.vatRate) }} %
             </div>

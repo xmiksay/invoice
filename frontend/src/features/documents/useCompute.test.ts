@@ -5,7 +5,16 @@ import { flushPromises } from "@vue/test-utils";
 import type { ComputeRequest } from "./types";
 import { useCompute } from "./useCompute";
 
-const body = (currency: string): ComputeRequest => ({ lines: [], vatMode: "standard", currency, exchangeRate: null, roundTotal: false });
+const body = (currency: string): ComputeRequest => ({
+  lines: [],
+  vatMode: "standard",
+  currency,
+  exchangeRate: null,
+  roundTotal: false,
+  contactId: null,
+  docType: "invoice",
+  locale: "cs",
+});
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
 
 /** fetch stub whose responses the test resolves by hand, in any order. */

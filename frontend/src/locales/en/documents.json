@@ -1,0 +1,234 @@
+{
+  "draftNumber": "Draft",
+  "overdue": "Overdue",
+  "sent": "Sent",
+  "status": {
+    "draft": "Draft",
+    "issued": "Issued",
+    "cancelled": "Cancelled"
+  },
+  "paymentState": {
+    "unpaid": "Unpaid",
+    "partial": "Partially paid",
+    "paid": "Paid",
+    "overpaid": "Overpaid"
+  },
+  "vatMode": {
+    "standard": "Standard VAT",
+    "reverse_charge": "Reverse charge",
+    "exempt": "VAT exempt",
+    "non_payer": "Not a VAT payer"
+  },
+  "paymentMethod": {
+    "bank_transfer": "Bank transfer",
+    "cash": "Cash",
+    "card": "Card",
+    "other": "Other"
+  },
+  "rateSource": {
+    "cnb": "ČNB",
+    "manual": "manual",
+    "original": "from the original invoice"
+  },
+  "fields": {
+    "docType": "Document type",
+    "number": "Number",
+    "customer": "Customer",
+    "supplier": "Supplier",
+    "contactId": "Customer",
+    "issueDate": "Issue date",
+    "taxPointDate": "Tax point date",
+    "dueDate": "Due date",
+    "currency": "Currency",
+    "exchangeRate": "Exchange rate (CZK per unit)",
+    "locale": "Document language",
+    "vatMode": "VAT mode",
+    "bankAccountId": "Bank account",
+    "paymentMethod": "Payment method",
+    "variableSymbol": "Variable symbol",
+    "constantSymbol": "Constant symbol",
+    "orderRef": "Order reference",
+    "headerNote": "Text above lines",
+    "footerNote": "Text below lines",
+    "internalNote": "Internal note",
+    "roundTotal": "Round to whole crowns",
+    "lines": "Lines",
+    "date": "Date",
+    "amount": "Amount",
+    "note": "Note",
+    "reason": "Reason",
+    "sentAt": "Sent",
+    "cancelledAt": "Cancelled",
+    "cancelReason": "Cancellation reason",
+    "correctionReason": "Reason for correction"
+  },
+  "list": {
+    "title": {
+      "invoice": "Invoices",
+      "proforma": "Proforma invoices",
+      "credit_note": "Credit notes",
+      "advance_tax_doc": "Tax documents for payments"
+    },
+    "new": {
+      "invoice": "New invoice",
+      "proforma": "New proforma invoice"
+    },
+    "searchPlaceholder": "Search by number, customer or variable symbol",
+    "status": "Status",
+    "anyStatus": "Any status",
+    "paymentState": "Payment",
+    "anyPaymentState": "Any payment state",
+    "from": "Issued from",
+    "to": "Issued to",
+    "overdueOnly": "Overdue only",
+    "empty": {
+      "invoice": "No invoices yet.",
+      "proforma": "No proforma invoices yet.",
+      "credit_note": "No credit notes yet. Issue one from an invoice's detail.",
+      "advance_tax_doc": "No tax documents for payments yet. They are issued automatically when a proforma invoice is paid."
+    },
+    "noResults": "No documents match the filter.",
+    "tabs": "Document type",
+    "tab": {
+      "invoice": "Invoices",
+      "proforma": "Proforma invoices",
+      "credit_note": "Credit notes",
+      "advance_tax_doc": "Tax documents for payments"
+    }
+  },
+  "editor": {
+    "newTitle": {
+      "invoice": "New invoice",
+      "proforma": "New proforma invoice",
+      "credit_note": "New credit note"
+    },
+    "editTitle": {
+      "invoice": "Edit invoice draft",
+      "proforma": "Edit proforma invoice draft",
+      "credit_note": "Edit credit note draft"
+    },
+    "saveDraft": "Save draft",
+    "newContact": "New contact",
+    "changeContact": "Change",
+    "removeContact": "Remove",
+    "noAccountForCurrency": "No account in {currency}",
+    "roundTotalCzkOnly": "CZK documents only.",
+    "variableSymbolHint": "Empty = derived from the invoice number.",
+    "internalNoteHint": "Never printed on the document.",
+    "manualRate": "Manual rate — overrides ČNB",
+    "manualRateHint": "CZK per unit. Empty = the ČNB rate for the tax point date is fixed at issue.",
+    "indicativeRate": "Indicative ČNB rate for {date}: {rate} (fixed at issue)",
+    "indicativeRateLoading": "Loading the indicative ČNB rate…",
+    "indicativeRateUnknown": "ČNB does not publish a rate for {currency} — enter a manual rate.",
+    "indicativeRateUnavailable": "The ČNB rate cannot be loaded right now; it is fixed at issue, or enter a manual rate.",
+    "creditNoteHint": "Required before issue. Enter amounts as positive — the credit note subtracts them.",
+    "originalRate": "from the original invoice, fixed"
+  },
+  "line": {
+    "title": "Lines",
+    "empty": "No lines yet.",
+    "addItem": "Item",
+    "addText": "Text",
+    "addSubtotal": "Subtotal",
+    "kinds": {
+      "item": "Item",
+      "text": "Text",
+      "subtotal": "Subtotal",
+      "advance": "Advance deduction"
+    },
+    "description": "Description",
+    "quantity": "Quantity",
+    "unit": "Unit",
+    "unitPrice": "Unit price excl. VAT",
+    "discountPct": "Discount %",
+    "vatRate": "VAT %",
+    "refs": "Lines summed",
+    "kind": "Line type",
+    "collapse": "Show only the subtotal on the document",
+    "collapsed": "collapsed",
+    "noRefOptions": "Add some items first.",
+    "refsInvalid": "Select at least one line (item or subtotal); lines must not form a cycle and must share one VAT rate.",
+    "moveUp": "Move line {n} up",
+    "moveDown": "Move line {n} down",
+    "remove": "Remove line {n}",
+    "rowLabel": "Line {n}",
+    "memberOf": "Part of the subtotal on line {positions}",
+    "atLeastOneItem": "The document needs at least one item.",
+    "advancePending": "Advance deduction (described by the server)",
+    "advanceRecap": "{rate} %: base {base}, VAT {vat}",
+    "advanceNeedsStandard": "Deducting a tax document for a payment is only possible in the Standard VAT mode."
+  },
+  "totals": {
+    "title": "Summary",
+    "computing": "Recalculating…",
+    "rate": "Rate",
+    "base": "Base",
+    "vat": "VAT",
+    "baseCzk": "Base in CZK",
+    "vatCzk": "VAT in CZK",
+    "total": "Total",
+    "rounding": "Rounding",
+    "payable": "Amount due",
+    "totalCzk": "Amount due in CZK",
+    "atRate": "rate {rate}",
+    "none": "Add some lines.",
+    "fixErrors": "Fix the highlighted fields to recalculate the totals.",
+    "overpaid": "Overpaid"
+  },
+  "detail": {
+    "backToList": "Back to the list",
+    "backToDetail": "Back to the document",
+    "issue": "Issue",
+    "markSent": "Mark as sent",
+    "markSentAgain": "Mark as sent again",
+    "cancel": "Cancel invoice",
+    "confirmIssue": "Issue the document? It can no longer be edited afterwards.",
+    "confirmDelete": "Really delete this draft?",
+    "cancelPrompt": "Reason for cancelling document {number} (optional):",
+    "cannotProceed": "The action could not be completed:",
+    "settle": "Issue final invoice",
+    "settled": "Settled",
+    "creditNote": "Issue credit note",
+    "creditNotePrompt": "Reason for the credit note to invoice {number}:",
+    "ddppNote": "Issued automatically for a payment received on a proforma invoice. It cannot be edited or cancelled — deleting the payment cancels it."
+  },
+  "payments": {
+    "title": "Payments",
+    "paid": "Paid",
+    "remaining": "Remaining",
+    "add": "Add payment",
+    "delete": "Delete payment",
+    "empty": "No payments yet.",
+    "confirmDelete": "Really delete this payment?",
+    "addAnother": "Add another payment",
+    "refundsTitle": "Refunds",
+    "confirmDeleteWithDdpp": "Delete this payment? Its tax document {number} will be cancelled too.",
+    "ddpp": "Tax document {number}",
+    "ddppCreated": "Tax document for the payment issued:",
+    "rate": "Payment exchange rate (CZK per unit)",
+    "rateHint": "Optional. Empty = ČNB rate for the payment date.",
+    "indicativeRate": "ČNB rate for {date}: {rate}",
+    "openDraftInvoice": "Open the draft invoice"
+  },
+  "docTypes": {
+    "invoice": "Invoice",
+    "proforma": "Proforma invoice",
+    "credit_note": "Credit note",
+    "advance_tax_doc": "Tax document for a received payment",
+    "received": "Received invoice"
+  },
+  "related": {
+    "title": "Related documents",
+    "parent": "Based on",
+    "child": "Follow-up"
+  },
+  "catalog": {
+    "add": "From catalog",
+    "searchPlaceholder": "Search items or groups",
+    "groups": "Groups",
+    "items": "Items",
+    "memberCount": "items: {n}",
+    "noResults": "Nothing found in the catalog.",
+    "unpriced": "No price filled in for: {names} — the catalog price is in a currency other than {currency}; enter it manually."
+  }
+}

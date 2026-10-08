@@ -1,12 +1,15 @@
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::State;
+use axum::http::StatusCode;
 use uuid::Uuid;
 
-use super::dto::{CancelInput, Document, InternalNoteInput, MarkSentInput};
+use super::dto::{CancelInput, CreditNoteInput, Document, InternalNoteInput, MarkSentInput};
 use super::fetch;
 use crate::app::AppState;
-use crate::document::repo::{issue as issue_repo, lifecycle};
+use crate::document::repo::{
+    credit as credit_repo, issue as issue_repo, lifecycle, settle as settle_repo,
+};
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::{ApiJson, ApiPath, optional_json};
 use crate::time::today;
@@ -22,7 +25,7 @@ use crate::validation as v;
         (status = 200, body = Document),
         (status = 404, body = ErrorBody),
         (status = 409, description = "`invalid_state` (not a draft)", body = ErrorBody),
-        (status = 422, description = "Not issuable (contactId, lines, dueDate, taxPointDate, bankAccountId, exchangeRate)", body = ErrorBody),
+        (status = 422, description = "Not issuable (contactId, lines, dueDate, taxPointDate, bankAccountId, exchangeRate, correctionReason, lines.N.advanceDocumentId, lines: exceeds_original)", body = ErrorBody),
     )
 )]
 pub async fn issue(
@@ -43,7 +46,7 @@ pub async fn issue(
     responses(
         (status = 200, body = Document),
         (status = 404, body = ErrorBody),
-        (status = 409, description = "`invalid_state` (not issued)", body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not issued, a DDPP, or a proforma with payments)", body = ErrorBody),
     )
 )]
 pub async fn cancel(
@@ -109,4 +112,50 @@ pub async fn internal_note(
         .map_err(|r| AppError::field("internalNote", r))?;
     lifecycle::set_internal_note(&state.db, id, note).await?;
     Ok(Json(fetch(&state, id).await?))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/documents/{id}/settle",
+    tag = "documents",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path, description = "The proforma")),
+    responses(
+        (status = 201, description = "Draft final invoice", body = Document),
+        (status = 404, body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not an issued proforma, or already settled)", body = ErrorBody),
+    )
+)]
+pub async fn settle(
+    State(state): State<AppState>,
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<(StatusCode, Json<Document>), AppError> {
+    let new_id = settle_repo::settle(&state.db, id, today()).await?;
+    Ok((StatusCode::CREATED, Json(fetch(&state, new_id).await?)))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/documents/{id}/credit-note",
+    tag = "documents",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path, description = "The invoice")),
+    request_body = CreditNoteInput,
+    responses(
+        (status = 201, description = "Draft credit note", body = Document),
+        (status = 404, body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not an issued invoice)", body = ErrorBody),
+        (status = 422, description = "`correctionReason`: `too_long`", body = ErrorBody),
+    )
+)]
+pub async fn credit_note(
+    State(state): State<AppState>,
+    ApiPath(id): ApiPath<Uuid>,
+    body: Bytes,
+) -> Result<(StatusCode, Json<Document>), AppError> {
+    let input: CreditNoteInput = optional_json(&body)?;
+    let reason = v::opt_text(input.correction_reason.as_deref(), 500)
+        .map_err(|r| AppError::field("correctionReason", r))?;
+    let new_id = credit_repo::create(&state.db, id, reason, today()).await?;
+    Ok((StatusCode::CREATED, Json(fetch(&state, new_id).await?)))
 }

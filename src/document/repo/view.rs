@@ -12,7 +12,7 @@ use super::query::Full;
 use crate::contact::entity::contact;
 use crate::document::compute::{self, Params, RecapRow, round2};
 use crate::document::entity::document;
-use crate::document::handlers::dto::{self, Document, DocumentSummary, lines_out};
+use crate::document::handlers::dto::{self, Document, DocumentSummary, RelatedDocument, lines_out};
 use crate::document::line::{Status, VatMode};
 use crate::document::state;
 use crate::error::AppError;
@@ -33,7 +33,7 @@ fn derived(doc: &document::Model, today: NaiveDate) -> Result<(Status, bool), Ap
     let s = status(doc)?;
     Ok((
         s,
-        state::is_overdue(s, doc.paid, doc.payable, doc.due_date, today),
+        state::is_overdue(&doc.doc_type, s, doc.paid, doc.payable, doc.due_date, today),
     ))
 }
 
@@ -61,6 +61,16 @@ fn stored_totals(full: &Full) -> compute::Totals {
     }
 }
 
+fn related(r: &document::Model) -> Result<RelatedDocument, AppError> {
+    Ok(RelatedDocument {
+        id: r.id,
+        doc_type: r.doc_type.clone(),
+        number: r.number.clone(),
+        status: status(r)?,
+        payable: round2(r.payable),
+    })
+}
+
 pub fn document(full: Full, today: NaiveDate) -> Result<Document, AppError> {
     let (status, overdue) = derived(&full.doc, today)?;
     let d = &full.doc;
@@ -76,9 +86,27 @@ pub fn document(full: Full, today: NaiveDate) -> Result<Document, AppError> {
     let evaluated = compute::evaluate(&full.lines, params)
         .map_err(|e| anyhow::anyhow!("stored document {} fails validation: {e:?}", d.id))?;
     let totals = stored_totals(&full).into();
+    let related_documents = full
+        .related
+        .iter()
+        .map(related)
+        .collect::<Result<Vec<_>, AppError>>()?;
+    let parent = full.parent.as_ref().map(related).transpose()?;
     let d = full.doc;
+    let settled = (d.doc_type == "proforma").then(|| {
+        related_documents
+            .iter()
+            .any(|r| r.doc_type == "invoice" && r.status != Status::Cancelled)
+    });
     Ok(Document {
-        payment_state: state::document_payment_state(status, d.paid, d.payable),
+        payment_state: state::document_payment_state(&d.doc_type, status, d.paid, d.payable),
+        sign: dto::sign(&d.doc_type),
+        settled,
+        related_documents,
+        parent,
+        related_document_id: d.related_document_id,
+        payment_id: d.payment_id,
+        correction_reason: d.correction_reason,
         overdue,
         status,
         supplier: snapshot(&d.supplier_snapshot)?,
@@ -149,7 +177,14 @@ pub async fn summaries(
                 None => d.contact_id.and_then(|id| names.get(&id).cloned()),
             };
             Ok(DocumentSummary {
-                payment_state: state::document_payment_state(status, d.paid, d.payable),
+                payment_state: state::document_payment_state(
+                    &d.doc_type,
+                    status,
+                    d.paid,
+                    d.payable,
+                ),
+                sign: dto::sign(&d.doc_type),
+                related_document_id: d.related_document_id,
                 overdue,
                 status,
                 customer_name,

@@ -3,10 +3,12 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { FieldErrors } from "@/api/types";
 import FormField from "@/components/form/FormField.vue";
-import type { LineDraft, RefOption } from "../lines";
+import type { AdvanceLineDraft, LineDraft, RefOption } from "../lines";
+
+type EditableLine = Exclude<LineDraft, AdvanceLineDraft>;
 
 const props = defineProps<{
-  line: LineDraft;
+  line: EditableLine;
   index: number;
   count: number;
   vatOptions: string[];
@@ -16,7 +18,7 @@ const props = defineProps<{
   base: string | null;
   refOptions: RefOption[];
 }>();
-const emit = defineEmits<{ update: [line: LineDraft]; move: [delta: -1 | 1]; remove: [] }>();
+const emit = defineEmits<{ update: [line: EditableLine]; move: [delta: -1 | 1]; remove: [] }>();
 
 const { t } = useI18n();
 
@@ -25,7 +27,7 @@ const id = (field: string) => `line-${props.index}-${field}`;
 const cls = (field: string) => ({ "input-error": props.errors[field] });
 
 function set(patch: Record<string, unknown>) {
-  emit("update", { ...props.line, ...patch } as LineDraft);
+  emit("update", { ...props.line, ...patch } as EditableLine);
 }
 const value = (e: Event) => (e.target as HTMLInputElement).value;
 

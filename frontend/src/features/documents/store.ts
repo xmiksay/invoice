@@ -1,9 +1,21 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { documentsApi } from "./api";
-import type { DocStatus, Document, DocumentInput, DocumentSummary, Payment, PaymentInput, PaymentState } from "./types";
+import type {
+  DocStatus,
+  Document,
+  DocumentInput,
+  DocumentSummary,
+  Payment,
+  PaymentInput,
+  PaymentState,
+} from "./types";
 
 export const PAGE_SIZE = 50;
+
+/** Doc types the list has a tab for, in tab order. */
+export const LIST_DOC_TYPES = ["invoice", "proforma", "credit_note", "advance_tax_doc"] as const;
+export type ListDocType = (typeof LIST_DOC_TYPES)[number];
 
 export interface InvoiceFilters {
   status: DocStatus | "";
@@ -16,10 +28,11 @@ export interface InvoiceFilters {
 
 export const emptyFilters = (): InvoiceFilters => ({ status: "", paymentState: "", overdue: false, q: "", from: "", to: "" });
 
-/** Issued-invoice list; filters + page live here so they survive a trip to the detail view. */
+/** Issued-document list; tab, filters + page live here so they survive a trip to the detail view. */
 export const useInvoiceListStore = defineStore("documents/invoices", () => {
   const items = ref<DocumentSummary[]>([]);
   const total = ref(0);
+  const docType = ref<ListDocType>("invoice");
   const filters = ref<InvoiceFilters>(emptyFilters());
   const offset = ref(0);
   const loading = ref(false);
@@ -33,7 +46,7 @@ export const useInvoiceListStore = defineStore("documents/invoices", () => {
     try {
       const page = await documentsApi.list({
         direction: "issued",
-        docType: "invoice",
+        docType: docType.value,
         status: f.status || undefined,
         paymentState: f.paymentState || undefined,
         overdue: f.overdue,
@@ -62,7 +75,17 @@ export const useInvoiceListStore = defineStore("documents/invoices", () => {
     await load();
   }
 
-  return { items, total, filters, offset, loading, load, applyFilters, goTo };
+  /** Switching the tab keeps the filters but starts at the first page. */
+  async function setDocType(next: ListDocType): Promise<void> {
+    if (next !== docType.value) {
+      docType.value = next;
+      offset.value = 0;
+      items.value = [];
+    }
+    await load();
+  }
+
+  return { items, total, docType, filters, offset, loading, load, applyFilters, goTo, setDocType };
 });
 
 /** The document open in the detail view, with its payments. Every action stores the server's answer. */
@@ -80,8 +103,10 @@ export const useDocumentStore = defineStore("documents/current", () => {
       doc.value = null;
       payments.value = [];
     }
-    doc.value = await documentsApi.get(docId);
-    payments.value = doc.value.status === "draft" ? [] : await documentsApi.payments(docId);
+    const loaded = await documentsApi.get(docId);
+    // A DDPP has no payments of its own.
+    payments.value = loaded.status === "draft" || loaded.docType === "advance_tax_doc" ? [] : await documentsApi.payments(docId);
+    doc.value = loaded;
   }
 
   async function save(input: DocumentInput, docId?: string): Promise<Document> {
@@ -110,10 +135,21 @@ export const useDocumentStore = defineStore("documents/current", () => {
     doc.value = await documentsApi.setInternalNote(id(), note);
   }
 
-  // Payments change `paid` / `paymentState`, so the document is reloaded too.
-  async function addPayment(input: PaymentInput): Promise<void> {
-    await documentsApi.addPayment(id(), input);
+  /** Final-invoice draft settling the loaded proforma. */
+  async function settle(): Promise<Document> {
+    return documentsApi.settle(id());
+  }
+
+  /** Credit-note draft for the loaded invoice. */
+  async function creditNote(reason: string | null): Promise<Document> {
+    return documentsApi.creditNote(id(), reason);
+  }
+
+  // Payments change `paid` / `paymentState` (and may issue or cancel a DDPP), so the document is reloaded too.
+  async function addPayment(input: PaymentInput): Promise<Payment> {
+    const payment = await documentsApi.addPayment(id(), input);
     await load(id());
+    return payment;
   }
 
   async function removePayment(paymentId: string): Promise<void> {
@@ -121,5 +157,19 @@ export const useDocumentStore = defineStore("documents/current", () => {
     await load(id());
   }
 
-  return { doc, payments, load, save, remove, issue, cancel, markSent, setInternalNote, addPayment, removePayment };
+  return {
+    doc,
+    payments,
+    load,
+    save,
+    remove,
+    issue,
+    cancel,
+    markSent,
+    setInternalNote,
+    settle,
+    creditNote,
+    addPayment,
+    removePayment,
+  };
 });

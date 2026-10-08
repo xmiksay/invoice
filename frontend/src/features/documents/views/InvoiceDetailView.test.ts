@@ -1,31 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { flushPromises, mount } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
-import { createMemoryHistory, createRouter } from "vue-router";
+import { flushPromises } from "@vue/test-utils";
 import { i18n } from "@/i18n";
 import { calls, mockFetchRoutes, reply } from "@/test-utils";
 import { company, contact, document } from "../testData";
 import type { Payment } from "../types";
-import InvoiceDetailView from "./InvoiceDetailView.vue";
+import { mountDetail as mountAt } from "./testMount";
 
-const stub = { template: "<div />" };
-
-async function mountDetail() {
-  const pinia = createPinia();
-  setActivePinia(pinia);
-  const router = createRouter({
-    history: createMemoryHistory(),
-    routes: [
-      { path: "/invoices", name: "invoices", component: stub },
-      { path: "/invoices/:id", name: "invoice-detail", component: InvoiceDetailView },
-      { path: "/invoices/:id/edit", name: "invoice-edit", component: stub },
-    ],
-  });
-  await router.push("/invoices/d1");
-  const w = mount({ template: "<RouterView />" }, { global: { plugins: [pinia, i18n, router] } });
-  await flushPromises();
-  return w;
-}
+const mountDetail = async () => (await mountAt()).w;
 
 const issued = document({ status: "issued", number: "20260001", paymentState: "unpaid", customer: { ...contact(), registration: null, vatPayer: null } });
 
@@ -86,12 +67,12 @@ describe("InvoiceDetailView", () => {
 
   it("adds a payment defaulting to the remaining amount and reloads", async () => {
     let paid = "210.00";
-    const payments: Payment[] = [{ id: "p1", date: "2026-10-02", amount: "210.00", note: null, createdAt: "" }];
+    const payments: Payment[] = [{ id: "p1", date: "2026-10-02", amount: "210.00", note: null, advanceDocumentId: null, createdAt: "" }];
     const fetch = mockFetchRoutes({
       "GET /api/documents/d1": () => ({ ...issued, paid, paymentState: paid === "1210.00" ? "paid" : "partial" }),
       "GET /api/documents/d1/payments": () => payments,
       "POST /api/documents/d1/payments": (body: unknown) => {
-        const p = { id: "p2", note: null, createdAt: "", ...(body as object) } as Payment;
+        const p = { id: "p2", note: null, advanceDocumentId: null, createdAt: "", ...(body as object) } as Payment;
         payments.push(p);
         paid = "1210.00";
         return reply(201, p);

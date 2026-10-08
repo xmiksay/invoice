@@ -15,7 +15,7 @@ use utoipa::ToSchema;
 
 /// Per-field validation failures: camelCase wire field name → reason code
 /// (`required`, `invalid`, `too_long`, `duplicate`, `invalid_ico`, `invalid_pattern`,
-/// `below_issued`).
+/// `below_issued`, `exceeds_original`, `mixed_vat`).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct FieldErrors(BTreeMap<String, &'static str>);
 
@@ -42,6 +42,13 @@ impl FieldErrors {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Add every error of `other` (existing reasons win).
+    pub fn merge(&mut self, other: FieldErrors) {
+        for (field, reason) in other.0 {
+            self.0.entry(field).or_insert(reason);
+        }
     }
 
     /// `Ok(())` when nothing was recorded, else [`AppError::Validation`].
@@ -86,6 +93,15 @@ pub enum AppError {
     #[error("ČNB unavailable: {0:#}")]
     CnbUnavailable(anyhow::Error),
 
+    #[error("the advance is deducted by an issued invoice")]
+    AdvanceSettled,
+
+    #[error("the advance is deducted by a draft invoice")]
+    AdvanceInUse,
+
+    #[error("the catalog item is the last member of a group")]
+    CatalogItemInUse,
+
     #[error("internal error: {0:#}")]
     Internal(#[from] anyhow::Error),
 
@@ -113,6 +129,9 @@ impl AppError {
             Self::DocumentLocked => (StatusCode::CONFLICT, "document_locked"),
             Self::InvalidState => (StatusCode::CONFLICT, "invalid_state"),
             Self::CnbUnavailable(_) => (StatusCode::BAD_GATEWAY, "cnb_unavailable"),
+            Self::AdvanceSettled => (StatusCode::CONFLICT, "advance_settled"),
+            Self::AdvanceInUse => (StatusCode::CONFLICT, "advance_in_use"),
+            Self::CatalogItemInUse => (StatusCode::CONFLICT, "catalog_item_in_use"),
             Self::Internal(_) | Self::Database(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")
             }
@@ -274,6 +293,21 @@ mod tests {
                 AppError::CnbUnavailable(anyhow::anyhow!("timeout")),
                 StatusCode::BAD_GATEWAY,
                 "cnb_unavailable",
+            ),
+            (
+                AppError::AdvanceSettled,
+                StatusCode::CONFLICT,
+                "advance_settled",
+            ),
+            (
+                AppError::AdvanceInUse,
+                StatusCode::CONFLICT,
+                "advance_in_use",
+            ),
+            (
+                AppError::CatalogItemInUse,
+                StatusCode::CONFLICT,
+                "catalog_item_in_use",
             ),
             (
                 AppError::from(anyhow::anyhow!("boom")),

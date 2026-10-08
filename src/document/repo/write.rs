@@ -6,12 +6,13 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-use super::{lines, query, view};
+use super::{advance_sources, lines, query, view};
 use crate::document::compute::Totals;
 use crate::document::entity::document::{ActiveModel, Entity};
 use crate::document::handlers::input::DocumentData;
 use crate::document::line::Status;
 use crate::error::AppError;
+use crate::settings::doc_type::DocType;
 
 /// Header fields an edit sets, shared by create and update.
 fn apply(row: &mut ActiveModel, d: &DocumentData) {
@@ -22,7 +23,13 @@ fn apply(row: &mut ActiveModel, d: &DocumentData) {
     row.currency = Set(d.currency.clone());
     row.exchange_rate = Set(d.exchange_rate);
     row.exchange_rate_date = Set(None);
-    row.exchange_rate_source = Set(d.exchange_rate.map(|_| "manual".to_string()));
+    // A credit note's rate is copied from its invoice, never entered.
+    let source = match d.doc_type {
+        DocType::CreditNote => "original",
+        _ => "manual",
+    };
+    row.exchange_rate_source = Set(d.exchange_rate.map(|_| source.to_string()));
+    row.correction_reason = Set(d.correction_reason.clone());
     row.locale = Set(d.locale.clone());
     row.vat_mode = Set(d.vat_mode.as_str().to_string());
     row.bank_account_id = Set(d.bank_account_id);
@@ -56,7 +63,7 @@ pub async fn create(
         .await?)
 }
 
-async fn create_in(
+pub async fn create_in(
     txn: &DatabaseTransaction,
     data: DocumentData,
     totals: Totals,
@@ -66,7 +73,7 @@ async fn create_in(
     let mut row = ActiveModel {
         id: Set(id),
         direction: Set("issued".into()),
-        doc_type: Set("invoice".into()),
+        doc_type: Set(data.doc_type.as_str().into()),
         status: Set(Status::Draft.as_str().into()),
         number: Set(None),
         number_year: Set(None),
@@ -79,13 +86,15 @@ async fn create_in(
         sent_at: Set(None),
         cancelled_at: Set(None),
         cancel_reason: Set(None),
-        related_document_id: Set(None),
+        related_document_id: Set(data.related_document_id),
+        payment_id: Set(None),
         created_at: Set(now),
         updated_at: Set(now),
         ..Default::default()
     };
     apply(&mut row, &data);
     apply_totals(&mut row, &totals);
+    advance_sources::lock_and_recheck(txn, id, &data.lines).await?;
     row.insert(txn).await?;
     lines::replace(txn, id, &data.lines).await?;
     lines::replace_recap(txn, id, &totals).await?;
@@ -111,6 +120,7 @@ async fn update_in(
     totals: Totals,
 ) -> Result<(), AppError> {
     let doc = locked_draft(txn, id).await?;
+    advance_sources::lock_and_recheck(txn, id, &data.lines).await?;
     let mut row: ActiveModel = doc.into();
     apply(&mut row, &data);
     apply_totals(&mut row, &totals);

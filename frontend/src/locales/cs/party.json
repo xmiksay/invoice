@@ -1,0 +1,14 @@
+{
+  "name": "Název",
+  "ico": "IČO",
+  "dic": "DIČ",
+  "street": "Ulice a číslo",
+  "city": "Obec",
+  "zip": "PSČ",
+  "country": "Země",
+  "countryHint": "Dvoupísmenný kód, např. CZ.",
+  "email": "E-mail",
+  "phone": "Telefon",
+  "aresLoad": "Načíst z ARES",
+  "aresLoading": "Načítám…"
+}

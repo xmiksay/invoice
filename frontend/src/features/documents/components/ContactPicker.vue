@@ -9,7 +9,8 @@ import type { Contact } from "@/features/contacts/types";
 const SEARCH_DEBOUNCE_MS = 300;
 const RESULTS = 10;
 
-const props = defineProps<{ contactId: string | null; error?: string }>();
+/** `locked`: the contact is fixed (a credit note keeps its invoice's customer). */
+const props = defineProps<{ contactId: string | null; error?: string; locked?: boolean }>();
 const emit = defineEmits<{ pick: [contact: Contact]; clear: [] }>();
 
 const { t } = useI18n();
@@ -62,25 +63,25 @@ onBeforeUnmount(() => clearTimeout(timer));
   <div class="space-y-2">
     <div class="flex items-center justify-between gap-2">
       <span id="contact-picker-label" class="text-sm font-medium">{{ t("documents.fields.customer") }}</span>
-      <RouterLink :to="{ name: 'contact-new' }" target="_blank" class="text-xs text-blue-600 hover:underline dark:text-blue-400">
+      <RouterLink v-if="!locked" :to="{ name: 'contact-new' }" target="_blank" class="text-xs text-blue-600 hover:underline dark:text-blue-400">
         {{ t("documents.editor.newContact") }}
       </RouterLink>
     </div>
 
-    <div v-if="selected && !searching" class="flex flex-wrap items-start justify-between gap-2 rounded-md border border-gray-200 p-3 dark:border-gray-700" data-test="selected-contact">
+    <div v-if="selected && (!searching || locked)" class="flex flex-wrap items-start justify-between gap-2 rounded-md border border-gray-200 p-3 dark:border-gray-700" data-test="selected-contact">
       <div class="text-sm">
         <div class="font-medium">{{ selected.name }}</div>
         <div class="text-gray-600 dark:text-gray-400">
           {{ [selected.ico && `${t("party.ico")} ${selected.ico}`, selected.street, [selected.zip, selected.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") }}
         </div>
       </div>
-      <div class="flex gap-2">
+      <div v-if="!locked" class="flex gap-2">
         <button type="button" class="btn btn-sm" @click="startSearch">{{ t("documents.editor.changeContact") }}</button>
         <button type="button" class="btn btn-sm" @click="emit('clear')">{{ t("documents.editor.removeContact") }}</button>
       </div>
     </div>
 
-    <div v-else class="space-y-1">
+    <div v-else-if="!locked" class="space-y-1">
       <input
         id="contact-search"
         v-model="query"

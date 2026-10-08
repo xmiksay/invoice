@@ -11,6 +11,7 @@ const route = useRoute();
 const links = [
   { to: "/invoices", label: "nav.invoices" },
   { to: "/contacts", label: "nav.contacts" },
+  { to: "/catalog", label: "nav.catalog" },
   { to: "/settings", label: "nav.settings" },
 ] as const;
 

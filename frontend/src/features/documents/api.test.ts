@@ -54,7 +54,17 @@ describe("documents api", () => {
   });
 
   it("compute passes the abort signal", async () => {
-    const body: ComputeRequest = { lines: [], vatMode: "standard", currency: "CZK", exchangeRate: null, roundTotal: false };
+    const body: ComputeRequest = {
+      lines: [],
+      vatMode: "standard",
+      currency: "CZK",
+      exchangeRate: null,
+      roundTotal: false,
+      contactId: "c1",
+      docType: "invoice",
+      locale: "cs",
+      documentId: "d1",
+    };
     const fetch = mockFetch(200, {});
     const controller = new AbortController();
     await documentsApi.compute(body, controller.signal);
@@ -101,6 +111,27 @@ describe("documents api", () => {
     fetch = mockFetch(204);
     await documentsApi.removePayment("d1", "p1");
     expect(sentRequest(fetch)).toMatchObject({ url: "/api/documents/d1/payments/p1", method: "DELETE" });
+  });
+
+  it("settle and credit note create drafts", async () => {
+    let fetch = mockFetch(201, {});
+    await documentsApi.settle("pf1");
+    expect(sentRequest(fetch)).toMatchObject({ url: "/api/documents/pf1/settle", method: "POST" });
+
+    fetch = mockFetch(201, {});
+    await documentsApi.creditNote("d1", "wrong quantity");
+    expect(sentRequest(fetch)).toEqual({ url: "/api/documents/d1/credit-note", method: "POST", body: { correctionReason: "wrong quantity" } });
+
+    fetch = mockFetch(201, {});
+    await documentsApi.creditNote("d1", null);
+    expect(sentRequest(fetch).body).toEqual({});
+  });
+
+  it("proforma payment carries an optional manual rate", async () => {
+    const payment = { date: "2026-10-08", amount: "100.00", note: null, exchangeRate: "24.5" };
+    const fetch = mockFetch(201, {});
+    await documentsApi.addPayment("pf1", payment);
+    expect(sentRequest(fetch).body).toEqual(payment);
   });
 
   it("exchange rate for a date", async () => {

@@ -9,6 +9,8 @@ export const REASON_CODES = [
   "invalid_ico",
   "invalid_pattern",
   "below_issued",
+  "exceeds_original",
+  "mixed_vat",
 ] as const;
 
 /** Field errors of a 422 `validation` response, or null for any other failure. */
@@ -38,6 +40,9 @@ const KNOWN_CODES: Record<string, string> = {
   document_locked: "errors.documentLocked",
   invalid_state: "errors.invalidState",
   cnb_unavailable: "errors.cnbUnavailable",
+  advance_settled: "errors.advanceSettled",
+  advance_in_use: "errors.advanceInUse",
+  catalog_item_in_use: "errors.catalogItemInUse",
 };
 
 /** i18n key + params for a non-field error message. */
