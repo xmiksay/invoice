@@ -1,0 +1,33 @@
+{
+  "app": {
+    "name": "Faktury"
+  },
+  "nav": {
+    "invoices": "Faktury",
+    "main": "Hlavní navigace"
+  },
+  "locale": {
+    "label": "Jazyk"
+  },
+  "auth": {
+    "login": {
+      "title": "Přihlášení",
+      "tokenLabel": "API token",
+      "hint": "Zadejte API token nastavený na serveru (INVOICE__API_TOKEN).",
+      "submit": "Přihlásit",
+      "submitting": "Ověřuji…"
+    },
+    "logout": "Odhlásit"
+  },
+  "errors": {
+    "invalidToken": "Neplatný token.",
+    "unreachable": "Server je nedostupný. Zkuste to později.",
+    "unexpected": "Neočekávaná chyba ({code})."
+  },
+  "home": {
+    "title": "Přehled",
+    "comingSoon": "Faktury již brzy.",
+    "backendVersion": "Verze serveru: {version}",
+    "backendUnavailable": "Verzi serveru se nepodařilo načíst."
+  }
+}

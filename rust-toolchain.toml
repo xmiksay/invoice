@@ -1,0 +1,5 @@
+# Keep in sync with the toolchain in .github/workflows/ci.yml and the rust:<ver>
+# image in Dockerfile — bump all three together.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]

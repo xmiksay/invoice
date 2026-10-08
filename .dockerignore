@@ -1,0 +1,9 @@
+target
+.git
+.github
+.env
+data
+docs
+frontend/node_modules
+frontend/dist
+tests

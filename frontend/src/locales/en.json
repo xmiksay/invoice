@@ -1,0 +1,33 @@
+{
+  "app": {
+    "name": "Invoices"
+  },
+  "nav": {
+    "invoices": "Invoices",
+    "main": "Main navigation"
+  },
+  "locale": {
+    "label": "Language"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "tokenLabel": "API token",
+      "hint": "Enter the API token configured on the server (INVOICE__API_TOKEN).",
+      "submit": "Sign in",
+      "submitting": "Checking…"
+    },
+    "logout": "Log out"
+  },
+  "errors": {
+    "invalidToken": "Invalid token.",
+    "unreachable": "The server is unreachable. Try again later.",
+    "unexpected": "Unexpected error ({code})."
+  },
+  "home": {
+    "title": "Dashboard",
+    "comingSoon": "Invoices coming soon.",
+    "backendVersion": "Server version: {version}",
+    "backendUnavailable": "Could not load the server version."
+  }
+}
