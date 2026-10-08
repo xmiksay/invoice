@@ -1,0 +1,15 @@
+{
+  "ico": "12345679",
+  "obchodniJmeno": "Jan Testovací",
+  "sidlo": {
+    "kodStatu": "CZ",
+    "nazevObce": "Lhota",
+    "nazevCastiObce": "Dolní Lhota",
+    "cisloDomovni": 12,
+    "typCisloDomovni": 1,
+    "psc": 1234,
+    "textovaAdresa": "Dolní Lhota 12, 01234 Lhota"
+  },
+  "pravniForma": "101",
+  "primarniZdroj": "res"
+}

@@ -43,6 +43,20 @@ describe("api client", () => {
     await expect(request("/api/x")).rejects.toEqual(new ApiError(404, "not_found"));
   });
 
+  it("carries 422 validation fields", async () => {
+    mockFetch(422, { code: "validation", fields: { ico: "invalid_ico", name: "required" } });
+    await expect(request("/api/x")).rejects.toMatchObject({
+      status: 422,
+      code: "validation",
+      fields: { ico: "invalid_ico", name: "required" },
+    });
+  });
+
+  it("defaults fields to an empty object", async () => {
+    mockFetch(409, { code: "conflict" });
+    await expect(request("/api/x")).rejects.toMatchObject({ fields: {} });
+  });
+
   it("falls back to http_<status> for non-JSON errors", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>", { status: 502 })));
     await expect(request("/api/x")).rejects.toMatchObject({ status: 502, code: "http_502" });

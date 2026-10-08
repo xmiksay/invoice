@@ -4,10 +4,16 @@
   },
   "nav": {
     "invoices": "Faktury",
-    "main": "Hlavní navigace"
+    "main": "Hlavní navigace",
+    "contacts": "Kontakty",
+    "settings": "Nastavení"
   },
   "locale": {
-    "label": "Jazyk"
+    "label": "Jazyk",
+    "names": {
+      "cs": "Čeština",
+      "en": "Angličtina"
+    }
   },
   "auth": {
     "login": {
@@ -22,12 +28,140 @@
   "errors": {
     "invalidToken": "Neplatný token.",
     "unreachable": "Server je nedostupný. Zkuste to později.",
-    "unexpected": "Neočekávaná chyba ({code})."
+    "unexpected": "Neočekávaná chyba ({code}).",
+    "notFound": "Záznam nebyl nalezen.",
+    "conflict": "Záznam koliduje s existujícím.",
+    "validation": "Formulář obsahuje chyby.",
+    "aresNotFound": "Subjekt v ARES nenalezen.",
+    "aresUnavailable": "ARES je nedostupný. Zkuste to později."
   },
   "home": {
     "title": "Přehled",
     "comingSoon": "Faktury již brzy.",
     "backendVersion": "Verze serveru: {version}",
     "backendUnavailable": "Verzi serveru se nepodařilo načíst."
+  },
+  "common": {
+    "save": "Uložit",
+    "saving": "Ukládám…",
+    "saved": "Uloženo.",
+    "cancel": "Zrušit",
+    "delete": "Smazat",
+    "edit": "Upravit",
+    "add": "Přidat",
+    "actions": "Akce",
+    "loading": "Načítám…",
+    "search": "Hledat",
+    "notSet": "Nenastaveno",
+    "range": "{from}–{to} z {total}",
+    "prev": "Předchozí",
+    "next": "Další"
+  },
+  "validation": {
+    "required": "Povinné pole.",
+    "invalid": "Neplatná hodnota.",
+    "too_long": "Hodnota je příliš dlouhá.",
+    "duplicate": "Tato hodnota už existuje.",
+    "invalid_ico": "Neplatné IČO.",
+    "invalid_pattern": "Neplatný vzor čísla."
+  },
+  "party": {
+    "name": "Název",
+    "ico": "IČO",
+    "dic": "DIČ",
+    "street": "Ulice a číslo",
+    "city": "Obec",
+    "zip": "PSČ",
+    "country": "Země",
+    "countryHint": "Dvoupísmenný kód, např. CZ.",
+    "email": "E-mail",
+    "phone": "Telefon",
+    "aresLoad": "Načíst z ARES",
+    "aresLoading": "Načítám…"
+  },
+  "contacts": {
+    "title": "Kontakty",
+    "new": "Nový kontakt",
+    "newTitle": "Nový kontakt",
+    "editTitle": "Upravit kontakt",
+    "backToList": "Zpět na kontakty",
+    "searchPlaceholder": "Hledat podle názvu, IČO, DIČ nebo obce",
+    "noResults": "Nic nenalezeno.",
+    "empty": "Zatím žádné kontakty.",
+    "confirmDelete": "Opravdu smazat kontakt „{name}“?",
+    "defaultDueDays": "Výchozí splatnost (dny)",
+    "defaultCurrency": "Výchozí měna",
+    "defaultLocale": "Jazyk dokladů",
+    "note": "Poznámka"
+  },
+  "settings": {
+    "title": "Nastavení",
+    "tabs": {
+      "company": "Firma",
+      "bankAccounts": "Bankovní účty",
+      "vatRates": "Sazby DPH",
+      "numberSeries": "Číselné řady"
+    },
+    "company": {
+      "vatPayer": "Plátce DPH",
+      "web": "Web",
+      "registration": "Zápis v rejstříku",
+      "registrationHint": "Např. Fyzická osoba zapsaná v živnostenském rejstříku.",
+      "defaultDueDays": "Výchozí splatnost (dny)",
+      "defaultLocale": "Výchozí jazyk dokladů"
+    },
+    "bankAccounts": {
+      "add": "Přidat účet",
+      "edit": "Upravit účet",
+      "label": "Označení",
+      "currency": "Měna",
+      "account": "Účet",
+      "accountNumber": "Číslo účtu",
+      "accountNumberHint": "Např. 19-123456789/0100. Vyplňte číslo účtu nebo IBAN.",
+      "iban": "IBAN",
+      "bic": "BIC / SWIFT",
+      "isDefault": "Výchozí pro měnu",
+      "defaultFor": "Výchozí {currency}",
+      "confirmDelete": "Opravdu smazat účet „{name}“?",
+      "empty": "Zatím žádné bankovní účty."
+    },
+    "vatRates": {
+      "add": "Přidat sazbu",
+      "edit": "Upravit sazbu",
+      "rate": "Sazba (%)",
+      "label": "Název",
+      "position": "Pořadí",
+      "isDefault": "Výchozí",
+      "active": "Aktivní",
+      "setDefault": "Nastavit {rate} % jako výchozí",
+      "toggleActive": "Aktivní sazba {rate} %",
+      "confirmDelete": "Opravdu smazat sazbu {rate} % ({label})?",
+      "empty": "Žádné sazby DPH.",
+      "defaultMustBeActive": "Výchozí sazba musí být aktivní."
+    },
+    "numberSeries": {
+      "docTypes": {
+        "invoice": "Faktura",
+        "credit_note": "Dobropis",
+        "proforma": "Zálohová faktura",
+        "advance_tax_doc": "Daňový doklad k přijaté platbě",
+        "received": "Přijaté faktury"
+      },
+      "pattern": "Vzor",
+      "preview": "Náhled dalšího čísla",
+      "serverPreview": "Další číslo podle serveru",
+      "counters": "Počítadla podle roku",
+      "year": "Rok",
+      "lastNumber": "Poslední číslo",
+      "lastNumberFor": "Poslední číslo za rok {year}",
+      "invalidCounter": "Rok musí mít 4 číslice a poslední číslo musí být nezáporné celé číslo.",
+      "helpTitle": "Jak zapsat vzor",
+      "helpRules": "Právě jeden rok (čtyř- nebo dvoumístný) a právě jedno počítadlo (1–9 znaků N = počet číslic). Ostatní znaky: písmena bez diakritiky, číslice a / _ -. Nejvýše 40 znaků. Každá řada musí mít jiný vzor. Počítadlo se každý rok nuluje.",
+      "tokens": {
+        "yyyy": "rok čtyřmístně (2026)",
+        "yy": "rok dvoumístně (26)",
+        "n": "pořadové číslo doplněné nulami (0001)"
+      }
+    }
   }
 }

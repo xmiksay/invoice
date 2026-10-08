@@ -43,4 +43,18 @@ describe("router auth guard", () => {
     await router.push("/nope/deep");
     expect(router.currentRoute.value.name).toBe("home");
   });
+
+  it("resolves feature routes and redirects /settings to the company tab", async () => {
+    useAuthStore().token = "t";
+    const router = createAppRouter(createMemoryHistory());
+    await router.push("/settings");
+    expect(router.currentRoute.value.name).toBe("settings-company");
+    await router.push("/settings/number-series");
+    expect(router.currentRoute.value.name).toBe("settings-number-series");
+    await router.push("/contacts/new");
+    expect(router.currentRoute.value.name).toBe("contact-new");
+    await router.push("/contacts/abc");
+    expect(router.currentRoute.value.name).toBe("contact-edit");
+    expect(router.currentRoute.value.params.id).toBe("abc");
+  });
 });

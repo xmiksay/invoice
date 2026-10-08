@@ -11,8 +11,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::Router;
 use axum::body::Body;
-use axum::http::{Request, Response};
+use axum::http::{Method, Request, Response, StatusCode};
 use invoice::app::{self, AppState};
+use invoice::ares::{AresClient, DEFAULT_ARES_URL};
 use invoice::migration::{Migrator, MigratorTrait};
 use invoice::secret::Secret;
 use sea_orm::{ConnectOptions, ConnectionTrait, Database, DatabaseConnection};
@@ -52,9 +53,9 @@ impl TestDb {
         let base_url = test_database_url();
         let schema = unique_schema();
 
-        let admin = Database::connect(&base_url)
-            .await
-            .expect("connect to TEST_DATABASE_URL (is the local Postgres running? see .env.example)");
+        let admin = Database::connect(&base_url).await.expect(
+            "connect to TEST_DATABASE_URL (is the local Postgres running? see .env.example)",
+        );
         admin
             .execute_unprepared(&format!("CREATE SCHEMA \"{schema}\""))
             .await
@@ -92,8 +93,13 @@ impl Drop for TestDb {
             };
             rt.block_on(async move {
                 if let Ok(conn) = Database::connect(&url).await {
+                    // This blocks the test's runtime, so a lock held by one of
+                    // the test's own connections could never be released:
+                    // give up (leaking the schema) instead of hanging forever.
                     let _ = conn
-                        .execute_unprepared(&format!("DROP SCHEMA IF EXISTS \"{schema}\" CASCADE"))
+                        .execute_unprepared(&format!(
+                            "SET lock_timeout = '10s'; DROP SCHEMA IF EXISTS \"{schema}\" CASCADE"
+                        ))
                         .await;
                 }
             });
@@ -102,10 +108,17 @@ impl Drop for TestDb {
     }
 }
 
+/// App router; ARES points at the real default URL, which tests never call.
 pub fn router(db: DatabaseConnection) -> Router {
+    router_with_ares(db, DEFAULT_ARES_URL)
+}
+
+/// App router with ARES at `ares_url` (a local mock server in tests).
+pub fn router_with_ares(db: DatabaseConnection, ares_url: &str) -> Router {
     app::router(AppState {
         db,
         api_token: Secret::new(TEST_TOKEN.to_string()),
+        ares: AresClient::new(ares_url).expect("build ARES client"),
     })
 }
 
@@ -126,4 +139,40 @@ pub async fn json(resp: Response<Body>) -> serde_json::Value {
         .await
         .expect("read body");
     serde_json::from_slice(&bytes).expect("JSON body")
+}
+
+/// Authenticated request with an optional JSON body.
+pub fn authed(method: Method, uri: &str, body: Option<serde_json::Value>) -> Request<Body> {
+    let b = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("authorization", format!("Bearer {TEST_TOKEN}"));
+    match body {
+        Some(v) => b
+            .header("content-type", "application/json")
+            .body(Body::from(v.to_string())),
+        None => b.body(Body::empty()),
+    }
+    .expect("build request")
+}
+
+/// Send an authenticated request; returns the status and the JSON body
+/// (`Null` for an empty body).
+pub async fn call(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    body: Option<serde_json::Value>,
+) -> (StatusCode, serde_json::Value) {
+    let resp = send(app.clone(), authed(method, uri, body)).await;
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .expect("read body");
+    let json = if bytes.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::from_slice(&bytes).expect("JSON body")
+    };
+    (status, json)
 }

@@ -1,0 +1,30 @@
+{
+  "ico": "44444443",
+  "obchodniJmeno": "Ukázková firma a.s.",
+  "sidlo": {
+    "kodStatu": "CZ",
+    "nazevStatu": "Česká republika",
+    "kodKraje": 19,
+    "nazevKraje": "Hlavní město Praha",
+    "kodObce": 554782,
+    "nazevObce": "Praha",
+    "nazevMestskeCastiObvodu": "Praha 4",
+    "nazevCastiObce": "Michle",
+    "kodUlice": 123456,
+    "nazevUlice": "Ukázková",
+    "cisloDomovni": 778,
+    "typCisloDomovni": 1,
+    "cisloOrientacni": 3,
+    "cisloOrientacniPismeno": "a",
+    "psc": 14000,
+    "textovaAdresa": "Ukázková 778/3a, Michle, 14000 Praha 4",
+    "standardizaceAdresy": true
+  },
+  "pravniForma": "121",
+  "financniUrad": "004",
+  "datumVzniku": "2003-06-30",
+  "datumAktualizace": "2026-01-01",
+  "dic": "CZ44444443",
+  "czNace": ["620"],
+  "primarniZdroj": "ros"
+}

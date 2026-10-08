@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { LOCALES, setLocale, type Locale } from "@/i18n";
 import { useAuthStore } from "@/stores/auth";
 
 const { t, locale } = useI18n();
 const router = useRouter();
+const route = useRoute();
+
+const links = [
+  { to: "/", label: "nav.invoices" },
+  { to: "/contacts", label: "nav.contacts" },
+  { to: "/settings", label: "nav.settings" },
+] as const;
+
+// Path prefix match: "/contacts/123" keeps "Contacts" highlighted.
+function isActive(to: string): boolean {
+  return to === "/" ? route.path === "/" : route.path === to || route.path.startsWith(`${to}/`);
+}
 const auth = useAuthStore();
 
 function onLocaleChange(event: Event) {
@@ -25,17 +37,19 @@ async function logout() {
         {{ t("app.name") }}
       </RouterLink>
 
-      <nav :aria-label="t('nav.main')" class="flex flex-1 gap-4 text-sm">
+      <nav :aria-label="t('nav.main')" class="order-last flex w-full gap-4 text-sm sm:order-none sm:w-auto sm:flex-1">
         <RouterLink
-          :to="{ name: 'home' }"
+          v-for="link in links"
+          :key="link.to"
+          :to="link.to"
           class="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-          active-class="!text-gray-900 dark:!text-gray-100 font-medium"
+          :class="{ '!text-gray-900 dark:!text-gray-100 font-medium': isActive(link.to) }"
         >
-          {{ t("nav.invoices") }}
+          {{ t(link.label) }}
         </RouterLink>
       </nav>
 
-      <div class="flex items-center gap-3">
+      <div class="ml-auto flex items-center gap-3">
         <label class="sr-only" for="locale-select">{{ t("locale.label") }}</label>
         <select
           id="locale-select"

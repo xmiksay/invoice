@@ -26,7 +26,8 @@ Everything goes through `make` (`make help` lists targets). `CARGO_BUILD_JOBS=4`
 - Branch `master` is the default. Work on a feature branch, one PR per phase / task, fast-forward only, Conventional Commits.
 - Toolchain is pinned: `rust-toolchain.toml` (1.97.0) must match `dtolnay/rust-toolchain` in `.github/workflows/ci.yml` and the `rust:` image in `Dockerfile`; Node is `frontend/.nvmrc` (22). Bump them together.
 - Integration tests need Postgres (`TEST_DATABASE_URL`); each test gets a throwaway schema (`tests/common/mod.rs`). They fail, not skip, without it.
-- Errors to clients are `{"code": "..."}` only — internal/DB detail is logged, never returned (`src/error.rs`).
+- Errors to clients are `{"code": "..."}`, plus a `fields` map on 422 (`{"code":"validation","fields":{"<camelCaseField>":"<reason>"}}`) — internal/DB detail is logged, never returned (`src/error.rs`).
+- Wire format and every route are specified in [`docs/api.md`](../docs/api.md) — update it with any API change.
 - All `/api/*` except `/api/health` and `/api/openapi.json` require the Bearer token (`src/auth.rs`).
 - UI strings go through vue-i18n; `frontend/src/locales/cs.json` and `en.json` must have identical keys (test enforced).
 - Migrations are append-only (`src/migration/mod.rs` explains how to add one).

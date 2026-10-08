@@ -7,11 +7,17 @@
 
 pub use sea_orm_migration::prelude::*;
 
+mod m20261008_000001_settings;
+mod m20261008_000002_contacts;
+
 pub struct Migrator;
 
 #[async_trait::async_trait]
 impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
-        vec![]
+        vec![
+            Box::new(m20261008_000001_settings::Migration),
+            Box::new(m20261008_000002_contacts::Migration),
+        ]
     }
 }

@@ -47,6 +47,9 @@ ISDOC import notes (FakturaOnline export, ISDOC 6.0.2):
 - `PaymentMeans/Payment/PaidAmount` equals the total even for unpaid invoices — do not treat it as a payment.
 - Test fixtures must be anonymized (no real IČO/DIČ/IBAN/names).
 
+Phase 1b note:
+- Setting a number-series counter below the highest already-issued number for that doc type/year must be rejected (needs the documents table).
+
 ### Phase 2 — interchange
 ISDOC export, CSV/XLSX bulk import (fixed documented template, sample downloadable
 in the UI, one row = one invoice with VAT recap, no lines), CSV export for the
