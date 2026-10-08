@@ -14,14 +14,12 @@ Everything goes through `make` (`make help` lists targets). `CARGO_BUILD_JOBS=4`
 
 | Task | Command |
 |---|---|
-| Test DB (Postgres 16, docker) | `make test-db-up` / `make test-db-down` |
+| Database | local Postgres 18 on `localhost:5432`: `invoice` (dev), `invoice_test` (tests); setup in `.env.example` |
 | Full gate (must be green before push) | `make lint` and `make test` |
 | Backend only | `make lint-backend`, `make test-unit`, `make test-integration` |
 | Frontend only | `make frontend-install`, `make lint-frontend`, `make test-frontend` |
 | Dev | `make dev-server` + `make dev-frontend` (Vite proxies `/api` → `:3000`) |
 | Release build / image | `make build`, `make docker-build` |
-
-If host port 5433 is taken, pass `TEST_DB_PORT=<port>` to both `make test-db-up` and `make test`.
 
 ## Rules
 

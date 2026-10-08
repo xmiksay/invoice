@@ -4,11 +4,9 @@ SHELL := /usr/bin/env bash
 
 export CARGO_BUILD_JOBS ?= 4
 
-# Local dev/test Postgres from docker-compose.yml. Override TEST_DB_PORT when
-# 5433 is taken on this host (e.g. `make test-db-up test-backend TEST_DB_PORT=5434`).
-TEST_DB_PORT ?= 5433
-TEST_DATABASE_URL ?= postgres://invoice:invoice@localhost:$(TEST_DB_PORT)/invoice
-export TEST_DB_PORT TEST_DATABASE_URL
+# Integration tests use the local Postgres (see .env.example for the one-time setup).
+TEST_DATABASE_URL ?= postgres://invoice:invoice@localhost:5432/invoice_test
+export TEST_DATABASE_URL
 
 IMAGE ?= ghcr.io/xmiksay/invoice:dev
 
@@ -60,7 +58,7 @@ lint: lint-backend lint-frontend ## Lint backend and frontend
 test-unit: ## Rust unit tests (no DB)
 	cargo test --lib --bins
 
-test-integration: ## Rust integration tests (needs Postgres: make test-db-up)
+test-integration: ## Rust integration tests (needs local Postgres, TEST_DATABASE_URL)
 	cargo test --test '*'
 
 test-backend: test-unit test-integration ## All Rust tests
@@ -69,12 +67,6 @@ test-frontend: ## Frontend tests
 	npm --prefix frontend run test
 
 test: test-backend test-frontend ## All tests
-
-test-db-up: ## Start the dev/test Postgres (host port TEST_DB_PORT, default 5433)
-	docker compose up -d --wait postgres
-
-test-db-down: ## Stop the dev/test Postgres and drop its volume
-	docker compose down -v
 
 # ===== Migrations ============================================================
 migrate: ## Apply pending migrations (needs INVOICE__DATABASE_URL)
@@ -94,4 +86,4 @@ clean: ## Remove build artifacts
 .PHONY: help build run dev-server dev-frontend frontend-install frontend-build \
 	fmt fmt-check clippy lint-backend lint-frontend lint \
 	test-unit test-integration test-backend test-frontend test \
-	test-db-up test-db-down migrate migrate-status docker-build clean
+	migrate migrate-status docker-build clean

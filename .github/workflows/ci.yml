@@ -21,11 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_USER: invoice
           POSTGRES_PASSWORD: invoice
-          POSTGRES_DB: invoice
+          POSTGRES_DB: invoice_test
         ports:
           - 5432:5432
         options: >-
@@ -34,7 +34,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      TEST_DATABASE_URL: postgres://invoice:invoice@localhost:5432/invoice
+      TEST_DATABASE_URL: postgres://invoice:invoice@localhost:5432/invoice_test
     steps:
       - uses: actions/checkout@v5
       # Must equal rust-toolchain.toml's channel — bump both together.

@@ -11,7 +11,7 @@ Status: skeleton — see [docs/plan.md](docs/plan.md) for scope and phases,
 
 ```sh
 cp .env.example .env            # set INVOICE__API_TOKEN (openssl rand -hex 32)
-make test-db-up                 # Postgres 16 on localhost:5433
+# local Postgres on localhost:5432 — one-time role/db setup in .env.example
 make frontend-install
 make dev-server                 # backend on :3000
 make dev-frontend               # Vite on :5173, proxies /api
@@ -31,7 +31,6 @@ Open the SPA and log in with the API token.
 | `make lint` | `lint-backend` + `lint-frontend` (eslint + vue-tsc) |
 | `make test-unit` / `make test-integration` | Rust unit / integration tests (integration needs Postgres) |
 | `make test` | `test-backend` + `test-frontend` |
-| `make test-db-up` / `make test-db-down` | Dev/test Postgres (`TEST_DB_PORT`, default 5433) |
 | `make migrate` / `make migrate-status` | Apply / show migrations |
 | `make docker-build` | Build the Docker image (`IMAGE=...` to override the tag) |
 | `make clean` | Remove build artifacts |

@@ -47,7 +47,7 @@ Unauthenticated `/api/*` → 401 `{"code":"unauthorized"}` + `WWW-Authenticate: 
 | `INVOICE__API_TOKEN` | serve only | — | non-empty, single-user Bearer token |
 | `INVOICE__BIND` | no | `0.0.0.0:3000` | listen address |
 | `RUST_LOG` | no | `invoice=info,tower_http=info,sea_orm_migration=info` | |
-| `TEST_DATABASE_URL` | tests | from `TEST_DB_PORT` (5433) | integration tests |
+| `TEST_DATABASE_URL` | tests | `…@localhost:5432/invoice_test` | integration tests |
 
 ## Frontend (`frontend/`)
 

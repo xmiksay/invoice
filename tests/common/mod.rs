@@ -23,7 +23,7 @@ pub const TEST_TOKEN: &str = "test-token-0123456789";
 pub fn test_database_url() -> String {
     std::env::var("TEST_DATABASE_URL").expect(
         "TEST_DATABASE_URL must be set for integration tests \
-         (e.g. `make test-db-up`, then see .env.example)",
+         (local Postgres, see .env.example)",
     )
 }
 
@@ -54,7 +54,7 @@ impl TestDb {
 
         let admin = Database::connect(&base_url)
             .await
-            .expect("connect to TEST_DATABASE_URL (is `make test-db-up` running?)");
+            .expect("connect to TEST_DATABASE_URL (is the local Postgres running? see .env.example)");
         admin
             .execute_unprepared(&format!("CREATE SCHEMA \"{schema}\""))
             .await
