@@ -5,7 +5,9 @@
     "bankAccounts": "Bank accounts",
     "vatRates": "VAT rates",
     "numberSeries": "Number series",
-    "design": "Design"
+    "design": "Design",
+    "categories": "Categories",
+    "customFields": "Custom fields"
   },
   "company": {
     "vatPayer": "VAT payer",
@@ -50,7 +52,10 @@
       "credit_note": "Credit note",
       "proforma": "Proforma invoice",
       "advance_tax_doc": "Tax document for advance payment",
-      "received": "Received invoices"
+      "received": "Received invoices",
+      "received_credit_note": "Received credit notes",
+      "received_proforma": "Received proformas",
+      "received_advance_tax_doc": "Received advance tax documents"
     },
     "pattern": "Pattern",
     "preview": "Next number preview",
@@ -67,5 +72,48 @@
       "yy": "two-digit year (26)",
       "n": "sequence number padded with zeros (0001)"
     }
+  },
+  "categories": {
+    "add": "Add category",
+    "edit": "Edit category",
+    "name": "Name",
+    "kind": "Kind",
+    "kinds": {
+      "expense": "Expense",
+      "income": "Income"
+    },
+    "toggleActive": "Category {name} active",
+    "confirmDelete": "Really delete the category “{name}”?",
+    "empty": "No categories yet.",
+    "help": "Expense categories go on received documents, income categories on issued ones. A category used by documents cannot be deleted — deactivate it."
+  },
+  "customFields": {
+    "add": "Add field",
+    "edit": "Edit field",
+    "key": "Key",
+    "keyHint": "Lowercase letters, digits and _, starting with a letter. Cannot be changed later.",
+    "label": "Label",
+    "type": "Type",
+    "types": {
+      "text": "Text",
+      "number": "Number",
+      "date": "Date",
+      "bool": "Yes/no",
+      "select": "Select"
+    },
+    "options": "Options",
+    "optionsHint": "One option per line (1–50).",
+    "appliesTo": "Applies to",
+    "scopes": {
+      "issued": "Issued",
+      "received": "Received",
+      "both": "Issued and received"
+    },
+    "required": "Required",
+    "inactive": "inactive",
+    "immutable": "Cannot be changed after create.",
+    "confirmDelete": "Really delete the field “{label}”? Values stored on documents stay but are no longer shown.",
+    "empty": "No custom fields yet.",
+    "help": "Custom fields show in the editor and the metadata of documents of their direction. Inactive fields are not offered; stored values are kept."
   }
 }

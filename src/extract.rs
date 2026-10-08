@@ -29,6 +29,12 @@ pub fn optional_json<T: serde::de::DeserializeOwned + Default>(body: &[u8]) -> R
     serde_json::from_slice(body).map_err(|e| AppError::BadRequest(e.to_string()))
 }
 
+/// An already-parsed JSON body as `T`; a wrong shape → 400 `bad_request`.
+/// For routes that pick the body type from the body itself.
+pub fn from_value<T: serde::de::DeserializeOwned>(body: serde_json::Value) -> Result<T, AppError> {
+    serde_json::from_value(body).map_err(|e| AppError::BadRequest(e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

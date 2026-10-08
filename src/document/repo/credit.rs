@@ -16,7 +16,7 @@ use crate::document::entity::{document, vat_recap};
 use crate::document::handlers::input::DocumentData;
 use crate::document::line::{LineData, PaymentMethod, Status, VatMode};
 use crate::error::AppError;
-use crate::settings::doc_type::DocType;
+use crate::settings::doc_type::{DocType, ISSUED};
 
 /// Lock `id` and require an issued invoice (else `invalid_state`).
 async fn locked_invoice<C: ConnectionTrait>(
@@ -24,10 +24,17 @@ async fn locked_invoice<C: ConnectionTrait>(
     id: Uuid,
 ) -> Result<document::Model, AppError> {
     let doc = query::lock(txn, id).await?;
-    if doc.doc_type != DocType::Invoice.as_str() || view::status(&doc)? != Status::Issued {
+    if !creditable(&doc)? {
         return Err(AppError::InvalidState);
     }
     Ok(doc)
+}
+
+/// An issued invoice of ours (received documents are never credited here).
+fn creditable(doc: &document::Model) -> Result<bool, AppError> {
+    Ok(doc.doc_type == DocType::Invoice.as_str()
+        && doc.direction == ISSUED
+        && view::status(doc)? == Status::Issued)
 }
 
 /// A draft credit note copying the invoice (advance lines dropped).
@@ -38,7 +45,7 @@ pub async fn create(
     today: NaiveDate,
 ) -> Result<Uuid, AppError> {
     let inv = query::find(db, invoice_id).await?;
-    if inv.doc_type != DocType::Invoice.as_str() || view::status(&inv)? != Status::Issued {
+    if !creditable(&inv)? {
         return Err(AppError::InvalidState);
     }
     let due_date = context::due_date(db, inv.contact_id, today).await?;
@@ -67,6 +74,9 @@ pub async fn create(
         internal_note: None,
         round_total: false,
         lines: copy_lines(&query::load_lines(db, invoice_id).await?),
+        imported: false,
+        number: None,
+        meta: Default::default(),
     };
     let totals = compute::evaluate(&data.lines, data.params())
         .map_err(AppError::Validation)?

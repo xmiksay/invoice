@@ -76,6 +76,18 @@ fn maps_variants_to_status_and_code() {
             "catalog_item_in_use",
         ),
         (
+            AppError::CategoryInUse,
+            StatusCode::CONFLICT,
+            "category_in_use",
+        ),
+        (AppError::NumberTaken, StatusCode::CONFLICT, "number_taken"),
+        (AppError::PdfMissing, StatusCode::NOT_FOUND, "pdf_missing"),
+        (
+            AppError::TooLarge,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "too_large",
+        ),
+        (
             AppError::PdfUnavailable("down".into()),
             StatusCode::SERVICE_UNAVAILABLE,
             "pdf_unavailable",

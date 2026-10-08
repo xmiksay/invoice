@@ -16,6 +16,7 @@ use crate::document::handlers::dto::{self, Document, DocumentSummary, RelatedDoc
 use crate::document::line::{Status, VatMode};
 use crate::document::state;
 use crate::error::AppError;
+use crate::settings::doc_type::RECEIVED;
 
 pub fn status(doc: &document::Model) -> Result<Status, AppError> {
     Ok(Status::parse(&doc.status)
@@ -33,7 +34,9 @@ fn derived(doc: &document::Model, today: NaiveDate) -> Result<(Status, bool), Ap
     let s = status(doc)?;
     Ok((
         s,
-        state::is_overdue(&doc.doc_type, s, doc.paid, doc.payable, doc.due_date, today),
+        doc.due_date.is_some_and(|due| {
+            state::is_overdue(&doc.doc_type, s, doc.paid, doc.payable, due, today)
+        }),
     ))
 }
 
@@ -68,7 +71,20 @@ fn related(r: &document::Model) -> Result<RelatedDocument, AppError> {
         number: r.number.clone(),
         status: status(r)?,
         payable: round2(r.payable),
+        currency: r.currency.clone(),
     })
+}
+
+/// The top-level `total`: received documents show the contract's
+/// Σ(base + vat) + rounding, issued ones `totals.total`.
+fn top_total(received: bool, t: &dto::Totals) -> Result<rust_decimal::Decimal, AppError> {
+    if !received {
+        return Ok(t.total);
+    }
+    Ok(t.total
+        .checked_add(t.rounding)
+        .map(round2)
+        .context("stored received total overflows")?)
 }
 
 pub fn document(full: Full, today: NaiveDate) -> Result<Document, AppError> {
@@ -85,7 +101,19 @@ pub fn document(full: Full, today: NaiveDate) -> Result<Document, AppError> {
     // Stored lines passed validation on save, so this only derives line bases.
     let evaluated = compute::evaluate(&full.lines, params)
         .map_err(|e| anyhow::anyhow!("stored document {} fails validation: {e:?}", d.id))?;
-    let totals = stored_totals(&full).into();
+    let totals: dto::Totals = stored_totals(&full).into();
+    let received = full.doc.direction == RECEIVED;
+    let vat_recap = received.then(|| {
+        totals
+            .recap
+            .iter()
+            .map(|r| dto::EnteredRecap {
+                rate: r.vat_rate,
+                base: r.base,
+                vat: r.vat,
+            })
+            .collect()
+    });
     let related_documents = full
         .related
         .iter()
@@ -109,6 +137,29 @@ pub fn document(full: Full, today: NaiveDate) -> Result<Document, AppError> {
             _ => None,
         },
         settled,
+        original: match (
+            d.original_sha256.clone(),
+            d.original_size,
+            d.original_uploaded_at,
+        ) {
+            (Some(sha256), Some(size), Some(uploaded_at)) => Some(dto::OriginalPdf {
+                sha256,
+                size,
+                uploaded_at,
+            }),
+            _ => None,
+        },
+        vat_recap,
+        rounding: totals.rounding,
+        total: top_total(received, &totals)?,
+        payable: totals.payable,
+        imported: d.imported,
+        supplier_number: d.supplier_number,
+        received_date: d.received_date,
+        vat_deductible: d.vat_deductible,
+        supplier_account: d.supplier_account,
+        category_id: d.category_id,
+        custom_fields: d.custom_fields.as_object().cloned().unwrap_or_default(),
         related_documents,
         parent,
         related_document_id: d.related_document_id,
@@ -153,6 +204,16 @@ pub fn document(full: Full, today: NaiveDate) -> Result<Document, AppError> {
     })
 }
 
+/// The other party's snapshot: the supplier of a received document, else
+/// the customer.
+fn counterparty(d: &document::Model) -> &Option<serde_json::Value> {
+    if d.direction == RECEIVED {
+        &d.supplier_snapshot
+    } else {
+        &d.customer_snapshot
+    }
+}
+
 /// Summaries; drafts (no snapshot yet) show the live contact name.
 pub async fn summaries(
     db: &DatabaseConnection,
@@ -161,7 +222,7 @@ pub async fn summaries(
 ) -> Result<Vec<DocumentSummary>, AppError> {
     let ids: Vec<Uuid> = docs
         .iter()
-        .filter(|d| d.customer_snapshot.is_none())
+        .filter(|d| counterparty(d).is_none())
         .filter_map(|d| d.contact_id)
         .collect();
     let names: HashMap<Uuid, String> = if ids.is_empty() {
@@ -178,7 +239,7 @@ pub async fn summaries(
     docs.into_iter()
         .map(|d| {
             let (status, overdue) = derived(&d, today)?;
-            let snap: Option<dto::PartySnapshot> = snapshot(&d.customer_snapshot)?;
+            let snap: Option<dto::PartySnapshot> = snapshot(counterparty(&d))?;
             let customer_name = match snap {
                 Some(s) => Some(s.name),
                 None => d.contact_id.and_then(|id| names.get(&id).cloned()),
@@ -206,6 +267,10 @@ pub async fn summaries(
                 payable: round2(d.payable),
                 paid: round2(d.paid),
                 sent_at: d.sent_at,
+                imported: d.imported,
+                has_pdf: d.pdf_path.is_some() || d.original_path.is_some(),
+                supplier_number: d.supplier_number,
+                category_id: d.category_id,
             })
         })
         .collect()

@@ -5,7 +5,9 @@
     "bankAccounts": "Bankovní účty",
     "vatRates": "Sazby DPH",
     "numberSeries": "Číselné řady",
-    "design": "Design"
+    "design": "Design",
+    "categories": "Kategorie",
+    "customFields": "Vlastní pole"
   },
   "company": {
     "vatPayer": "Plátce DPH",
@@ -50,7 +52,10 @@
       "credit_note": "Dobropis",
       "proforma": "Zálohová faktura",
       "advance_tax_doc": "Daňový doklad k přijaté platbě",
-      "received": "Přijaté faktury"
+      "received": "Přijaté faktury",
+      "received_credit_note": "Přijaté dobropisy",
+      "received_proforma": "Přijaté zálohové faktury",
+      "received_advance_tax_doc": "Přijaté daňové doklady k platbě"
     },
     "pattern": "Vzor",
     "preview": "Náhled dalšího čísla",
@@ -67,5 +72,48 @@
       "yy": "rok dvoumístně (26)",
       "n": "pořadové číslo doplněné nulami (0001)"
     }
+  },
+  "categories": {
+    "add": "Přidat kategorii",
+    "edit": "Upravit kategorii",
+    "name": "Název",
+    "kind": "Druh",
+    "kinds": {
+      "expense": "Výdaj",
+      "income": "Příjem"
+    },
+    "toggleActive": "Aktivní kategorie {name}",
+    "confirmDelete": "Opravdu smazat kategorii „{name}“?",
+    "empty": "Zatím žádné kategorie.",
+    "help": "Výdajové kategorie se přiřazují přijatým dokladům, příjmové vydaným. Kategorii použitou na dokladech nelze smazat — deaktivujte ji."
+  },
+  "customFields": {
+    "add": "Přidat pole",
+    "edit": "Upravit pole",
+    "key": "Klíč",
+    "keyHint": "Malá písmena, číslice a _, začíná písmenem. Později nelze změnit.",
+    "label": "Popisek",
+    "type": "Typ",
+    "types": {
+      "text": "Text",
+      "number": "Číslo",
+      "date": "Datum",
+      "bool": "Ano/ne",
+      "select": "Výběr"
+    },
+    "options": "Možnosti",
+    "optionsHint": "Jedna možnost na řádek (1–50).",
+    "appliesTo": "Platí pro",
+    "scopes": {
+      "issued": "Vydané",
+      "received": "Přijaté",
+      "both": "Vydané i přijaté"
+    },
+    "required": "Povinné",
+    "inactive": "neaktivní",
+    "immutable": "Po vytvoření nelze změnit.",
+    "confirmDelete": "Opravdu smazat pole „{label}“? Hodnoty uložené v dokladech zůstanou, ale nebudou se zobrazovat.",
+    "empty": "Zatím žádná vlastní pole.",
+    "help": "Vlastní pole se zobrazí v editoru a v metadatech dokladů daného směru. Neaktivní pole se nenabízejí, uložené hodnoty zůstávají."
   }
 }

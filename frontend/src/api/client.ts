@@ -19,7 +19,7 @@ export class ApiError extends Error {
 }
 
 export interface RequestOptions extends Omit<RequestInit, "body"> {
-  /** Serialized as JSON. */
+  /** Serialized as JSON; a `FormData` goes out as multipart (the browser sets the boundary). */
   body?: unknown;
   /**
    * Explicit token instead of the stored one. Used to validate a candidate
@@ -59,14 +59,15 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
   const headers = new Headers(extraHeaders);
   headers.set("Accept", accept);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  if (body !== undefined) headers.set("Content-Type", "application/json");
+  const multipart = body instanceof FormData;
+  if (body !== undefined && !multipart) headers.set("Content-Type", "application/json");
 
   let res: Response;
   try {
     res = await fetch(path, {
       ...init,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
     });
   } catch {
     throw new ApiError(0, "network");

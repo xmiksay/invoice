@@ -15,7 +15,7 @@ use utoipa::ToSchema;
 
 /// Per-field validation failures: camelCase wire field name → reason code
 /// (`required`, `invalid`, `too_long`, `duplicate`, `invalid_ico`, `invalid_pattern`,
-/// `below_issued`, `exceeds_original`, `mixed_vat`).
+/// `below_issued`, `exceeds_original`, `mixed_vat`, `unknown`, `inactive`).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct FieldErrors(BTreeMap<String, &'static str>);
 
@@ -42,6 +42,11 @@ impl FieldErrors {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// The reason recorded for `field`.
+    pub fn get(&self, field: &str) -> Option<&'static str> {
+        self.0.get(field).copied()
     }
 
     /// Add every error of `other` (existing reasons win).
@@ -102,6 +107,19 @@ pub enum AppError {
     #[error("the catalog item is the last member of a group")]
     CatalogItemInUse,
 
+    #[error("the category is used by a document")]
+    CategoryInUse,
+
+    /// The allocated number is already held by another (imported) document.
+    #[error("document number already taken")]
+    NumberTaken,
+
+    #[error("the document has no PDF")]
+    PdfMissing,
+
+    #[error("upload too large")]
+    TooLarge,
+
     /// mdcast unreachable, token rejected, or a gateway answering for it.
     #[error("PDF service unavailable: {0}")]
     PdfUnavailable(String),
@@ -147,6 +165,10 @@ impl AppError {
             Self::AdvanceSettled => (StatusCode::CONFLICT, "advance_settled"),
             Self::AdvanceInUse => (StatusCode::CONFLICT, "advance_in_use"),
             Self::CatalogItemInUse => (StatusCode::CONFLICT, "catalog_item_in_use"),
+            Self::CategoryInUse => (StatusCode::CONFLICT, "category_in_use"),
+            Self::NumberTaken => (StatusCode::CONFLICT, "number_taken"),
+            Self::PdfMissing => (StatusCode::NOT_FOUND, "pdf_missing"),
+            Self::TooLarge => (StatusCode::PAYLOAD_TOO_LARGE, "too_large"),
             Self::PdfUnavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "pdf_unavailable"),
             Self::PdfRenderFailed(_) | Self::PdfUpstream(_) => {
                 (StatusCode::BAD_GATEWAY, "pdf_render_failed")
@@ -168,6 +190,15 @@ pub fn unique_violation(err: &DbErr) -> Option<String> {
     };
     e.is_unique_violation()
         .then(|| e.constraint().unwrap_or_default().to_string())
+}
+
+/// Maps a violation of the unique document-number indexes to `on_number`,
+/// any other error as usual.
+pub fn number_violation(err: DbErr, on_number: impl FnOnce() -> AppError) -> AppError {
+    match unique_violation(&err).as_deref() {
+        Some("documents_issued_number_key" | "documents_received_number_key") => on_number(),
+        _ => err.into(),
+    }
 }
 
 impl From<DbErr> for AppError {

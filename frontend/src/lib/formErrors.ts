@@ -11,6 +11,8 @@ export const REASON_CODES = [
   "below_issued",
   "exceeds_original",
   "mixed_vat",
+  "unknown",
+  "inactive",
 ] as const;
 
 /** Field errors of a 422 `validation` response, or null for any other failure. */
@@ -45,6 +47,10 @@ const KNOWN_CODES: Record<string, string> = {
   catalog_item_in_use: "errors.catalogItemInUse",
   pdf_unavailable: "errors.pdfUnavailable",
   pdf_render_failed: "errors.pdfRenderFailed",
+  pdf_missing: "errors.pdfMissing",
+  too_large: "errors.tooLarge",
+  category_in_use: "errors.categoryInUse",
+  number_taken: "errors.numberTaken",
 };
 
 /** i18n key + params for a non-field error message. */

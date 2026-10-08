@@ -5,14 +5,17 @@ use uuid::Uuid;
 
 use super::compute_input::{ComputeCtx, ComputeInput};
 use super::dto::{Computed, Document, DocumentList, ListQuery, lines_out};
-use super::fetch;
 use super::input::DocumentInput;
+use super::{fetch, received};
 use crate::app::AppState;
 use crate::contact::handlers::dto::ListQuery as Paging;
 use crate::document::line::Status;
-use crate::document::repo::{advance_sources, context, query, view, write};
+use crate::document::repo::{
+    advance_sources, context, query, received as received_repo, view, write,
+};
 use crate::error::{AppError, ErrorBody};
-use crate::extract::{ApiJson, ApiPath, ApiQuery};
+use crate::extract::{ApiJson, ApiPath, ApiQuery, from_value};
+use crate::settings::doc_type::RECEIVED;
 use crate::settings::repo::company;
 use crate::time::today;
 
@@ -47,21 +50,30 @@ pub async fn list(
     path = "/api/documents",
     tag = "documents",
     security(("bearer" = [])),
-    request_body = DocumentInput,
+    request_body(content = DocumentInput, description = "An issued draft (`DocumentInput`), or with `direction: \"received\"` a received document (`ReceivedInput`)"),
     responses(
         (status = 201, body = Document),
+        (status = 409, description = "`number_taken` (received: the allocated number is used)", body = ErrorBody),
         (status = 422, description = "Validation failed", body = ErrorBody),
     )
 )]
 pub async fn create(
     State(state): State<AppState>,
-    ApiJson(input): ApiJson<DocumentInput>,
+    ApiJson(body): ApiJson<serde_json::Value>,
 ) -> Result<(StatusCode, Json<Document>), AppError> {
-    let ids = input.advance_ids();
-    let ctx = context::load(&state.db, input.contact_id, today(), None, &ids).await?;
-    let (mut data, evaluated) = input.validate(&ctx)?;
-    context::resolve_bank(&state.db, &mut data, true).await?;
-    let id = write::create(&state.db, data, evaluated.totals).await?;
+    let direction = body
+        .get("direction")
+        .and_then(|d| d.as_str())
+        .map(str::trim);
+    let id = if direction == Some(RECEIVED) {
+        received::create(&state, body).await?
+    } else {
+        let input: DocumentInput = from_value(body)?;
+        let ctx = context::load(&state.db, &input, today(), None).await?;
+        let (mut data, evaluated) = input.validate(&ctx)?;
+        context::resolve_bank(&state.db, &mut data, true).await?;
+        write::create(&state.db, data, evaluated.totals).await?
+    };
     Ok((StatusCode::CREATED, Json(fetch(&state, id).await?)))
 }
 
@@ -86,26 +98,29 @@ pub async fn get(
     tag = "documents",
     security(("bearer" = [])),
     params(("id" = Uuid, Path)),
-    request_body = DocumentInput,
+    request_body(content = DocumentInput, description = "`DocumentInput` for an issued draft, `ReceivedInput` for a received document"),
     responses(
         (status = 200, body = Document),
         (status = 404, body = ErrorBody),
-        (status = 409, description = "`document_locked` (not a draft)", body = ErrorBody),
+        (status = 409, description = "`document_locked` (an issued document that is not a draft)", body = ErrorBody),
         (status = 422, description = "Validation failed", body = ErrorBody),
     )
 )]
 pub async fn update(
     State(state): State<AppState>,
     ApiPath(id): ApiPath<Uuid>,
-    ApiJson(input): ApiJson<DocumentInput>,
+    ApiJson(body): ApiJson<serde_json::Value>,
 ) -> Result<Json<Document>, AppError> {
     let doc = query::find(&state.db, id).await?;
+    if doc.direction == RECEIVED {
+        received::update(&state, &doc, body).await?;
+        return Ok(Json(fetch(&state, id).await?));
+    }
     if view::status(&doc)? != Status::Draft {
         return Err(AppError::DocumentLocked);
     }
-    let existing = Some(context::existing(&doc)?);
-    let ids = input.advance_ids();
-    let ctx = context::load(&state.db, input.contact_id, today(), existing, &ids).await?;
+    let input: DocumentInput = from_value(body)?;
+    let ctx = context::load(&state.db, &input, today(), Some(&doc)).await?;
     let (mut data, evaluated) = input.validate(&ctx)?;
     context::resolve_bank(&state.db, &mut data, false).await?;
     write::update(&state.db, id, data, evaluated.totals).await?;
@@ -121,14 +136,23 @@ pub async fn update(
     responses(
         (status = 204),
         (status = 404, body = ErrorBody),
-        (status = 409, description = "`document_locked` (not a draft)", body = ErrorBody),
+        (status = 409, description = "`document_locked` (an issued document that is not a draft; received documents can always be deleted)", body = ErrorBody),
     )
 )]
 pub async fn delete(
     State(state): State<AppState>,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    write::delete(&state.db, id).await?;
+    let doc = query::find(&state.db, id).await?;
+    let original = if doc.direction == RECEIVED {
+        received_repo::delete(&state.db, id).await?
+    } else {
+        write::delete(&state.db, id).await?
+    };
+    // After the commit: a failed delete never loses the file.
+    if let Some(rel) = original {
+        state.pdf.remove(&rel).await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

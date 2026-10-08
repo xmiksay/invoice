@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import type { Category } from "@/features/settings/types";
 import type { InvoiceFilters } from "../store";
 import { DOC_STATUSES, PAYMENT_STATES } from "../types";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
-const props = defineProps<{ filters: InvoiceFilters }>();
+/** `categories`: those of the list's kind; `showImported`: the issued list's imported / native filter. */
+const props = defineProps<{ filters: InvoiceFilters; categories: Category[]; showImported?: boolean; searchPlaceholder?: string }>();
 const emit = defineEmits<{ change: [filters: InvoiceFilters] }>();
 
 const { t } = useI18n();
@@ -35,7 +37,7 @@ onBeforeUnmount(() => clearTimeout(timer));
         v-model="local.q"
         type="search"
         class="input"
-        :placeholder="t('documents.list.searchPlaceholder')"
+        :placeholder="searchPlaceholder ?? t('documents.list.searchPlaceholder')"
         @input="onSearchInput"
       />
     </div>
@@ -64,5 +66,20 @@ onBeforeUnmount(() => clearTimeout(timer));
       <input id="filter-overdue" v-model="local.overdue" type="checkbox" class="size-4" @change="emitNow" />
       {{ t("documents.list.overdueOnly") }}
     </label>
+    <div class="sm:col-span-2">
+      <label for="filter-category" class="sr-only">{{ t("metadata.category") }}</label>
+      <select id="filter-category" v-model="local.categoryId" class="input" @change="emitNow">
+        <option value="">{{ t("documents.list.anyCategory") }}</option>
+        <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+      </select>
+    </div>
+    <div v-if="showImported" class="sm:col-span-2">
+      <label for="filter-imported" class="sr-only">{{ t("documents.list.origin") }}</label>
+      <select id="filter-imported" v-model="local.imported" class="input" @change="emitNow">
+        <option value="">{{ t("documents.list.anyOrigin") }}</option>
+        <option value="false">{{ t("documents.list.nativeOnly") }}</option>
+        <option value="true">{{ t("documents.list.importedOnly") }}</option>
+      </select>
+    </div>
   </div>
 </template>

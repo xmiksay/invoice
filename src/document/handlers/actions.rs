@@ -6,9 +6,11 @@ use uuid::Uuid;
 
 use super::dto::{CancelInput, CreditNoteInput, Document, InternalNoteInput, MarkSentInput};
 use super::fetch;
+use super::meta::MetadataInput;
 use crate::app::AppState;
 use crate::document::repo::{
-    credit as credit_repo, issue as issue_repo, lifecycle, settle as settle_repo,
+    credit as credit_repo, issue as issue_repo, lifecycle, meta as meta_repo, query,
+    settle as settle_repo,
 };
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::{ApiJson, ApiPath, optional_json};
@@ -76,7 +78,7 @@ pub async fn cancel(
     responses(
         (status = 200, body = Document),
         (status = 404, body = ErrorBody),
-        (status = 409, description = "`invalid_state` (not issued)", body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not issued, or a received document)", body = ErrorBody),
     )
 )]
 pub async fn mark_sent(
@@ -113,6 +115,31 @@ pub async fn internal_note(
     let note = v::opt_text(input.internal_note.as_deref(), 2000)
         .map_err(|r| AppError::field("internalNote", r))?;
     lifecycle::set_internal_note(&state.db, id, note).await?;
+    Ok(Json(fetch(&state, id).await?))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/documents/{id}/metadata",
+    tag = "documents",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path)),
+    request_body = MetadataInput,
+    responses(
+        (status = 200, body = Document),
+        (status = 404, body = ErrorBody),
+        (status = 422, description = "`categoryId` (`invalid` / `inactive`), `customFields.<key>`, `internalNote`", body = ErrorBody),
+    )
+)]
+pub async fn metadata(
+    State(state): State<AppState>,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<MetadataInput>,
+) -> Result<Json<Document>, AppError> {
+    let doc = query::find(&state.db, id).await?;
+    let ctx = meta_repo::load(&state.db, &doc.direction, input.category_id, Some(&doc)).await?;
+    let (meta, note) = input.validate(&doc.direction, &ctx)?;
+    meta_repo::set(&state.db, id, meta, note).await?;
     Ok(Json(fetch(&state, id).await?))
 }
 

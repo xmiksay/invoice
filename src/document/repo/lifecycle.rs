@@ -8,6 +8,7 @@ use super::{query, view};
 use crate::document::entity::document;
 use crate::document::line::Status;
 use crate::error::AppError;
+use crate::settings::doc_type::ISSUED;
 
 /// Lock the row, require `issued` and `allowed`, apply `f`. Anything else is
 /// `invalid_state`.
@@ -29,7 +30,8 @@ async fn on_issued_in(
     f: impl FnOnce(&mut document::ActiveModel),
 ) -> Result<(), AppError> {
     let doc = query::lock(txn, id).await?;
-    if view::status(&doc)? != Status::Issued || !allowed(&doc) {
+    // Received documents are only recorded: no cancel / mark-sent.
+    if view::status(&doc)? != Status::Issued || doc.direction != ISSUED || !allowed(&doc) {
         return Err(AppError::InvalidState);
     }
     let mut row: document::ActiveModel = doc.into();
@@ -39,11 +41,11 @@ async fn on_issued_in(
     Ok(())
 }
 
-/// A DDPP is only ever cancelled by deleting its payment; a proforma only
-/// while nothing is paid on it.
+/// A native DDPP is only ever cancelled by deleting its payment (an imported
+/// one has no payment link); a proforma only while nothing is paid on it.
 fn cancellable(doc: &document::Model) -> bool {
     match doc.doc_type.as_str() {
-        "advance_tax_doc" => false,
+        "advance_tax_doc" => doc.imported,
         "proforma" => doc.paid.is_zero(),
         _ => true,
     }

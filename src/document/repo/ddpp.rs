@@ -17,12 +17,13 @@ use crate::document::advance::issues_ddpp;
 use crate::document::ddpp::{self, Share};
 use crate::document::entity::{document, document_line, payment, vat_recap};
 use crate::document::line::{ItemData, LineData, MAX_INPUT, Status};
-use crate::error::AppError;
-use crate::settings::doc_type::DocType;
+use crate::error::{AppError, number_violation};
+use crate::settings::doc_type::{DocType, ISSUED};
 use crate::settings::repo::number_series;
 
-/// Whether a payment on `doc` must issue a DDPP: an issued proforma whose
-/// supplier was a VAT payer, in `standard` mode.
+/// Whether a payment on `doc` must issue a DDPP: a native issued proforma
+/// (never a received or imported one) whose supplier was a VAT payer, in
+/// `standard` mode.
 pub fn needed(doc: &document::Model) -> bool {
     let vat_payer = doc
         .supplier_snapshot
@@ -30,6 +31,8 @@ pub fn needed(doc: &document::Model) -> bool {
         .and_then(|s| s.get("vatPayer"))
         .and_then(serde_json::Value::as_bool);
     doc.doc_type == DocType::Proforma.as_str()
+        && doc.direction == ISSUED
+        && !doc.imported
         && doc.status == Status::Issued.as_str()
         && issues_ddpp(vat_payer, &doc.vat_mode)
 }
@@ -97,7 +100,7 @@ pub async fn issue(
         contact_id: Set(proforma.contact_id),
         issue_date: Set(payment.date),
         tax_point_date: Set(Some(payment.date)),
-        due_date: Set(payment.date),
+        due_date: Set(Some(payment.date)),
         currency: Set(proforma.currency.clone()),
         exchange_rate: Set(rate.rate),
         exchange_rate_date: Set(rate.date),
@@ -133,7 +136,9 @@ pub async fn issue(
         ..Default::default()
     };
     write::apply_totals(&mut row, &totals);
-    row.insert(txn).await?;
+    row.insert(txn)
+        .await
+        .map_err(|e| number_violation(e, || AppError::NumberTaken))?;
     lines::replace(txn, id, &lines).await?;
     lines::replace_recap(txn, id, &totals).await?;
     Ok(id)

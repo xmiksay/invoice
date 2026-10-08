@@ -191,3 +191,17 @@ describe("doc types", () => {
     ]);
   });
 });
+
+describe("import mode", () => {
+  it("any doc type, own number required, link only sent for imports", () => {
+    const draft = newDocumentDraft(ctx(), "advance_tax_doc", true);
+    expect(draft).toMatchObject({ docType: "advance_tax_doc", imported: true, number: "", taxPointDate: "2026-10-08" });
+    expect(validateDocument(draft)).toEqual({ number: "required" });
+    const input = toInput({ ...draft, number: " Z-1 ", relatedDocumentId: "pf1" });
+    expect(input).toMatchObject({ imported: true, number: "Z-1", relatedDocumentId: "pf1" });
+    const native = toInput({ ...newDocumentDraft(ctx()), relatedDocumentId: "pf1" });
+    expect(native).toMatchObject({ imported: false, number: null });
+    expect("relatedDocumentId" in native).toBe(false);
+  });
+});
+

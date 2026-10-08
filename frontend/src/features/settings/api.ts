@@ -3,7 +3,11 @@ import type { DocLocale } from "@/api/types";
 import type {
   BankAccount,
   BankAccountInput,
+  Category,
+  CategoryInput,
   Company,
+  CustomField,
+  CustomFieldInput,
   DesignInfo,
   DocType,
   NumberSeries,
@@ -38,6 +42,8 @@ export const companyApi = {
 
 export const bankAccountsApi = crudApi<BankAccount, BankAccountInput>("bank-accounts");
 export const vatRatesApi = crudApi<VatRate, VatRateInput>("vat-rates");
+export const categoriesApi = crudApi<Category, CategoryInput>("categories");
+export const customFieldsApi = crudApi<CustomField, CustomFieldInput>("custom-fields");
 
 export const numberSeriesApi = {
   list: () => request<NumberSeries[]>(`${BASE}/number-series`),

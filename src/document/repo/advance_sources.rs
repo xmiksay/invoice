@@ -53,8 +53,10 @@ pub async fn load<C: ConnectionTrait>(
     if ids.is_empty() {
         return Ok(HashMap::new());
     }
+    // Received documents can never be deducted: as if they did not exist.
     let docs = document::Entity::find()
         .filter(document::Column::Id.is_in(ids.to_vec()))
+        .filter(document::Column::Direction.eq(crate::settings::doc_type::ISSUED))
         .all(db)
         .await?;
     let recaps = vat_recap::Entity::find()

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useAction } from "@/composables/useAction";
 import { contactsApi } from "@/features/contacts/api";
 import { useCompanyStore } from "@/features/settings/stores";
@@ -9,18 +9,20 @@ import DocumentActions from "../components/DocumentActions.vue";
 import DocumentInfoCard from "../components/DocumentInfoCard.vue";
 import DocumentLinesTable from "../components/DocumentLinesTable.vue";
 import DocumentPdf from "../components/DocumentPdf.vue";
-import InternalNoteCard from "../components/InternalNoteCard.vue";
+import OriginalPdfPanel from "../components/OriginalPdfPanel.vue";
+import MetadataCard from "@/features/metadata/components/MetadataCard.vue";
 import PartiesCard from "../components/PartiesCard.vue";
 import PaymentsPanel from "../components/PaymentsPanel.vue";
 import RelatedDocumentsPanel from "../components/RelatedDocumentsPanel.vue";
 import StatusBadges from "../components/StatusBadges.vue";
 import TotalsPanel from "../components/TotalsPanel.vue";
-import { listLocation } from "../routes";
+import { detailLocation, listLocation } from "../routes";
 import { useDocumentStore } from "../store";
 import type { PartySnapshot } from "../types";
 
 const { t } = useI18n();
 const route = useRoute();
+const router = useRouter();
 const store = useDocumentStore();
 const company = useCompanyStore();
 const { error, run } = useAction();
@@ -41,12 +43,17 @@ watch(
   (docId) =>
     void run(async () => {
       await store.load(docId);
+      // A received document opened under /invoices/… belongs to the received views.
+      if (store.doc?.direction === "received") {
+        await router.replace(detailLocation(docId, "received"));
+        return;
+      }
       if (store.doc?.status === "draft") await loadLiveParties(store.doc.contactId);
     }),
   { immediate: true },
 );
 
-const doc = computed(() => (store.doc?.id === id.value ? store.doc : null));
+const doc = computed(() => (store.doc?.id === id.value && store.doc.direction === "issued" ? store.doc : null));
 const isDraft = computed(() => doc.value?.status === "draft");
 // A DDPP has no payments of its own.
 const hasPayments = computed(() => !isDraft.value && doc.value?.docType !== "advance_tax_doc");
@@ -67,15 +74,17 @@ const hasPayments = computed(() => !isDraft.value && doc.value?.docType !== "adv
           {{ t(`documents.docTypes.${doc.docType}`) }}
           <span class="font-mono">{{ doc.number ?? t("documents.draftNumber") }}</span>
         </h1>
-        <StatusBadges :status="doc.status" :payment-state="doc.paymentState" :overdue="doc.overdue" :sent-at="doc.sentAt" :sign="doc.sign" />
+        <StatusBadges :status="doc.status" :payment-state="doc.paymentState" :overdue="doc.overdue" :sent-at="doc.sentAt" :sign="doc.sign" :imported="doc.imported" />
         <span v-if="doc.settled" class="badge !bg-green-100 !text-green-800 dark:!bg-green-900/50 dark:!text-green-300" data-test="settled-badge">
           {{ t("documents.detail.settled") }}
         </span>
       </div>
-      <p v-if="doc.docType === 'advance_tax_doc'" class="text-sm text-gray-600 dark:text-gray-400" data-test="ddpp-note">{{ t("documents.detail.ddppNote") }}</p>
+      <p v-if="doc.docType === 'advance_tax_doc' && !doc.imported" class="text-sm text-gray-600 dark:text-gray-400" data-test="ddpp-note">{{ t("documents.detail.ddppNote") }}</p>
 
       <DocumentActions :doc="doc" />
-      <DocumentPdf :doc="doc" />
+      <!-- An imported document is never rendered with our design: its PDF is the uploaded original. -->
+      <OriginalPdfPanel v-if="doc.imported" :doc="doc" />
+      <DocumentPdf v-else :doc="doc" />
 
       <PartiesCard :supplier="isDraft ? liveSupplier : doc.supplier" :customer="isDraft ? liveCustomer : doc.customer" />
       <RelatedDocumentsPanel :parent="doc.parent" :children="doc.relatedDocuments" :currency="doc.currency" />
@@ -83,7 +92,7 @@ const hasPayments = computed(() => !isDraft.value && doc.value?.docType !== "adv
       <DocumentLinesTable :lines="doc.lines" :currency="doc.currency" />
       <TotalsPanel :totals="doc.totals" :currency="doc.currency" :exchange-rate="doc.exchangeRate" :sign="doc.sign" />
       <PaymentsPanel v-if="hasPayments" :doc="doc" />
-      <InternalNoteCard :note="doc.internalNote" />
+      <MetadataCard :doc="doc" />
     </template>
   </section>
 </template>

@@ -2,13 +2,16 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import { documentsApi } from "./api";
 import type {
+  Direction,
   DocStatus,
   Document,
   DocumentInput,
   DocumentSummary,
+  MetadataInput,
   Payment,
   PaymentInput,
   PaymentState,
+  ReceivedDocumentInput,
 } from "./types";
 
 export const PAGE_SIZE = 50;
@@ -24,12 +27,24 @@ export interface InvoiceFilters {
   q: string;
   from: string;
   to: string;
+  categoryId: string;
+  /** Issued list only: "" = all, "true" = imported only, "false" = native only. */
+  imported: "" | "true" | "false";
 }
 
-export const emptyFilters = (): InvoiceFilters => ({ status: "", paymentState: "", overdue: false, q: "", from: "", to: "" });
+export const emptyFilters = (): InvoiceFilters => ({
+  status: "",
+  paymentState: "",
+  overdue: false,
+  q: "",
+  from: "",
+  to: "",
+  categoryId: "",
+  imported: "",
+});
 
-/** Issued-document list; tab, filters + page live here so they survive a trip to the detail view. */
-export const useInvoiceListStore = defineStore("documents/invoices", () => {
+/** A document list of one direction; tab, filters + page live here so they survive a trip to the detail view. */
+const defineListStore = (id: string, direction: Direction) => defineStore(id, () => {
   const items = ref<DocumentSummary[]>([]);
   const total = ref(0);
   const docType = ref<ListDocType>("invoice");
@@ -45,7 +60,7 @@ export const useInvoiceListStore = defineStore("documents/invoices", () => {
     const f = filters.value;
     try {
       const page = await documentsApi.list({
-        direction: "issued",
+        direction,
         docType: docType.value,
         status: f.status || undefined,
         paymentState: f.paymentState || undefined,
@@ -53,6 +68,8 @@ export const useInvoiceListStore = defineStore("documents/invoices", () => {
         q: f.q,
         from: f.from || undefined,
         to: f.to || undefined,
+        categoryId: f.categoryId || undefined,
+        imported: f.imported === "" ? undefined : f.imported === "true",
         limit: PAGE_SIZE,
         offset: offset.value,
       });
@@ -88,6 +105,9 @@ export const useInvoiceListStore = defineStore("documents/invoices", () => {
   return { items, total, docType, filters, offset, loading, load, applyFilters, goTo, setDocType };
 });
 
+export const useInvoiceListStore = defineListStore("documents/invoices", "issued");
+export const useReceivedListStore = defineListStore("documents/received", "received");
+
 /** The document open in the detail view, with its payments. Every action stores the server's answer. */
 export const useDocumentStore = defineStore("documents/current", () => {
   const doc = ref<Document | null>(null);
@@ -109,7 +129,7 @@ export const useDocumentStore = defineStore("documents/current", () => {
     doc.value = loaded;
   }
 
-  async function save(input: DocumentInput, docId?: string): Promise<Document> {
+  async function save(input: DocumentInput | ReceivedDocumentInput, docId?: string): Promise<Document> {
     doc.value = docId ? await documentsApi.update(docId, input) : await documentsApi.create(input);
     return doc.value;
   }
@@ -131,8 +151,18 @@ export const useDocumentStore = defineStore("documents/current", () => {
     doc.value = await documentsApi.markSent(id());
   }
 
-  async function setInternalNote(note: string | null): Promise<void> {
-    doc.value = await documentsApi.setInternalNote(id(), note);
+  async function setMetadata(input: MetadataInput): Promise<void> {
+    doc.value = await documentsApi.setMetadata(id(), input);
+  }
+
+  async function uploadOriginal(file: File): Promise<void> {
+    await documentsApi.uploadOriginal(id(), file);
+    await load(id());
+  }
+
+  async function removeOriginal(): Promise<void> {
+    await documentsApi.removeOriginal(id());
+    await load(id());
   }
 
   /** Final-invoice draft settling the loaded proforma. */
@@ -166,7 +196,9 @@ export const useDocumentStore = defineStore("documents/current", () => {
     issue,
     cancel,
     markSent,
-    setInternalNote,
+    setMetadata,
+    uploadOriginal,
+    removeOriginal,
     settle,
     creditNote,
     addPayment,

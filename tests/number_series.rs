@@ -43,6 +43,21 @@ async fn series_are_seeded_with_preview() {
             (json!("proforma"), json!("Z{YYYY}{NNNN}"), json!([])),
             (json!("advance_tax_doc"), json!("DP{YYYY}{NNNN}"), json!([])),
             (json!("received"), json!("P{YYYY}{NNNN}"), json!([])),
+            (
+                json!("received_credit_note"),
+                json!("PD{YYYY}{NNNN}"),
+                json!([])
+            ),
+            (
+                json!("received_proforma"),
+                json!("PZ{YYYY}{NNNN}"),
+                json!([])
+            ),
+            (
+                json!("received_advance_tax_doc"),
+                json!("PDP{YYYY}{NNNN}"),
+                json!([])
+            ),
         ]
     );
     assert_eq!(

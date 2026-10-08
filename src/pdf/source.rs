@@ -105,7 +105,9 @@ impl Source {
             number: d.number.as_deref(),
             issue_date: d.issue_date,
             tax_point_date: d.tax_point_date,
-            due_date: d.due_date,
+            due_date: d
+                .due_date
+                .with_context(|| format!("document {} has no due date", d.id))?,
             currency: &d.currency,
             rate: self.rate,
             payment_method: &d.payment_method,

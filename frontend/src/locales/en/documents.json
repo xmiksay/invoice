@@ -5,7 +5,8 @@
   "status": {
     "draft": "Draft",
     "issued": "Issued",
-    "cancelled": "Cancelled"
+    "cancelled": "Cancelled",
+    "recorded": "Recorded"
   },
   "paymentState": {
     "unpaid": "Unpaid",
@@ -94,7 +95,13 @@
       "proforma": "Proforma invoices",
       "credit_note": "Credit notes",
       "advance_tax_doc": "Tax documents for payments"
-    }
+    },
+    "noPdf": "no PDF",
+    "anyCategory": "All categories",
+    "origin": "Origin",
+    "anyOrigin": "Issued here and imported",
+    "nativeOnly": "Issued here only",
+    "importedOnly": "Imported only"
   },
   "editor": {
     "newTitle": {
@@ -220,7 +227,15 @@
   "related": {
     "title": "Related documents",
     "parent": "Based on",
-    "child": "Follow-up"
+    "child": "Follow-up",
+    "pick": {
+      "proforma": "Follows the proforma",
+      "invoice": "Corrects the invoice"
+    },
+    "pickHint": "Informational link only; amounts are not recalculated.",
+    "none": "No link",
+    "search": "Search by number or counterparty…",
+    "more": "Showing the first {n} — refine the search."
   },
   "catalog": {
     "add": "From catalog",
@@ -230,5 +245,18 @@
     "memberCount": "items: {n}",
     "noResults": "Nothing found in the catalog.",
     "unpriced": "No price filled in for: {names} — the catalog price is in a currency other than {currency}; enter it manually."
+  },
+  "imported": "Imported",
+  "import": {
+    "action": "Import an existing document",
+    "hint": "Imported document: enter its own number. Issuing allocates no number from the series and renders no PDF — upload the original PDF on the detail page.",
+    "number": "Document number",
+    "confirmIssue": "Issue the imported document? It keeps its number, no PDF is rendered and it can no longer be edited.",
+    "title": {
+      "invoice": "Import an invoice",
+      "proforma": "Import a proforma",
+      "credit_note": "Import a credit note",
+      "advance_tax_doc": "Import an advance tax document"
+    }
   }
 }

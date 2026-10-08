@@ -12,6 +12,7 @@ mod m20261008_000002_contacts;
 mod m20261009_000001_documents;
 mod m20261010_000001_phase_1c;
 mod m20261011_000001_pdf_archive;
+mod m20261012_000001_received_import;
 
 pub struct Migrator;
 
@@ -24,6 +25,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261009_000001_documents::Migration),
             Box::new(m20261010_000001_phase_1c::Migration),
             Box::new(m20261011_000001_pdf_archive::Migration),
+            Box::new(m20261012_000001_received_import::Migration),
         ]
     }
 }

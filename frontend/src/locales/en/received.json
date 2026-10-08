@@ -1,0 +1,56 @@
+{
+  "docTypes": {
+    "invoice": "Received invoice",
+    "proforma": "Received proforma",
+    "credit_note": "Received credit note",
+    "advance_tax_doc": "Received advance tax document"
+  },
+  "newTitle": {
+    "invoice": "Record an invoice",
+    "proforma": "Record a proforma",
+    "credit_note": "Record a credit note",
+    "advance_tax_doc": "Record an advance tax document"
+  },
+  "editTitle": {
+    "invoice": "Edit received invoice",
+    "proforma": "Edit received proforma",
+    "credit_note": "Edit received credit note",
+    "advance_tax_doc": "Edit received advance tax document"
+  },
+  "list": {
+    "title": {
+      "invoice": "Received invoices",
+      "proforma": "Received proformas",
+      "credit_note": "Received credit notes",
+      "advance_tax_doc": "Received advance tax documents"
+    },
+    "empty": "No received documents of this type yet.",
+    "searchPlaceholder": "Search by number, supplier number, supplier or VS"
+  },
+  "confirmDelete": "Really delete this received document? Its payments and uploaded PDF are deleted too; the number is not returned to the series.",
+  "supplierNonPayer": "Supplier is not a VAT payer",
+  "fields": {
+    "supplierNumber": "Supplier's document number",
+    "supplierNumberHint": "As printed on the document.",
+    "receivedDate": "Received date",
+    "receivedDateAuto": "Follows the tax point date, else the issue date.",
+    "manualRateHint": "CZK per 1 unit. Empty = the ČNB rate for the received date is fixed on save.",
+    "indicativeRate": "Indicative ČNB rate for {date}: {rate} (fixed on save)",
+    "vatDeductible": "VAT deductible",
+    "supplierAccount": "Supplier's account"
+  },
+  "recap": {
+    "title": "VAT recap",
+    "creditNoteHint": "Enter amounts as positive, as printed on the credit note.",
+    "rate": "Rate %",
+    "rateOf": "Rate in row {n}",
+    "baseOf": "Base in row {n}",
+    "vatOf": "VAT in row {n}",
+    "remove": "Remove row {n}",
+    "addRow": "Rate",
+    "vatSuggested": "computed, can be overwritten",
+    "noVat": "Outside the standard VAT mode, VAT is always 0.",
+    "payableAuto": "Follows the total; overwrite e.g. for a final invoice after advances.",
+    "payableManual": "Entered manually. Clear it to follow the total again."
+  }
+}

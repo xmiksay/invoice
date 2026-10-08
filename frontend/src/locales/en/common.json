@@ -13,5 +13,7 @@
   "range": "{from}–{to} of {total}",
   "prev": "Previous",
   "next": "Next",
-  "details": "Details"
+  "details": "Details",
+  "yes": "Yes",
+  "no": "No"
 }

@@ -1,0 +1,56 @@
+{
+  "docTypes": {
+    "invoice": "Přijatá faktura",
+    "proforma": "Přijatá zálohová faktura",
+    "credit_note": "Přijatý dobropis",
+    "advance_tax_doc": "Přijatý daňový doklad k platbě"
+  },
+  "newTitle": {
+    "invoice": "Zaevidovat fakturu",
+    "proforma": "Zaevidovat zálohovou fakturu",
+    "credit_note": "Zaevidovat dobropis",
+    "advance_tax_doc": "Zaevidovat daňový doklad k platbě"
+  },
+  "editTitle": {
+    "invoice": "Upravit přijatou fakturu",
+    "proforma": "Upravit přijatou zálohovou fakturu",
+    "credit_note": "Upravit přijatý dobropis",
+    "advance_tax_doc": "Upravit přijatý daňový doklad k platbě"
+  },
+  "list": {
+    "title": {
+      "invoice": "Přijaté faktury",
+      "proforma": "Přijaté zálohové faktury",
+      "credit_note": "Přijaté dobropisy",
+      "advance_tax_doc": "Přijaté daňové doklady k platbě"
+    },
+    "empty": "Zatím žádné přijaté doklady tohoto typu.",
+    "searchPlaceholder": "Hledat podle čísla, čísla dodavatele, dodavatele nebo VS"
+  },
+  "confirmDelete": "Opravdu smazat tento přijatý doklad? Smažou se i jeho platby a nahrané PDF; číslo se do řady nevrací.",
+  "supplierNonPayer": "Dodavatel není plátce DPH",
+  "fields": {
+    "supplierNumber": "Číslo dokladu dodavatele",
+    "supplierNumberHint": "Jak je uvedeno na dokladu.",
+    "receivedDate": "Datum přijetí",
+    "receivedDateAuto": "Podle DUZP, případně data vystavení.",
+    "manualRateHint": "CZK za 1 jednotku. Prázdné = kurz ČNB k datu přijetí se zafixuje při uložení.",
+    "indicativeRate": "Orientační kurz ČNB k {date}: {rate} (zafixuje se při uložení)",
+    "vatDeductible": "Nárok na odpočet DPH",
+    "supplierAccount": "Účet dodavatele"
+  },
+  "recap": {
+    "title": "Rekapitulace DPH",
+    "creditNoteHint": "Částky zadávejte kladně, jak jsou na dobropisu.",
+    "rate": "Sazba %",
+    "rateOf": "Sazba na řádku {n}",
+    "baseOf": "Základ na řádku {n}",
+    "vatOf": "DPH na řádku {n}",
+    "remove": "Odebrat řádek {n}",
+    "addRow": "Sazba",
+    "vatSuggested": "dopočteno, lze přepsat",
+    "noVat": "Mimo režim Běžné DPH je DPH vždy 0.",
+    "payableAuto": "Podle celkové částky; přepište např. u vyúčtování po zálohách.",
+    "payableManual": "Zadáno ručně. Smazáním se vrátí celková částka."
+  }
+}

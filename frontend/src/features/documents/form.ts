@@ -1,7 +1,8 @@
 import type { DocLocale, FieldErrors } from "@/api/types";
 import { collectErrors, nullIfEmpty, textRule } from "@/lib/formErrors";
 import type { Contact } from "@/features/contacts/types";
-import type { BankAccount, Company, VatRate } from "@/features/settings/types";
+import { toMetadataDraft, toMetadataInput, validateMetadata, type MetadataDraft } from "@/features/metadata/metadata";
+import type { BankAccount, Company, CustomField, VatRate } from "@/features/settings/types";
 import { toLineDraft, toWireLine, type LineDraft } from "./lines";
 import type { ComputeRequest, Document, DocumentInput, EditableDocType, PaymentMethod, VatMode } from "./types";
 
@@ -24,11 +25,19 @@ export interface DocumentDraft {
   orderRef: string;
   headerNote: string;
   footerNote: string;
-  internalNote: string;
   roundTotal: boolean;
   correctionReason: string;
-  /** Read-only: the proforma a final invoice settles (its non-payer advance line references it). */
+  /**
+   * Native: read-only, the proforma a final invoice settles (its non-payer advance line references it).
+   * Imported: picked by the user (DDPP / final invoice → proforma, credit note → invoice).
+   */
   relatedDocumentId: string | null;
+  /** Manual import of an existing document; fixed for the life of the draft. */
+  imported: boolean;
+  /** Imported only: the document's own number. */
+  number: string;
+  /** Category, custom fields, internal note. */
+  meta: MetadataDraft;
   lines: LineDraft[];
 }
 
@@ -37,6 +46,8 @@ export interface DraftContext {
   company: Company;
   vatRates: VatRate[];
   bankAccounts: BankAccount[];
+  /** Custom field definitions applicable to issued documents. */
+  fieldDefs: CustomField[];
   today: string;
 }
 
@@ -66,7 +77,8 @@ export function defaultVatRate(rates: VatRate[], vatMode: VatMode): string {
 }
 
 /** Mirrors the server's create defaults so the form shows them before the first save. */
-export function newDocumentDraft(ctx: DraftContext, docType: "invoice" | "proforma" = "invoice"): DocumentDraft {
+/** Natively only invoices and proformas start empty; an import may be any type. */
+export function newDocumentDraft(ctx: DraftContext, docType: EditableDocType = "invoice", imported = false): DocumentDraft {
   const { company, bankAccounts, today } = ctx;
   return {
     docType,
@@ -86,10 +98,12 @@ export function newDocumentDraft(ctx: DraftContext, docType: "invoice" | "profor
     orderRef: "",
     headerNote: "",
     footerNote: "",
-    internalNote: "",
     roundTotal: false,
     correctionReason: "",
     relatedDocumentId: null,
+    imported,
+    number: "",
+    meta: toMetadataDraft({ categoryId: null, customFields: {}, internalNote: null }, ctx.fieldDefs),
     lines: [],
   };
 }
@@ -122,14 +136,14 @@ export function changeCurrency(draft: DocumentDraft, currency: string, accounts:
   };
 }
 
-export function toDraft(doc: Document): DocumentDraft {
+export function toDraft(doc: Document, fieldDefs: CustomField[] = []): DocumentDraft {
   return {
-    // Only drafts reach the editor, and DDPPs are never drafts.
+    // Only drafts reach the editor: native DDPPs never are, imported ones may be.
     docType: doc.docType as EditableDocType,
     contactId: doc.contactId,
     issueDate: doc.issueDate,
     taxPointDate: doc.taxPointDate ?? "",
-    dueDate: doc.dueDate,
+    dueDate: doc.dueDate ?? "",
     currency: doc.currency,
     exchangeRate: doc.exchangeRate ?? "",
     locale: doc.locale,
@@ -141,10 +155,12 @@ export function toDraft(doc: Document): DocumentDraft {
     orderRef: doc.orderRef ?? "",
     headerNote: doc.headerNote ?? "",
     footerNote: doc.footerNote ?? "",
-    internalNote: doc.internalNote ?? "",
     roundTotal: doc.roundTotal,
     correctionReason: doc.correctionReason ?? "",
     relatedDocumentId: doc.relatedDocumentId,
+    imported: doc.imported,
+    number: doc.imported ? (doc.number ?? "") : "",
+    meta: toMetadataDraft(doc, fieldDefs),
     lines: doc.lines.map(toLineDraft),
   };
 }
@@ -152,7 +168,7 @@ export function toDraft(doc: Document): DocumentDraft {
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DECIMAL = /^-?\d+([.,]\d+)?$/;
 
-export function validateDocument(d: DocumentDraft): FieldErrors {
+export function validateDocument(d: DocumentDraft, fieldDefs: CustomField[] = []): FieldErrors {
   const vs = d.variableSymbol.trim();
   const ks = d.constantSymbol.trim();
   const rate = d.exchangeRate.trim();
@@ -167,9 +183,10 @@ export function validateDocument(d: DocumentDraft): FieldErrors {
     orderRef: textRule(d.orderRef, { max: 100 }),
     headerNote: textRule(d.headerNote, { max: 2000 }),
     footerNote: textRule(d.footerNote, { max: 2000 }),
-    internalNote: textRule(d.internalNote, { max: 2000 }),
     correctionReason: d.docType === "credit_note" && textRule(d.correctionReason, { required: true, max: 500 }),
+    number: d.imported && textRule(d.number, { required: true, max: 40 }),
   });
+  Object.assign(errors, validateMetadata(d.meta, fieldDefs));
   d.lines.forEach((line, i) => {
     // Advance descriptions are generated by the server.
     if (line.kind === "advance") return;
@@ -179,7 +196,7 @@ export function validateDocument(d: DocumentDraft): FieldErrors {
   return errors;
 }
 
-export function toInput(d: DocumentDraft): DocumentInput {
+export function toInput(d: DocumentDraft, fieldDefs: CustomField[] = []): DocumentInput {
   return {
     docType: d.docType,
     direction: "issued",
@@ -198,9 +215,13 @@ export function toInput(d: DocumentDraft): DocumentInput {
     orderRef: nullIfEmpty(d.orderRef),
     headerNote: nullIfEmpty(d.headerNote),
     footerNote: nullIfEmpty(d.footerNote),
-    internalNote: nullIfEmpty(d.internalNote),
     roundTotal: d.roundTotal,
     correctionReason: d.docType === "credit_note" ? nullIfEmpty(d.correctionReason) : null,
+    imported: d.imported,
+    number: d.imported ? d.number.trim() : null,
+    // Natively the link is made by settle / credit note; only an import sets it itself.
+    ...(d.imported ? { relatedDocumentId: d.relatedDocumentId } : {}),
+    ...toMetadataInput(d.meta, fieldDefs),
     lines: d.lines.map(toWireLine),
   };
 }

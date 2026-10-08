@@ -37,6 +37,8 @@ fn ctx(apply_defaults: bool, contact: Option<contact::Model>) -> Context {
         default_vat_rate: Some(Decimal::from(21)),
         existing: None,
         advances: HashMap::new(),
+        related: None,
+        meta: Default::default(),
     }
 }
 
@@ -180,6 +182,7 @@ fn existing(doc_type: DocType) -> Existing {
     Existing {
         id: Uuid::from_u128(42),
         doc_type,
+        imported: false,
         related_document_id: Some(Uuid::from_u128(41)),
         contact_id: None,
         vat_mode: VatMode::Standard,

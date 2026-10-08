@@ -1,0 +1,11 @@
+{
+  "title": "Originál PDF",
+  "uploadedAt": "Nahráno {date}, {size}",
+  "upload": "Nahrát PDF",
+  "replace": "Nahradit PDF",
+  "uploading": "Pracuji…",
+  "hint": "PDF dokladu, jak jste jej dostali (nejvýše 20 MB).",
+  "notPdf": "Soubor není PDF.",
+  "tooLarge": "Soubor je příliš velký (nejvýše 20 MB).",
+  "confirmDelete": "Opravdu smazat nahrané PDF?"
+}

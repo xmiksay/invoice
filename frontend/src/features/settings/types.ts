@@ -41,7 +41,17 @@ export interface VatRate {
 }
 export type VatRateInput = Omit<VatRate, "id">;
 
-export const DOC_TYPES = ["invoice", "credit_note", "proforma", "advance_tax_doc", "received"] as const;
+/** Number-series keys; the `received*` keys are the series of received documents (1e). */
+export const DOC_TYPES = [
+  "invoice",
+  "credit_note",
+  "proforma",
+  "advance_tax_doc",
+  "received",
+  "received_credit_note",
+  "received_proforma",
+  "received_advance_tax_doc",
+] as const;
 export type DocType = (typeof DOC_TYPES)[number];
 
 export interface NumberCounter {
@@ -70,3 +80,36 @@ export interface DesignFile {
   /** Bytes. */
   size: number;
 }
+
+export const CATEGORY_KINDS = ["expense", "income"] as const;
+export type CategoryKind = (typeof CATEGORY_KINDS)[number];
+
+/** `/api/settings/categories` — received documents take `expense`, issued `income`. */
+export interface Category {
+  id: string;
+  name: string;
+  kind: CategoryKind;
+  active: boolean;
+  position: number;
+}
+export type CategoryInput = Omit<Category, "id">;
+
+export const CUSTOM_FIELD_TYPES = ["text", "number", "date", "bool", "select"] as const;
+export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
+export const CUSTOM_FIELD_SCOPES = ["issued", "received", "both"] as const;
+export type CustomFieldScope = (typeof CUSTOM_FIELD_SCOPES)[number];
+
+/** `/api/settings/custom-fields` — `key` and `type` are immutable after create. */
+export interface CustomField {
+  id: string;
+  key: string;
+  label: string;
+  type: CustomFieldType;
+  /** `select` only. */
+  options: string[];
+  appliesTo: CustomFieldScope;
+  required: boolean;
+  active: boolean;
+  position: number;
+}
+export type CustomFieldInput = Omit<CustomField, "id">;

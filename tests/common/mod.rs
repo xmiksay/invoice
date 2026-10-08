@@ -23,6 +23,7 @@ use tower::ServiceExt;
 
 pub mod documents;
 pub mod mdcast;
+pub mod received;
 
 pub const TEST_TOKEN: &str = "test-token-0123456789";
 

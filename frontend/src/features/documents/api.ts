@@ -7,8 +7,10 @@ import type {
   DocumentListQuery,
   DocumentPage,
   ExchangeRate,
+  MetadataInput,
   Payment,
   PaymentInput,
+  ReceivedDocumentInput,
 } from "./types";
 
 const BASE = "/api/documents";
@@ -16,11 +18,12 @@ const item = (id: string) => `${BASE}/${encodeURIComponent(id)}`;
 
 function listParams(query: DocumentListQuery): string {
   const params = new URLSearchParams();
-  const { limit, offset, overdue, q, ...rest } = query;
+  const { limit, offset, overdue, imported, q, ...rest } = query;
   for (const [key, value] of Object.entries(rest)) {
     if (value) params.set(key, value);
   }
   if (overdue) params.set("overdue", "true");
+  if (imported !== undefined) params.set("imported", String(imported));
   if (q?.trim()) params.set("q", q.trim());
   params.set("limit", String(limit));
   params.set("offset", String(offset));
@@ -30,8 +33,9 @@ function listParams(query: DocumentListQuery): string {
 export const documentsApi = {
   list: (query: DocumentListQuery) => request<DocumentPage>(`${BASE}?${listParams(query)}`),
   get: (id: string) => request<Document>(item(id)),
-  create: (input: DocumentInput) => request<Document>(BASE, { method: "POST", body: input }),
-  update: (id: string, input: DocumentInput) => request<Document>(item(id), { method: "PUT", body: input }),
+  create: (input: DocumentInput | ReceivedDocumentInput) => request<Document>(BASE, { method: "POST", body: input }),
+  update: (id: string, input: DocumentInput | ReceivedDocumentInput) =>
+    request<Document>(item(id), { method: "PUT", body: input }),
   remove: (id: string) => request<void>(item(id), { method: "DELETE" }),
   compute: (body: ComputeRequest, signal?: AbortSignal) =>
     request<ComputeResult>(`${BASE}/compute`, { method: "POST", body, signal }),
@@ -39,15 +43,23 @@ export const documentsApi = {
   cancel: (id: string, reason: string | null) =>
     request<Document>(`${item(id)}/cancel`, { method: "POST", body: reason ? { reason } : {} }),
   markSent: (id: string) => request<Document>(`${item(id)}/mark-sent`, { method: "POST", body: {} }),
-  setInternalNote: (id: string, internalNote: string | null) =>
-    request<Document>(`${item(id)}/internal-note`, { method: "PUT", body: { internalNote } }),
+  /** Category, custom fields and internal note; every status, both directions. */
+  setMetadata: (id: string, input: MetadataInput) => request<Document>(`${item(id)}/metadata`, { method: "PUT", body: input }),
   /** Draft final invoice from an issued proforma. */
   settle: (id: string) => request<Document>(`${item(id)}/settle`, { method: "POST" }),
   /** Credit-note draft for an issued invoice. */
   creditNote: (id: string, correctionReason: string | null) =>
     request<Document>(`${item(id)}/credit-note`, { method: "POST", body: correctionReason ? { correctionReason } : {} }),
-  /** Draft: rendered live with the watermark; issued/cancelled: the archived file. */
+  /** Draft: rendered live with the watermark; issued/cancelled: the archived file; received/imported: the original. */
   pdf: (id: string, download = false) => requestBlob(`${item(id)}/pdf${download ? "?download=1" : ""}`),
+  /** Received / imported: upload (or replace) the original PDF, multipart part `file`. */
+  uploadOriginal: (id: string, file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    // The response body is not relied on: the caller reloads the document.
+    return request<unknown>(`${item(id)}/original`, { method: "PUT", body });
+  },
+  removeOriginal: (id: string) => request<void>(`${item(id)}/original`, { method: "DELETE" }),
   payments: (id: string) => request<Payment[]>(`${item(id)}/payments`),
   addPayment: (id: string, input: PaymentInput) =>
     request<Payment>(`${item(id)}/payments`, { method: "POST", body: input }),

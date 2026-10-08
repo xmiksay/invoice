@@ -112,4 +112,36 @@ describe("InvoicesListView", () => {
     expect(row.text()).toMatch(/-CZK\s1,210\.00/);
     expect(row.find('[data-test="credit-note-badge"]').exists()).toBe(true);
   });
+
+  it("imported / category filters, the imported badge, the no-PDF hint and the category name", async () => {
+    const fetch = mockFetchRoutes({
+      "GET /api/documents": {
+        items: [summary({ imported: true, hasPdf: false, categoryId: "k1" }), summary({ id: "d2", hasPdf: false })],
+        total: 2,
+      },
+      "GET /api/settings/categories": [
+        { id: "k1", name: "Consulting", kind: "income", active: true, position: 0 },
+        { id: "k2", name: "Software", kind: "expense", active: true, position: 0 },
+      ],
+    });
+    const w = await mountList();
+    const rows = w.findAll('[data-test="invoice-row"]');
+    expect(rows[0]!.find('[data-test="imported-badge"]').exists()).toBe(true);
+    expect(rows[0]!.find('[data-test="no-pdf"]').text()).toBe("no PDF");
+    expect(rows[0]!.find('[data-test="row-category"]').text()).toBe("Consulting");
+    // A native document without an archive (e.g. a draft) gets no hint.
+    expect(rows[1]!.find('[data-test="no-pdf"]').exists()).toBe(false);
+    expect(rows[1]!.find('[data-test="imported-badge"]').exists()).toBe(false);
+    // Only income categories are offered on the issued list.
+    expect(w.findAll("#filter-category option").map((o) => o.text())).toEqual(["All categories", "Consulting"]);
+
+    await w.find("#filter-imported").setValue("true");
+    await flushPromises();
+    expect(String(fetch.mock.calls.at(-1)?.[0])).toBe("/api/documents?direction=issued&docType=invoice&imported=true&limit=50&offset=0");
+    await w.find("#filter-category").setValue("k1");
+    await flushPromises();
+    expect(String(fetch.mock.calls.at(-1)?.[0])).toBe("/api/documents?direction=issued&docType=invoice&categoryId=k1&imported=true&limit=50&offset=0");
+    expect(w.find('[data-test="import-document"]').attributes("href")).toBe("/invoices/new?docType=invoice&imported=1");
+  });
 });
+

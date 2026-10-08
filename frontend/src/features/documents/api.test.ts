@@ -90,11 +90,11 @@ describe("documents api", () => {
     expect(sentRequest(fetch)).toEqual({ url: "/api/documents/d1/mark-sent", method: "POST", body: {} });
 
     fetch = mockFetch(200, {});
-    await documentsApi.setInternalNote("d1", "call first");
+    await documentsApi.setMetadata("d1", { categoryId: "k1", customFields: { po: "7" }, internalNote: "call first" });
     expect(sentRequest(fetch)).toEqual({
-      url: "/api/documents/d1/internal-note",
+      url: "/api/documents/d1/metadata",
       method: "PUT",
-      body: { internalNote: "call first" },
+      body: { categoryId: "k1", customFields: { po: "7" }, internalNote: "call first" },
     });
   });
 

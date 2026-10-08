@@ -6,14 +6,14 @@ use uuid::Uuid;
 
 use anyhow::Context as _;
 
-use super::advance_sources;
+use super::{advance_sources, meta};
 use crate::contact::entity::contact;
 use crate::document::defaults;
 use crate::document::entity::document;
-use crate::document::handlers::input::{Context, DocumentData, Existing};
+use crate::document::handlers::input::{Context, DocumentData, DocumentInput, Existing};
 use crate::document::line::VatMode;
 use crate::error::AppError;
-use crate::settings::doc_type::DocType;
+use crate::settings::doc_type::{DocType, ISSUED};
 use crate::settings::entity::{bank_account, vat_rate};
 use crate::settings::repo::company;
 
@@ -23,6 +23,7 @@ pub fn existing(doc: &document::Model) -> Result<Existing, AppError> {
         id: doc.id,
         doc_type: DocType::parse(&doc.doc_type)
             .with_context(|| format!("document {} has unknown type", doc.id))?,
+        imported: doc.imported,
         related_document_id: doc.related_document_id,
         contact_id: doc.contact_id,
         vat_mode: VatMode::parse(&doc.vat_mode)
@@ -33,15 +34,20 @@ pub fn existing(doc: &document::Model) -> Result<Existing, AppError> {
     })
 }
 
+/// `doc`: the stored draft a `PUT` replaces.
 pub async fn load(
     db: &DatabaseConnection,
-    contact_id: Option<Uuid>,
+    input: &DocumentInput,
     today: chrono::NaiveDate,
-    existing: Option<Existing>,
-    advance_ids: &[Uuid],
+    doc: Option<&document::Model>,
 ) -> Result<Context, AppError> {
-    let contact = match contact_id {
+    let existing = doc.map(existing).transpose()?;
+    let contact = match input.contact_id {
         Some(id) => contact::Entity::find_by_id(id).one(db).await?,
+        None => None,
+    };
+    let related = match input.related_document_id {
+        Some(id) => document::Entity::find_by_id(id).one(db).await?,
         None => None,
     };
     Ok(Context {
@@ -52,7 +58,9 @@ pub async fn load(
         contact,
         default_vat_rate: default_vat_rate(db).await?,
         existing,
-        advances: advance_sources::load(db, advance_ids).await?,
+        advances: advance_sources::load(db, &input.advance_ids()).await?,
+        related,
+        meta: meta::load(db, ISSUED, input.category_id, doc).await?,
     })
 }
 

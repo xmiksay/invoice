@@ -1,7 +1,8 @@
 {
-  "invoices": "Invoices",
+  "invoices": "Issued",
   "main": "Main navigation",
   "contacts": "Contacts",
   "settings": "Settings",
-  "catalog": "Catalog"
+  "catalog": "Catalog",
+  "received": "Received"
 }
