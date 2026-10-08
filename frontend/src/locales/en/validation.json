@@ -1,0 +1,11 @@
+{
+  "required": "This field is required.",
+  "invalid": "Invalid value.",
+  "too_long": "The value is too long.",
+  "duplicate": "This value already exists.",
+  "invalid_ico": "Invalid company ID (IČO).",
+  "invalid_pattern": "Invalid number pattern.",
+  "below_issued": "Cannot be lower than the highest number already issued.",
+  "exceeds_original": "Credit notes would exceed the original invoice for some VAT rate.",
+  "mixed_vat": "All items of a group must share one VAT rate."
+}

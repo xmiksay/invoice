@@ -1,0 +1,33 @@
+{
+  "title": "Catalog",
+  "tabs": {
+    "items": "Items",
+    "groups": "Groups"
+  },
+  "noResults": "Nothing found.",
+  "items": {
+    "add": "Add item",
+    "edit": "Edit item",
+    "name": "Name",
+    "note": "Note",
+    "active": "Active (offered in documents)",
+    "inactive": "inactive",
+    "searchPlaceholder": "Search by name",
+    "confirmDelete": "Delete the item “{name}”? It is removed from groups too.",
+    "empty": "No items yet."
+  },
+  "groups": {
+    "add": "Add group",
+    "edit": "Edit group",
+    "name": "Name",
+    "nameHint": "Becomes the subtotal description on the document.",
+    "collapse": "Show only the subtotal on the document",
+    "members": "Group items",
+    "noMembers": "Add at least one item.",
+    "pickItem": "Pick an item…",
+    "noMoreItems": "No more active items",
+    "searchPlaceholder": "Search by name",
+    "confirmDelete": "Delete the group “{name}”?",
+    "empty": "No groups yet."
+  }
+}

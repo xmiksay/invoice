@@ -1,0 +1,16 @@
+{
+  "save": "Save",
+  "saving": "Saving…",
+  "saved": "Saved.",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "edit": "Edit",
+  "add": "Add",
+  "actions": "Actions",
+  "loading": "Loading…",
+  "search": "Search",
+  "notSet": "Not set",
+  "range": "{from}–{to} of {total}",
+  "prev": "Previous",
+  "next": "Next"
+}

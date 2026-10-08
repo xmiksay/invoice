@@ -4,6 +4,7 @@ import {
   enforceVatMode,
   moveLine,
   newItemLine,
+  refTargets,
   newSubtotalLine,
   newTextLine,
   removeLine,
@@ -146,5 +147,25 @@ describe("splitLineErrors", () => {
       header: { contactId: "required", lines: "required" },
       lines: { 0: { quantity: "invalid", vatRate: "invalid" }, 2: { refs: "invalid" } },
     });
+  });
+});
+
+describe("advance lines", () => {
+  const advance = (): LineDraft =>
+    toLineDraft({ kind: "advance", position: 1, advanceDocumentId: "ddpp1", description: "Odpočet", base: "-100.00", recap: [{ vatRate: "21", base: "-100.00", vat: "-21.00" }] });
+
+  it("are never subtotal targets", () => {
+    const lines = [item("A"), advance(), newTextLine(), subtotal("S", [1]), item("B")];
+    expect(refTargets(lines, 3)).toEqual([1, 5]);
+    expect(refTargets(lines, 0)).toEqual([4, 5]);
+  });
+
+  it("removing one shifts the subtotal refs after it", () => {
+    const lines = [item("A"), advance(), item("B"), subtotal("S", [1, 3])];
+    expect(refsOf(removeLine(lines, 1))).toEqual([null, null, [1, 2]]);
+  });
+
+  it("wire form is only the reference", () => {
+    expect(toWireLine(advance())).toEqual({ kind: "advance", advanceDocumentId: "ddpp1" });
   });
 });

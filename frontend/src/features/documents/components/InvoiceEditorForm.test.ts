@@ -39,6 +39,7 @@ describe("InvoiceEditorForm", () => {
     await vi.advanceTimersByTimeAsync(300);
     await flushPromises();
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toMatchObject({ documentId: "d1", docType: "invoice", locale: "cs", contactId: null });
     expect(w.find('[data-test="payable"]').text().replace(/\s/g, " ")).toBe("CZK 1,210.00");
   });
 
@@ -119,5 +120,39 @@ describe("InvoiceEditorForm", () => {
     await flushPromises();
     expect(w.find('[data-test="indicative-rate"]').text()).toContain("cannot be loaded");
     expect(w.find("#doc-exchangeRate").attributes("disabled")).toBeUndefined();
+  });
+
+  it("proforma: no tax point field, saved with docType proforma and no tax point", async () => {
+    const fetch = mockFetchRoutes({ "POST /api/documents/compute": { lines: [], totals: totals() }, "PUT /api/documents/d1": { id: "d1" } });
+    const w = mountForm((d) => ({ ...d, docType: "proforma", taxPointDate: "" }));
+    expect(w.find("#doc-taxPointDate").exists()).toBe(false);
+    await w.find("form").trigger("submit");
+    await flushPromises();
+    const put = fetch.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(JSON.parse(String(put?.[1]?.body))).toMatchObject({ docType: "proforma", taxPointDate: null });
+  });
+
+  it("credit note: reason required, currency and rate fixed, totals negated", async () => {
+    const fetch = mockFetchRoutes({ "POST /api/documents/compute": { lines: [], totals: totals() }, "PUT /api/documents/d1": { id: "d1" } });
+    const w = mountForm((d) => ({ ...changeCurrency(d, "EUR", bankAccounts), docType: "credit_note", exchangeRate: "24.3" }));
+    await vi.advanceTimersByTimeAsync(300);
+    await flushPromises();
+    expect(fetch.mock.calls.some(([url]) => String(url).startsWith("/api/exchange-rates"))).toBe(false);
+    expect(w.find("#doc-exchangeRate").exists()).toBe(false);
+    expect(w.find('[data-test="original-rate"]').text()).toContain("24.3");
+    expect(w.find("#doc-currency").attributes("disabled")).toBeDefined();
+    expect(w.find("#doc-vatMode").attributes("disabled")).toBeDefined();
+    expect(w.find('[data-test="payable"]').text()).toMatch(/^-/);
+
+    await w.find("form").trigger("submit");
+    await flushPromises();
+    expect(w.find("#doc-correctionReason-error").text()).toBe("This field is required.");
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+
+    await w.find("#doc-correctionReason").setValue("wrong price");
+    await w.find("form").trigger("submit");
+    await flushPromises();
+    const put = fetch.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(JSON.parse(String(put?.[1]?.body))).toMatchObject({ docType: "credit_note", correctionReason: "wrong price", exchangeRate: "24.3" });
   });
 });

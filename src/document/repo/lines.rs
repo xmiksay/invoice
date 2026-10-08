@@ -6,11 +6,11 @@ use uuid::Uuid;
 
 use crate::document::compute::Totals;
 use crate::document::entity::{document_line, vat_recap};
-use crate::document::line::{ItemData, LineData};
+use crate::document::line::{AdvanceData, AdvanceRow, ItemData, LineData};
 use crate::error::AppError;
 
 pub fn to_data(m: document_line::Model) -> Result<LineData, AppError> {
-    let missing = |f: &str| anyhow::anyhow!("item line {} has no {f}", m.id);
+    let missing = |f: &str| anyhow::anyhow!("line {} has no {f}", m.id);
     Ok(match m.kind.as_str() {
         "item" => LineData::Item(ItemData {
             quantity: m.quantity.ok_or_else(|| missing("quantity"))?,
@@ -28,13 +28,30 @@ pub fn to_data(m: document_line::Model) -> Result<LineData, AppError> {
             refs: m.refs.unwrap_or_default(),
             collapse: m.collapse,
         },
+        "advance" => {
+            let recap: Vec<AdvanceRow> = match m.advance_recap {
+                Some(v) => serde_json::from_value(v).context("decode advance recap")?,
+                None => Vec::new(),
+            };
+            LineData::Advance(AdvanceData {
+                document_id: m
+                    .advance_document_id
+                    .ok_or_else(|| missing("advance_document_id"))?,
+                description: m.description,
+                recap,
+            })
+        }
         other => {
             Err(anyhow::anyhow!("unknown line kind {other:?}")).context("load document lines")?
         }
     })
 }
 
-fn to_active(document_id: Uuid, position: i32, line: &LineData) -> document_line::ActiveModel {
+fn to_active(
+    document_id: Uuid,
+    position: i32,
+    line: &LineData,
+) -> Result<document_line::ActiveModel, AppError> {
     let mut row = document_line::ActiveModel {
         id: Set(Uuid::new_v4()),
         document_id: Set(document_id),
@@ -47,6 +64,8 @@ fn to_active(document_id: Uuid, position: i32, line: &LineData) -> document_line
         vat_rate: Set(None),
         refs: Set(None),
         collapse: Set(false),
+        advance_document_id: Set(None),
+        advance_recap: Set(None),
         ..Default::default()
     };
     match line {
@@ -68,8 +87,15 @@ fn to_active(document_id: Uuid, position: i32, line: &LineData) -> document_line
             row.refs = Set(Some(refs.clone()));
             row.collapse = Set(*collapse);
         }
+        LineData::Advance(a) => {
+            row.description = Set(a.description.clone());
+            row.advance_document_id = Set(Some(a.document_id));
+            row.advance_recap = Set(Some(
+                serde_json::to_value(&a.recap).context("encode advance recap")?,
+            ));
+        }
     }
-    row
+    Ok(row)
 }
 
 /// Replace all lines of a document.
@@ -88,7 +114,8 @@ pub async fn replace<C: ConnectionTrait>(
     let rows = lines
         .iter()
         .zip(1..)
-        .map(|(l, p)| to_active(document_id, p, l));
+        .map(|(l, p)| to_active(document_id, p, l))
+        .collect::<Result<Vec<_>, _>>()?;
     document_line::Entity::insert_many(rows).exec(db).await?;
     Ok(())
 }

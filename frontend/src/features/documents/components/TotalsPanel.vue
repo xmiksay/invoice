@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { formatMoney, formatNumber } from "../format";
-import type { Totals } from "../types";
+import { formatMoney, formatNumber, isNegative, negate, signed } from "../format";
+import type { Sign, Totals } from "../types";
 
 const props = defineProps<{
   totals: Totals | null;
@@ -12,13 +12,19 @@ const props = defineProps<{
   pending?: boolean;
   /** Translated failure of the last computation; the previous totals stay visible. */
   error?: string | null;
+  /** -1 shows a credit note's (stored positive) amounts negated. */
+  sign?: Sign;
 }>();
 
 const { t, locale } = useI18n();
 
 const foreign = computed(() => props.currency !== "CZK");
-const money = (v: string | null | undefined) => formatMoney(v, props.currency, locale.value);
-const czk = (v: string | null | undefined) => formatMoney(v, "CZK", locale.value);
+const sign = computed<Sign>(() => props.sign ?? 1);
+const display = (v: string | null | undefined) => (v == null || v === "" ? v : signed(v, sign.value));
+const money = (v: string | null | undefined) => formatMoney(display(v), props.currency, locale.value);
+const czk = (v: string | null | undefined) => formatMoney(display(v), "CZK", locale.value);
+/** Advances above the invoice total: the customer gets the difference back. */
+const overpaid = computed(() => sign.value === 1 && isNegative(props.totals?.payable));
 const showCzk = computed(() => foreign.value && props.totals?.recap.some((r) => r.baseCzk !== null));
 </script>
 
@@ -65,8 +71,10 @@ const showCzk = computed(() => foreign.value && props.totals?.recap.some((r) => 
           <dt>{{ t("documents.totals.rounding") }}</dt>
           <dd class="text-right tabular-nums">{{ money(totals.rounding) }}</dd>
         </template>
-        <dt class="font-semibold">{{ t("documents.totals.payable") }}</dt>
-        <dd class="text-right text-base font-semibold tabular-nums" data-test="payable">{{ money(totals.payable) }}</dd>
+        <dt class="font-semibold" data-test="payable-label">{{ overpaid ? t("documents.totals.overpaid") : t("documents.totals.payable") }}</dt>
+        <dd class="text-right text-base font-semibold tabular-nums" :class="{ 'text-purple-700 dark:text-purple-300': overpaid }" data-test="payable">
+          {{ money(overpaid ? negate(totals.payable) : totals.payable) }}
+        </dd>
         <template v-if="foreign && totals.totalCzk !== null">
           <dt class="text-gray-600 dark:text-gray-400">
             {{ t("documents.totals.totalCzk") }}

@@ -7,7 +7,7 @@
 
 use rust_decimal::{Decimal, RoundingStrategy};
 
-use super::line::{LineData, MAX_AMOUNT, VatMode};
+use super::line::{AdvanceRow, LineData, MAX_AMOUNT, VatMode};
 use super::subtotals;
 use crate::error::FieldErrors;
 
@@ -32,7 +32,7 @@ pub fn item_base(quantity: Decimal, unit_price: Decimal, discount_pct: Decimal) 
 }
 
 /// `Some(x)` when `x` fits a `numeric(18,2)` column.
-fn fits(x: Decimal) -> Option<Decimal> {
+pub fn fits(x: Decimal) -> Option<Decimal> {
     (x.abs() < MAX_AMOUNT).then_some(x)
 }
 
@@ -126,7 +126,15 @@ pub fn evaluate(lines: &[LineData], p: Params) -> Result<Evaluated, FieldErrors>
         LineData::Item(item) => Some((item.vat_rate, *b)),
         _ => None,
     });
-    let totals = totals(items, p).map_err(|o| {
+    let advances: Vec<&AdvanceRow> = lines
+        .iter()
+        .filter_map(|l| match l {
+            LineData::Advance(a) => Some(a.recap.iter()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    let totals = totals_with(items, &advances, p).map_err(|o| {
         e.add(o.field(), "invalid");
         e.clone()
     })?;
@@ -141,15 +149,31 @@ pub fn totals(
     items: impl IntoIterator<Item = (Decimal, Decimal)>,
     p: Params,
 ) -> Result<Totals, Overflow> {
+    totals_with(items, &[], p)
+}
+
+/// Per-rate sums: item bases and the deducted advance amounts.
+#[derive(Default)]
+struct Group {
+    rate: Decimal,
+    items: Decimal,
+    adv_base: Decimal,
+    adv_vat: Decimal,
+    adv_base_czk: Decimal,
+    adv_vat_czk: Decimal,
+}
+
+/// Recap + totals with deducted advances: per rate
+/// `base = Σ item base − Σ advance base`,
+/// `vat = round2(Σ item base × rate/100) − Σ advance vat` (VAT-charging modes
+/// only), CZK: the item part at the document's rate minus each advance's own
+/// CZK amounts. Without advances this is exactly the 1b computation.
+pub fn totals_with(
+    items: impl IntoIterator<Item = (Decimal, Decimal)>,
+    advances: &[&AdvanceRow],
+    p: Params,
+) -> Result<Totals, Overflow> {
     use Overflow::{ExchangeRate, Lines};
-    let mut groups: Vec<(Decimal, Decimal)> = Vec::new();
-    for (rate, base) in items {
-        match groups.iter_mut().find(|(r, _)| *r == rate) {
-            Some((_, sum)) => *sum = sum.checked_add(base).ok_or(Lines)?,
-            None => groups.push((rate, base)),
-        }
-    }
-    groups.sort_by_key(|g| std::cmp::Reverse(g.0));
     let fx = if p.is_czk { None } else { p.exchange_rate };
     let czk = |x: Decimal| -> Result<Option<Decimal>, Overflow> {
         fx.map(|r| {
@@ -160,28 +184,82 @@ pub fn totals(
         })
         .transpose()
     };
+    let add = |a: Decimal, b: Decimal| a.checked_add(b).ok_or(Lines);
+    let mut groups: Vec<Group> = Vec::new();
+    fn group(groups: &mut Vec<Group>, rate: Decimal) -> &mut Group {
+        let i = match groups.iter().position(|g| g.rate == rate) {
+            Some(i) => i,
+            None => {
+                groups.push(Group {
+                    rate,
+                    ..Default::default()
+                });
+                groups.len() - 1
+            }
+        };
+        &mut groups[i]
+    }
+    for (rate, base) in items {
+        let g = group(&mut groups, rate);
+        g.items = add(g.items, base)?;
+    }
+    for a in advances {
+        let base_czk = match a.base_czk {
+            Some(c) => c,
+            None => czk(a.base)?.unwrap_or_default(),
+        };
+        let vat_czk = match a.vat_czk {
+            Some(c) => c,
+            None => czk(a.vat)?.unwrap_or_default(),
+        };
+        let g = group(&mut groups, a.vat_rate);
+        g.adv_base = add(g.adv_base, a.base)?;
+        g.adv_vat = add(g.adv_vat, a.vat)?;
+        g.adv_base_czk = add(g.adv_base_czk, base_czk)?;
+        g.adv_vat_czk = add(g.adv_vat_czk, vat_czk)?;
+    }
+    groups.sort_by_key(|g| std::cmp::Reverse(g.rate));
+    let sub = |a: Decimal, b: Decimal| a.checked_sub(b).map(round2).and_then(fits);
     let mut recap = Vec::with_capacity(groups.len());
     let (mut base_sum, mut vat_sum) = (Decimal::ZERO, Decimal::ZERO);
-    for (rate, base) in groups {
-        let base = fits(round2(base)).ok_or(Lines)?;
-        let vat = if p.vat_mode.charges_vat() {
-            round2(base.checked_mul(rate).ok_or(Lines)? / Decimal::ONE_HUNDRED)
+    for g in groups {
+        let item_base = fits(round2(g.items)).ok_or(Lines)?;
+        let item_vat = if p.vat_mode.charges_vat() {
+            round2(item_base.checked_mul(g.rate).ok_or(Lines)? / Decimal::ONE_HUNDRED)
         } else {
-            round2(Decimal::ZERO)
+            Decimal::ZERO
         };
-        base_sum = base_sum.checked_add(base).ok_or(Lines)?;
-        vat_sum = vat_sum.checked_add(vat).ok_or(Lines)?;
+        let adv_vat = if p.vat_mode.charges_vat() {
+            g.adv_vat
+        } else {
+            Decimal::ZERO
+        };
+        let base = sub(item_base, g.adv_base).ok_or(Lines)?;
+        let vat = sub(item_vat, adv_vat).ok_or(Lines)?;
+        let adv_vat_czk = if p.vat_mode.charges_vat() {
+            g.adv_vat_czk
+        } else {
+            Decimal::ZERO
+        };
+        let base_czk = czk(item_base)?
+            .map(|c| sub(c, g.adv_base_czk).ok_or(ExchangeRate))
+            .transpose()?;
+        let vat_czk = czk(item_vat)?
+            .map(|c| sub(c, adv_vat_czk).ok_or(ExchangeRate))
+            .transpose()?;
+        base_sum = add(base_sum, base)?;
+        vat_sum = add(vat_sum, vat)?;
         recap.push(RecapRow {
-            vat_rate: rate.normalize(),
+            vat_rate: g.rate.normalize(),
             base,
             vat,
-            base_czk: czk(base)?,
-            vat_czk: czk(vat)?,
+            base_czk,
+            vat_czk,
         });
     }
     let base = fits(round2(base_sum)).ok_or(Lines)?;
     let vat = fits(round2(vat_sum)).ok_or(Lines)?;
-    let total = fits(round2(base.checked_add(vat).ok_or(Lines)?)).ok_or(Lines)?;
+    let total = fits(round2(add(base, vat)?)).ok_or(Lines)?;
     let payable = if p.round_total && p.is_czk {
         fits(round0(total)).ok_or(Lines)?
     } else {
@@ -201,3 +279,7 @@ pub fn totals(
 #[cfg(test)]
 #[path = "compute_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "compute_advance_tests.rs"]
+mod advance_tests;

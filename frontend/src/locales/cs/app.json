@@ -1,0 +1,5 @@
+{
+  "name": "Faktury",
+  "backendVersion": "Verze serveru: {version}",
+  "backendUnavailable": "Verzi serveru se nepodařilo načíst."
+}

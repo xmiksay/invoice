@@ -15,13 +15,18 @@ use crate::document::entity::document::{self, Column, Entity};
 use crate::document::entity::{document_line, vat_recap};
 use crate::document::handlers::dto::ListQuery;
 use crate::document::line::{LineData, PaymentState};
+use crate::document::state;
 use crate::error::AppError;
 
-/// A document with its lines (by position) and stored recap rows.
+/// A document with its lines (by position), stored recap rows and the
+/// documents that reference it (`related_document_id`, oldest first).
 pub struct Full {
     pub doc: document::Model,
     pub lines: Vec<LineData>,
     pub recap: Vec<vat_recap::Model>,
+    pub related: Vec<document::Model>,
+    /// The document `related_document_id` points at.
+    pub parent: Option<document::Model>,
 }
 
 pub async fn find<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<document::Model, AppError> {
@@ -59,11 +64,30 @@ pub async fn load<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<Full, AppError
         .order_by_desc(vat_recap::Column::VatRate)
         .all(db)
         .await?;
-    Ok(Full { doc, lines, recap })
+    let related = Entity::find()
+        .filter(Column::RelatedDocumentId.eq(id))
+        .order_by_asc(Column::CreatedAt)
+        .order_by_asc(Column::Id)
+        .all(db)
+        .await?;
+    let parent = match doc.related_document_id {
+        Some(pid) => Entity::find_by_id(pid).one(db).await?,
+        None => None,
+    };
+    Ok(Full {
+        doc,
+        lines,
+        recap,
+        related,
+        parent,
+    })
 }
 
+/// Issued and carrying a payment state (a DDPP has none).
 fn issued() -> SimpleExpr {
-    Column::Status.eq("issued")
+    Column::Status
+        .eq("issued")
+        .and(Column::DocType.ne(state::NO_PAYMENTS_DOC_TYPE))
 }
 
 /// SQL mirror of [`crate::document::state::payment_state`] (`paid >= 0`).

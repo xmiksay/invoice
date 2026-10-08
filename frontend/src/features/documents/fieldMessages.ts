@@ -24,6 +24,7 @@ export const FIELD_LABELS = [
   "footerNote",
   "internalNote",
   "roundTotal",
+  "correctionReason",
   "lines",
   "date",
   "amount",
@@ -31,7 +32,7 @@ export const FIELD_LABELS = [
   "reason",
 ] as const;
 
-export const LINE_FIELD_LABELS = ["description", "quantity", "unit", "unitPrice", "discountPct", "vatRate", "refs", "kind"] as const;
+export const LINE_FIELD_LABELS = ["description", "quantity", "unit", "unitPrice", "discountPct", "vatRate", "refs", "kind", "advanceDocumentId"] as const;
 
 const has = (list: readonly string[], v: string) => list.includes(v);
 

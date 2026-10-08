@@ -11,7 +11,7 @@ import {
   validateDocument,
 } from "./form";
 import { formatMoney, remainingAmount } from "./format";
-import { newItemLine, newTextLine } from "./lines";
+import { newItemLine, newTextLine, type LineDraft } from "./lines";
 import { bankAccounts, company, contact, ctx, document, vatRates } from "./testData";
 
 describe("new document defaults", () => {
@@ -108,7 +108,18 @@ describe("draft ↔ wire", () => {
       currency: "CZK",
       exchangeRate: null,
       roundTotal: false,
+      contactId: null,
+      docType: "invoice",
+      locale: "cs",
     });
+  });
+
+  it("compute body carries the advance-line context: contact, type, locale and the edited draft's id", () => {
+    const draft = toDraft(document({ docType: "proforma", taxPointDate: null, locale: "en" }));
+    expect(toComputeRequest(draft, null, "d1")).toMatchObject({ contactId: "c1", docType: "proforma", locale: "en", documentId: "d1" });
+    expect(toComputeRequest(draft)).not.toHaveProperty("documentId");
+    // PUT never converts a draft to another type.
+    expect(toInput(draft).docType).toBe("proforma");
   });
 
   it("indicative ČNB rate goes to compute only, and only without a manual rate", () => {
@@ -141,5 +152,42 @@ describe("format", () => {
   it("remaining amount is exact and never negative", () => {
     expect(remainingAmount("1210.10", "210.20")).toBe("999.90");
     expect(remainingAmount("100.00", "150.00")).toBe("0.00");
+  });
+});
+
+describe("doc types", () => {
+  const advance = {
+    kind: "advance" as const,
+    position: 2,
+    advanceDocumentId: "ddpp1",
+    description: "Odpočet zálohy DP20260003",
+    base: "-826.45",
+    recap: [{ vatRate: "21", base: "-826.45", vat: "-173.55" }],
+  };
+
+  it("a new proforma has no tax point date and never sends one", () => {
+    const draft = newDocumentDraft(ctx(), "proforma");
+    expect(draft).toMatchObject({ docType: "proforma", taxPointDate: "" });
+    expect(toInput({ ...draft, taxPointDate: "2026-10-08" })).toMatchObject({ docType: "proforma", taxPointDate: null, correctionReason: null });
+  });
+
+  it("a credit note requires its correction reason", () => {
+    const draft = { ...toDraft(document({ docType: "credit_note", sign: -1, correctionReason: null })), lines: [] };
+    expect(validateDocument(draft)).toEqual({ correctionReason: "required" });
+    expect(toInput({ ...draft, correctionReason: " wrong price " })).toMatchObject({ docType: "credit_note", correctionReason: "wrong price" });
+    // Other doc types never send one.
+    expect(toInput({ ...draft, docType: "invoice", correctionReason: "x" }).correctionReason).toBeNull();
+  });
+
+  it("advance lines keep their display fields in the draft and go out as a bare reference", () => {
+    const draft = toDraft(document({ lines: [...document().lines, advance] }));
+    const line = draft.lines[1] as LineDraft;
+    expect(line).toMatchObject({ kind: "advance", advanceDocumentId: "ddpp1", base: "-826.45", description: "Odpočet zálohy DP20260003" });
+    // Server-generated description: no client "required" check.
+    expect(validateDocument(draft)).toEqual({});
+    expect(toComputeRequest(draft).lines).toEqual([
+      { kind: "item", description: "Work", quantity: "1", unit: null, unitPrice: "1000", discountPct: "0", vatRate: "21" },
+      { kind: "advance", advanceDocumentId: "ddpp1" },
+    ]);
   });
 });

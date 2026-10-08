@@ -6,90 +6,9 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
+pub use super::line_out::{Line, lines_out};
 use crate::document::compute::{self, RecapRow};
-use crate::document::line::{LineData, PaymentState, Status};
-use crate::document::subtotals::Resolved;
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ItemLine {
-    pub position: i32,
-    pub description: String,
-    pub quantity: Decimal,
-    pub unit: Option<String>,
-    pub unit_price: Decimal,
-    pub discount_pct: Decimal,
-    pub vat_rate: Decimal,
-    pub base: Decimal,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct TextLine {
-    pub position: i32,
-    pub description: String,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct SubtotalLine {
-    pub position: i32,
-    pub description: String,
-    pub refs: Vec<i32>,
-    pub collapse: bool,
-    /// Sum of the referenced bases.
-    pub base: Decimal,
-    /// The shared rate of the members.
-    pub vat_rate: Decimal,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum Line {
-    Item(ItemLine),
-    Text(TextLine),
-    Subtotal(SubtotalLine),
-}
-
-/// Response lines with positions and computed bases.
-pub fn lines_out(lines: &[LineData], resolved: &Resolved) -> Vec<Line> {
-    lines
-        .iter()
-        .zip(resolved)
-        .zip(1..)
-        .map(|((line, r), position)| {
-            let (vat_rate, base) = r.unwrap_or_default();
-            match line {
-                LineData::Item(i) => Line::Item(ItemLine {
-                    position,
-                    description: i.description.clone(),
-                    quantity: i.quantity.normalize(),
-                    unit: i.unit.clone(),
-                    unit_price: i.unit_price.normalize(),
-                    discount_pct: i.discount_pct.normalize(),
-                    vat_rate: i.vat_rate.normalize(),
-                    base: compute::round2(base),
-                }),
-                LineData::Text { description } => Line::Text(TextLine {
-                    position,
-                    description: description.clone(),
-                }),
-                LineData::Subtotal {
-                    description,
-                    refs,
-                    collapse,
-                } => Line::Subtotal(SubtotalLine {
-                    position,
-                    description: description.clone(),
-                    refs: refs.clone(),
-                    collapse: *collapse,
-                    base: compute::round2(base),
-                    vat_rate: vat_rate.normalize(),
-                }),
-            }
-        })
-        .collect()
-}
+use crate::document::line::{PaymentState, Status};
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -201,8 +120,36 @@ pub struct Document {
     pub totals: Totals,
     /// Sum of payments.
     pub paid: Decimal,
+    /// credit_note → invoice, invoice → the proforma it settles, DDPP → proforma.
+    pub related_document_id: Option<Uuid>,
+    /// DDPP only: the proforma payment it documents.
+    pub payment_id: Option<Uuid>,
+    pub correction_reason: Option<String>,
+    /// Documents whose `relatedDocumentId` is this one.
+    pub related_documents: Vec<RelatedDocument>,
+    /// The document `relatedDocumentId` points at.
+    pub parent: Option<RelatedDocument>,
+    /// Proforma only: a non-cancelled invoice settles it.
+    pub settled: Option<bool>,
+    /// `-1` for credit notes (amounts are stored positive), else `1`.
+    pub sign: i8,
     pub created_at: DateTime<FixedOffset>,
     pub updated_at: DateTime<FixedOffset>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RelatedDocument {
+    pub id: Uuid,
+    pub doc_type: String,
+    pub number: Option<String>,
+    pub status: Status,
+    pub payable: Decimal,
+}
+
+/// `-1` for credit notes.
+pub fn sign(doc_type: &str) -> i8 {
+    if doc_type == "credit_note" { -1 } else { 1 }
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -224,6 +171,8 @@ pub struct DocumentSummary {
     pub payable: Decimal,
     pub paid: Decimal,
     pub sent_at: Option<DateTime<FixedOffset>>,
+    pub sign: i8,
+    pub related_document_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -285,6 +234,8 @@ pub struct Payment {
     pub date: NaiveDate,
     pub amount: Decimal,
     pub note: Option<String>,
+    /// The DDPP this payment created (payer proformas).
+    pub advance_document_id: Option<Uuid>,
     pub created_at: DateTime<FixedOffset>,
 }
 
@@ -295,4 +246,14 @@ pub struct PaymentInput {
     /// Decimal string > 0, at most 2 dp, document currency.
     pub amount: String,
     pub note: Option<String>,
+    /// Foreign-currency proforma of a VAT payer: CZK per unit for the DDPP
+    /// (default: ČNB for the payment date). Ignored otherwise.
+    pub exchange_rate: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CreditNoteInput {
+    /// At most 500 characters; required at issue.
+    pub correction_reason: Option<String>,
 }

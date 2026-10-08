@@ -1,0 +1,16 @@
+{
+  "invalidToken": "Neplatný token.",
+  "unreachable": "Server je nedostupný. Zkuste to později.",
+  "unexpected": "Neočekávaná chyba ({code}).",
+  "notFound": "Záznam nebyl nalezen.",
+  "conflict": "Záznam koliduje s existujícím.",
+  "validation": "Formulář obsahuje chyby.",
+  "aresNotFound": "Subjekt v ARES nenalezen.",
+  "aresUnavailable": "ARES je nedostupný. Zkuste to později.",
+  "documentLocked": "Vystavený doklad už nelze měnit.",
+  "invalidState": "Tuto akci nelze v aktuálním stavu dokladu provést.",
+  "cnbUnavailable": "Kurzovní lístek ČNB je nedostupný. Zadejte kurz ručně.",
+  "advanceSettled": "Platbu nelze smazat: její daňový doklad už je odečten ve vystavené vyúčtovací faktuře.",
+  "advanceInUse": "Platbu nelze smazat: její zálohu odečítá koncept vyúčtovací faktury. Nejprve z něj odeberte řádek odpočtu zálohy.",
+  "catalogItemInUse": "Položku nelze smazat: je jedinou položkou skupiny. Nejprve upravte nebo smažte skupinu."
+}

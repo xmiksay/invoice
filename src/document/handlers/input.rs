@@ -1,16 +1,23 @@
 //! Document request bodies and their validation into [`DocumentData`].
 
-use chrono::{Days, NaiveDate};
+use std::collections::HashMap;
+
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+pub use super::existing::Existing;
+use super::existing::doc_type;
 use super::line_input::{LineInput, Texts, decimal, validate_lines};
 use crate::contact::entity::contact;
+use crate::document::advance::{self, AdvanceCtx, AdvanceSource};
 use crate::document::compute::{self, Evaluated, Params};
+use crate::document::defaults;
 use crate::document::line::{LineData, MAX_RATE, PaymentMethod, VatMode};
 use crate::error::{AppError, FieldErrors};
+use crate::settings::doc_type::DocType;
 use crate::settings::entity::company;
 use crate::validation::{self as v, Check};
 
@@ -19,9 +26,10 @@ use crate::validation::{self as v, Check};
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DocumentInput {
-    /// Only `invoice` in this phase.
+    /// `invoice` | `proforma` on create (default `invoice`); on update it must
+    /// equal the draft's type (omitted = unchanged), `credit_note` included.
     pub doc_type: Option<String>,
-    /// Only `issued` in this phase.
+    /// Only `issued`.
     pub direction: Option<String>,
     pub contact_id: Option<Uuid>,
     pub issue_date: Option<NaiveDate>,
@@ -43,12 +51,33 @@ pub struct DocumentInput {
     pub footer_note: Option<String>,
     pub internal_note: Option<String>,
     pub round_total: Option<bool>,
+    /// Credit notes only (ignored otherwise); at most 500 characters.
+    pub correction_reason: Option<String>,
     pub lines: Vec<LineInput>,
+}
+
+impl DocumentInput {
+    pub fn advance_ids(&self) -> Vec<Uuid> {
+        advance_ids(&self.lines)
+    }
+}
+
+/// The documents `advance` lines of a request reference.
+pub fn advance_ids(lines: &[LineInput]) -> Vec<Uuid> {
+    lines
+        .iter()
+        .filter(|l| l.kind == "advance")
+        .filter_map(|l| l.advance_document_id)
+        .collect()
 }
 
 /// Validated [`DocumentInput`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct DocumentData {
+    pub doc_type: DocType,
+    /// Set by settle / credit-note creation; kept on update.
+    pub related_document_id: Option<Uuid>,
+    pub correction_reason: Option<String>,
     pub contact_id: Option<Uuid>,
     pub issue_date: NaiveDate,
     pub tax_point_date: Option<NaiveDate>,
@@ -89,6 +118,27 @@ pub struct Context {
     /// The contact named by `contactId`, if it exists.
     pub contact: Option<contact::Model>,
     pub default_vat_rate: Option<Decimal>,
+    /// `PUT`: the draft being replaced.
+    pub existing: Option<Existing>,
+    /// Documents referenced by `advance` lines, by id.
+    pub advances: HashMap<Uuid, AdvanceSource>,
+}
+
+/// Resolve advance lines, then compute; errors of both are reported together.
+pub fn evaluate(
+    lines: &mut [LineData],
+    params: Params,
+    adv: &AdvanceCtx,
+) -> Result<Evaluated, AppError> {
+    let mut e = advance::resolve(lines, adv);
+    match compute::evaluate(lines, params) {
+        Ok(ev) if e.is_empty() => Ok(ev),
+        Ok(_) => Err(AppError::Validation(e)),
+        Err(more) => {
+            e.merge(more);
+            Err(AppError::Validation(e))
+        }
+    }
 }
 
 fn digits(s: Option<&str>, max: usize) -> Check<Option<String>> {
@@ -131,11 +181,14 @@ impl DocumentInput {
     /// computation rules. The bank account is checked by the repo.
     pub fn validate(self, ctx: &Context) -> Result<(DocumentData, Evaluated), AppError> {
         let mut e = FieldErrors::new();
-        let issued_invoice = self.doc_type.as_deref().is_none_or(|d| d == "invoice")
-            && self.direction.as_deref().is_none_or(|d| d == "issued");
-        if !issued_invoice {
-            e.add("docType", "invalid");
+        let existing = ctx.existing.as_ref();
+        let doc_type = match self.direction.as_deref().map(str::trim) {
+            None | Some("issued") => {
+                e.check("docType", doc_type(self.doc_type.as_deref(), existing))
+            }
+            Some(_) => e.check("docType", Err("invalid")),
         }
+        .unwrap_or(DocType::Invoice);
         if self.contact_id.is_some() && ctx.contact.is_none() {
             e.add("contactId", "invalid");
         }
@@ -143,19 +196,21 @@ impl DocumentInput {
         let issue_date = e
             .check("issueDate", or_default(self.issue_date, ctx, || ctx.today))
             .unwrap_or(ctx.today);
-        let tax_point_date = self
-            .tax_point_date
-            .or(ctx.apply_defaults.then_some(issue_date));
-        let due_days = c
-            .and_then(|c| c.default_due_days)
-            .unwrap_or(ctx.company.default_due_days);
+        // A proforma is not a tax document: no tax point date.
+        let tax_point_date = if doc_type == DocType::Proforma {
+            if self.tax_point_date.is_some() {
+                e.add("taxPointDate", "invalid");
+            }
+            None
+        } else {
+            self.tax_point_date
+                .or(ctx.apply_defaults.then_some(issue_date))
+        };
         let due_date = e
             .check(
                 "dueDate",
                 or_default(self.due_date, ctx, || {
-                    issue_date
-                        .checked_add_days(Days::new(u64::try_from(due_days).unwrap_or(0)))
-                        .unwrap_or(issue_date)
+                    defaults::due_date(c, &ctx.company, issue_date)
                 }),
             )
             .unwrap_or(issue_date);
@@ -174,14 +229,22 @@ impl DocumentInput {
             .check("exchangeRate", exchange_rate(self.exchange_rate.as_deref()))
             .flatten()
             .filter(|_| currency != "CZK");
+        let credit_note = existing.filter(|_| doc_type == DocType::CreditNote);
+        let rate = credit_note.map_or(rate, |x| x.exchange_rate);
+        let correction_reason = if doc_type == DocType::CreditNote {
+            e.check(
+                "correctionReason",
+                v::opt_text(self.correction_reason.as_deref(), 500),
+            )
+            .flatten()
+        } else {
+            None
+        };
         let locale = match self.locale.as_deref().map(v::locale) {
             Some(r) => e.check("locale", r),
             None => e.check(
                 "locale",
-                or_default(None, ctx, || {
-                    c.and_then(|c| c.default_locale.clone())
-                        .unwrap_or_else(|| ctx.company.default_locale.clone())
-                }),
+                or_default(None, ctx, || defaults::locale(c, &ctx.company)),
             ),
         }
         .unwrap_or_default();
@@ -198,6 +261,9 @@ impl DocumentInput {
                 }),
             ),
         };
+        if let (Some(x), Some(mode)) = (credit_note, vat_mode) {
+            x.check_bound(&currency, self.contact_id, mode, &mut e);
+        }
         let payment_method = match self.payment_method.as_deref() {
             Some(s) => e.check(
                 "paymentMethod",
@@ -215,7 +281,10 @@ impl DocumentInput {
             Texts::Validate,
             &mut e,
         );
-        let data = DocumentData {
+        let mut data = DocumentData {
+            doc_type,
+            related_document_id: existing.and_then(|x| x.related_document_id),
+            correction_reason,
             contact_id: self.contact_id,
             issue_date,
             tax_point_date,
@@ -257,55 +326,21 @@ impl DocumentInput {
         if !e.is_empty() {
             return Err(AppError::Validation(e));
         }
-        let evaluated =
-            compute::evaluate(&data.lines, data.params()).map_err(AppError::Validation)?;
+        let params = data.params();
+        let adv = AdvanceCtx {
+            doc_type: data.doc_type,
+            vat_mode: data.vat_mode,
+            document_id: existing.map(|x| x.id),
+            related_document_id: data.related_document_id,
+            contact_id: data.contact_id,
+            currency: &data.currency,
+            locale: &data.locale,
+            sources: &ctx.advances,
+        };
+        let mut lines = std::mem::take(&mut data.lines);
+        let evaluated = evaluate(&mut lines, params, &adv)?;
+        data.lines = lines;
         Ok((data, evaluated))
-    }
-}
-
-/// `POST /api/documents/compute` body.
-#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase", default)]
-pub struct ComputeInput {
-    pub lines: Vec<LineInput>,
-    /// Default: from the company (`standard` / `non_payer`).
-    pub vat_mode: Option<String>,
-    /// Default `CZK`.
-    pub currency: Option<String>,
-    pub exchange_rate: Option<String>,
-    pub round_total: bool,
-}
-
-impl ComputeInput {
-    pub fn validate(
-        self,
-        vat_payer: bool,
-        default_rate: Option<Decimal>,
-    ) -> Result<(Vec<LineData>, Evaluated), AppError> {
-        let mut e = FieldErrors::new();
-        let vat_mode = match self.vat_mode.as_deref() {
-            Some(s) => e.check("vatMode", parse_vat_mode(s)),
-            None if vat_payer => Some(VatMode::Standard),
-            None => Some(VatMode::NonPayer),
-        };
-        let currency = match self.currency.as_deref() {
-            Some(s) => e.check("currency", v::currency(s)),
-            None => Some("CZK".into()),
-        }
-        .unwrap_or_default();
-        let rate = e
-            .check("exchangeRate", exchange_rate(self.exchange_rate.as_deref()))
-            .flatten();
-        let lines = validate_lines(self.lines, vat_mode, default_rate, Texts::Skip, &mut e);
-        e.into_result()?;
-        let params = Params {
-            vat_mode: vat_mode.unwrap_or(VatMode::Standard),
-            is_czk: currency == "CZK",
-            exchange_rate: rate,
-            round_total: self.round_total,
-        };
-        let evaluated = compute::evaluate(&lines, params).map_err(AppError::Validation)?;
-        Ok((lines, evaluated))
     }
 }
 

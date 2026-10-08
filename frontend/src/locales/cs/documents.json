@@ -1,0 +1,234 @@
+{
+  "draftNumber": "Koncept",
+  "overdue": "Po splatnosti",
+  "sent": "Odesláno",
+  "status": {
+    "draft": "Koncept",
+    "issued": "Vystaveno",
+    "cancelled": "Stornováno"
+  },
+  "paymentState": {
+    "unpaid": "Neuhrazeno",
+    "partial": "Částečně uhrazeno",
+    "paid": "Uhrazeno",
+    "overpaid": "Přeplaceno"
+  },
+  "vatMode": {
+    "standard": "Běžné DPH",
+    "reverse_charge": "Přenesená daňová povinnost",
+    "exempt": "Osvobozeno od DPH",
+    "non_payer": "Neplátce DPH"
+  },
+  "paymentMethod": {
+    "bank_transfer": "Převodem",
+    "cash": "Hotově",
+    "card": "Kartou",
+    "other": "Jinak"
+  },
+  "rateSource": {
+    "cnb": "ČNB",
+    "manual": "ručně",
+    "original": "z původní faktury"
+  },
+  "fields": {
+    "docType": "Typ dokladu",
+    "number": "Číslo",
+    "customer": "Odběratel",
+    "supplier": "Dodavatel",
+    "contactId": "Odběratel",
+    "issueDate": "Datum vystavení",
+    "taxPointDate": "DUZP",
+    "dueDate": "Datum splatnosti",
+    "currency": "Měna",
+    "exchangeRate": "Kurz (CZK za 1 jednotku)",
+    "locale": "Jazyk dokladu",
+    "vatMode": "Režim DPH",
+    "bankAccountId": "Bankovní účet",
+    "paymentMethod": "Způsob úhrady",
+    "variableSymbol": "Variabilní symbol",
+    "constantSymbol": "Konstantní symbol",
+    "orderRef": "Číslo objednávky",
+    "headerNote": "Text nad položkami",
+    "footerNote": "Text pod položkami",
+    "internalNote": "Interní poznámka",
+    "roundTotal": "Zaokrouhlit na celé koruny",
+    "lines": "Položky",
+    "date": "Datum",
+    "amount": "Částka",
+    "note": "Poznámka",
+    "reason": "Důvod",
+    "sentAt": "Odesláno",
+    "cancelledAt": "Stornováno",
+    "cancelReason": "Důvod storna",
+    "correctionReason": "Důvod opravy"
+  },
+  "list": {
+    "title": {
+      "invoice": "Faktury",
+      "proforma": "Zálohové faktury",
+      "credit_note": "Dobropisy",
+      "advance_tax_doc": "Daňové doklady k platbě"
+    },
+    "new": {
+      "invoice": "Nová faktura",
+      "proforma": "Nová zálohová faktura"
+    },
+    "searchPlaceholder": "Hledat podle čísla, odběratele nebo VS",
+    "status": "Stav",
+    "anyStatus": "Všechny stavy",
+    "paymentState": "Úhrada",
+    "anyPaymentState": "Jakákoli úhrada",
+    "from": "Vystaveno od",
+    "to": "Vystaveno do",
+    "overdueOnly": "Jen po splatnosti",
+    "empty": {
+      "invoice": "Zatím žádné faktury.",
+      "proforma": "Zatím žádné zálohové faktury.",
+      "credit_note": "Zatím žádné dobropisy. Vystavíte je z detailu faktury.",
+      "advance_tax_doc": "Zatím žádné daňové doklady k platbě. Vznikají automaticky při úhradě zálohové faktury."
+    },
+    "noResults": "Žádné doklady neodpovídají filtru.",
+    "tabs": "Typ dokladu",
+    "tab": {
+      "invoice": "Faktury",
+      "proforma": "Zálohové faktury",
+      "credit_note": "Dobropisy",
+      "advance_tax_doc": "Daňové doklady k platbě"
+    }
+  },
+  "editor": {
+    "newTitle": {
+      "invoice": "Nová faktura",
+      "proforma": "Nová zálohová faktura",
+      "credit_note": "Nový dobropis"
+    },
+    "editTitle": {
+      "invoice": "Upravit koncept faktury",
+      "proforma": "Upravit koncept zálohové faktury",
+      "credit_note": "Upravit koncept dobropisu"
+    },
+    "saveDraft": "Uložit koncept",
+    "newContact": "Nový kontakt",
+    "changeContact": "Změnit",
+    "removeContact": "Odebrat",
+    "noAccountForCurrency": "Žádný účet v měně {currency}",
+    "roundTotalCzkOnly": "Jen pro doklady v CZK.",
+    "variableSymbolHint": "Prázdné = odvodí se z čísla faktury.",
+    "internalNoteHint": "Netiskne se na doklad.",
+    "manualRate": "Ruční kurz — přepíše ČNB",
+    "manualRateHint": "CZK za 1 jednotku. Prázdné = kurz ČNB k DUZP se zafixuje při vystavení.",
+    "indicativeRate": "Orientační kurz ČNB k {date}: {rate} (zafixuje se při vystavení)",
+    "indicativeRateLoading": "Načítám orientační kurz ČNB…",
+    "indicativeRateUnknown": "ČNB kurz pro {currency} nevyhlašuje — zadejte ruční kurz.",
+    "indicativeRateUnavailable": "Kurz ČNB teď nelze načíst; zafixuje se při vystavení, nebo zadejte ruční kurz.",
+    "creditNoteHint": "Povinné před vystavením. Částky zadávejte kladně — dobropis je odečte.",
+    "originalRate": "z původní faktury, nelze měnit"
+  },
+  "line": {
+    "title": "Položky",
+    "empty": "Zatím žádné položky.",
+    "addItem": "Položka",
+    "addText": "Text",
+    "addSubtotal": "Mezisoučet",
+    "kinds": {
+      "item": "Položka",
+      "text": "Text",
+      "subtotal": "Mezisoučet",
+      "advance": "Odpočet zálohy"
+    },
+    "description": "Popis",
+    "quantity": "Množství",
+    "unit": "Jednotka",
+    "unitPrice": "Cena bez DPH",
+    "discountPct": "Sleva %",
+    "vatRate": "DPH %",
+    "refs": "Sčítané řádky",
+    "kind": "Typ řádku",
+    "collapse": "Na dokladu zobrazit jen mezisoučet",
+    "collapsed": "sbaleno",
+    "noRefOptions": "Nejprve přidejte položky.",
+    "refsInvalid": "Vyberte alespoň jeden řádek (položku nebo mezisoučet); řádky se nesmí zacyklit a musí mít stejnou sazbu DPH.",
+    "moveUp": "Posunout řádek {n} nahoru",
+    "moveDown": "Posunout řádek {n} dolů",
+    "remove": "Odebrat řádek {n}",
+    "rowLabel": "Řádek {n}",
+    "memberOf": "Součást mezisoučtu na řádku {positions}",
+    "atLeastOneItem": "Doklad musí mít alespoň jednu položku.",
+    "advancePending": "Odpočet zálohy (popis doplní server)",
+    "advanceRecap": "{rate} %: základ {base}, DPH {vat}",
+    "advanceNeedsStandard": "Odpočet daňového dokladu k platbě je možný jen v režimu Běžné DPH."
+  },
+  "totals": {
+    "title": "Rekapitulace",
+    "computing": "Přepočítávám…",
+    "rate": "Sazba",
+    "base": "Základ",
+    "vat": "DPH",
+    "baseCzk": "Základ v CZK",
+    "vatCzk": "DPH v CZK",
+    "total": "Celkem",
+    "rounding": "Zaokrouhlení",
+    "payable": "K úhradě",
+    "totalCzk": "K úhradě v CZK",
+    "atRate": "kurz {rate}",
+    "none": "Přidejte položky.",
+    "fixErrors": "Opravte zvýrazněná pole, aby se součty přepočítaly.",
+    "overpaid": "Přeplatek"
+  },
+  "detail": {
+    "backToList": "Zpět na seznam",
+    "backToDetail": "Zpět na doklad",
+    "issue": "Vystavit",
+    "markSent": "Označit jako odeslanou",
+    "markSentAgain": "Znovu označit jako odeslanou",
+    "cancel": "Stornovat",
+    "confirmIssue": "Vystavit doklad? Poté už nepůjde upravit.",
+    "confirmDelete": "Opravdu smazat tento koncept?",
+    "cancelPrompt": "Důvod storna dokladu {number} (nepovinné):",
+    "cannotProceed": "Akci nelze dokončit:",
+    "settle": "Vystavit vyúčtovací fakturu",
+    "settled": "Vyúčtováno",
+    "creditNote": "Vystavit dobropis",
+    "creditNotePrompt": "Důvod opravy (dobropisu) k faktuře {number}:",
+    "ddppNote": "Vystaven automaticky k přijaté platbě zálohové faktury. Nelze upravit ani stornovat — zruší se smazáním platby."
+  },
+  "payments": {
+    "title": "Platby",
+    "paid": "Uhrazeno",
+    "remaining": "Zbývá",
+    "add": "Přidat platbu",
+    "delete": "Smazat platbu",
+    "empty": "Zatím žádné platby.",
+    "confirmDelete": "Opravdu smazat tuto platbu?",
+    "addAnother": "Přidat další platbu",
+    "refundsTitle": "Vrácené platby",
+    "confirmDeleteWithDdpp": "Opravdu smazat tuto platbu? Stornuje se tím i daňový doklad k platbě {number}.",
+    "ddpp": "Daňový doklad {number}",
+    "ddppCreated": "Vystaven daňový doklad k platbě:",
+    "rate": "Kurz platby (CZK za 1 jednotku)",
+    "rateHint": "Nepovinné. Prázdné = kurz ČNB k datu platby.",
+    "indicativeRate": "Kurz ČNB k {date}: {rate}",
+    "openDraftInvoice": "Otevřít koncept faktury"
+  },
+  "docTypes": {
+    "invoice": "Faktura",
+    "proforma": "Zálohová faktura",
+    "credit_note": "Dobropis",
+    "advance_tax_doc": "Daňový doklad k přijaté platbě",
+    "received": "Přijatá faktura"
+  },
+  "related": {
+    "title": "Související doklady",
+    "parent": "Vychází z",
+    "child": "Navazující"
+  },
+  "catalog": {
+    "add": "Z katalogu",
+    "searchPlaceholder": "Hledat položku nebo skupinu",
+    "groups": "Skupiny",
+    "items": "Položky",
+    "memberCount": "položek: {n}",
+    "noResults": "V katalogu nic nenalezeno.",
+    "unpriced": "Cena není vyplněna u: {names} — katalogová cena je v jiné měně než {currency}, doplňte ji ručně."
+  }
+}

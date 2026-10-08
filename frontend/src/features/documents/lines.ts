@@ -1,13 +1,17 @@
 import type { FieldErrors } from "@/api/types";
-import type { DocumentLine, ItemLine, SubtotalLine, TextLine, VatMode } from "./types";
+import type { AdvanceDisplay, AdvanceLine, ComputedLine, DocumentLine, ItemLine, SubtotalLine, TextLine, VatMode } from "./types";
+
+type Keyed<T> = T & { key: number };
+
+/** An advance deduction is read-only in the editor; its display fields come from the server. */
+export type AdvanceLineDraft = Keyed<AdvanceLine & AdvanceDisplay>;
 
 /**
  * Editor state of a line: the wire line plus a client-only `key` so v-for keeps
  * input state attached to the right row across reorders. Item amounts stay the
  * strings the user typed.
  */
-export type LineDraft = DocumentLine & { key: number };
-type Keyed<T> = T & { key: number };
+export type LineDraft = Keyed<ItemLine> | Keyed<TextLine> | Keyed<SubtotalLine> | AdvanceLineDraft;
 
 /** A line a subtotal can reference, shown by its 1-based position. */
 export interface RefOption {
@@ -30,6 +34,11 @@ export function newSubtotalLine(refs: number[] = []): Keyed<SubtotalLine> {
   return { key: key(), kind: "subtotal", description: "", refs, collapse: false };
 }
 
+/** 1-based positions a subtotal at `index` may reference: items and other subtotals, never itself, text or advance lines. */
+export function refTargets(lines: LineDraft[], index: number): number[] {
+  return lines.flatMap((l, i) => (i !== index && (l.kind === "item" || l.kind === "subtotal") ? [i + 1] : []));
+}
+
 /**
  * Refs for a subtotal appended at the end: the item lines after the last
  * subtotal. The server rejects empty refs, so starting empty would break the
@@ -41,7 +50,7 @@ export function defaultSubtotalRefs(lines: LineDraft[]): number[] {
 }
 
 /** Wire/response line → editor draft (drops response-only fields such as position/base). */
-export function toLineDraft(line: DocumentLine): LineDraft {
+export function toLineDraft(line: DocumentLine | ComputedLine): LineDraft {
   switch (line.kind) {
     case "item":
       return {
@@ -58,6 +67,15 @@ export function toLineDraft(line: DocumentLine): LineDraft {
       return { key: key(), kind: "text", description: line.description };
     case "subtotal":
       return { key: key(), kind: "subtotal", description: line.description, refs: [...line.refs], collapse: line.collapse };
+    case "advance":
+      return {
+        key: key(),
+        kind: "advance",
+        advanceDocumentId: line.advanceDocumentId,
+        description: "description" in line ? line.description : "",
+        base: "base" in line ? line.base : "",
+        recap: "recap" in line ? line.recap.map((r) => ({ ...r })) : [],
+      };
   }
 }
 
@@ -88,6 +106,8 @@ export function toWireLine(line: LineDraft): DocumentLine {
         refs: [...line.refs].sort((a, b) => a - b),
         collapse: line.collapse,
       };
+    case "advance":
+      return { kind: "advance", advanceDocumentId: line.advanceDocumentId };
   }
 }
 

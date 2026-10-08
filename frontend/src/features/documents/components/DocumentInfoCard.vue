@@ -42,6 +42,7 @@ const rows = computed(() => {
     ["sentAt", d.sentAt && date(d.sentAt)],
     ["cancelledAt", d.cancelledAt && date(d.cancelledAt)],
     ["cancelReason", d.cancelReason],
+    ["correctionReason", d.correctionReason],
   ];
   return all.filter((r): r is [string, string] => !!r[1]);
 });

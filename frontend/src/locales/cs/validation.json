@@ -1,0 +1,11 @@
+{
+  "required": "Povinné pole.",
+  "invalid": "Neplatná hodnota.",
+  "too_long": "Hodnota je příliš dlouhá.",
+  "duplicate": "Tato hodnota už existuje.",
+  "invalid_ico": "Neplatné IČO.",
+  "invalid_pattern": "Neplatný vzor čísla.",
+  "below_issued": "Nelze nastavit pod nejvyšší již vystavené číslo.",
+  "exceeds_original": "Dobropisy by v některé sazbě DPH přesáhly původní fakturu.",
+  "mixed_vat": "Všechny položky skupiny musí mít stejnou sazbu DPH."
+}

@@ -60,6 +60,12 @@ describe("router auth guard", () => {
     expect(router.currentRoute.value.name).toBe("invoice-new");
     await router.push("/invoices/d1");
     expect(router.currentRoute.value.name).toBe("invoice-detail");
+    await router.push("/catalog");
+    expect(router.currentRoute.value.name).toBe("catalog-items");
+    await router.push("/catalog/groups");
+    expect(router.currentRoute.value.name).toBe("catalog-groups");
+    await router.push("/invoices/new?docType=proforma");
+    expect(router.currentRoute.value.name).toBe("invoice-new");
     await router.push("/invoices/d1/edit");
     expect(router.currentRoute.value.name).toBe("invoice-edit");
     expect(router.currentRoute.value.params.id).toBe("d1");

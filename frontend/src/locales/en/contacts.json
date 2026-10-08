@@ -1,0 +1,15 @@
+{
+  "title": "Contacts",
+  "new": "New contact",
+  "newTitle": "New contact",
+  "editTitle": "Edit contact",
+  "backToList": "Back to contacts",
+  "searchPlaceholder": "Search by name, company ID, VAT ID or city",
+  "noResults": "Nothing found.",
+  "empty": "No contacts yet.",
+  "confirmDelete": "Really delete contact “{name}”?",
+  "defaultDueDays": "Default due days",
+  "defaultCurrency": "Default currency",
+  "defaultLocale": "Document language",
+  "note": "Note"
+}

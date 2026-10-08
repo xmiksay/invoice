@@ -5,6 +5,7 @@ import type { FieldErrors } from "@/api/types";
 import FormField from "@/components/form/FormField.vue";
 import { useErrorText } from "@/composables/useAction";
 import { useFormSubmit } from "@/composables/useFormSubmit";
+import { reasonKey } from "@/lib/formErrors";
 import type { Contact } from "@/features/contacts/types";
 import { applyContact, defaultVatRate, toComputeRequest, toInput, validateDocument, type DocumentDraft, type DraftContext } from "../form";
 import { formatMoney } from "../format";
@@ -26,11 +27,13 @@ const errorText = useErrorText();
 const store = useDocumentStore();
 const draft = ref<DocumentDraft>(props.initial);
 const { fieldErrors, error, submitting, submit } = useFormSubmit();
+const isCreditNote = computed(() => draft.value.docType === "credit_note");
 const indicative = useIndicativeRate(() => ({
-  currency: draft.value.currency,
+  // A credit note keeps its invoice's rate, so there is nothing to look up.
+  currency: isCreditNote.value ? "" : draft.value.currency,
   date: draft.value.taxPointDate || draft.value.issueDate,
 }));
-const compute = useCompute(() => toComputeRequest(draft.value, indicative.rate.value?.rate ?? null));
+const compute = useCompute(() => toComputeRequest(draft.value, indicative.rate.value?.rate ?? null, props.docId));
 
 watch(
   () => draft.value.vatMode,
@@ -94,7 +97,13 @@ async function onSubmit() {
 <template>
   <form class="space-y-6" novalidate @submit.prevent="onSubmit">
     <section class="card">
-      <ContactPicker :contact-id="draft.contactId" :error="headerErrors.contactId" @pick="onPick" @clear="draft.contactId = null" />
+      <ContactPicker :contact-id="draft.contactId" :error="headerErrors.contactId" :locked="isCreditNote" @pick="onPick" @clear="draft.contactId = null" />
+    </section>
+
+    <section v-if="isCreditNote" class="card">
+      <FormField :label="t('documents.fields.correctionReason')" for="doc-correctionReason" :error="headerErrors.correctionReason" :hint="t('documents.editor.creditNoteHint')">
+        <textarea id="doc-correctionReason" v-model="draft.correctionReason" rows="2" maxlength="500" class="input" :class="{ 'input-error': headerErrors.correctionReason }" />
+      </FormField>
     </section>
 
     <section class="card">
@@ -110,7 +119,9 @@ async function onSubmit() {
 
     <section class="card space-y-3">
       <h2 class="font-semibold">{{ t("documents.line.title") }}</h2>
-      <p v-if="headerErrors.lines" class="text-xs text-red-600 dark:text-red-400">{{ t("documents.line.atLeastOneItem") }}</p>
+      <p v-if="headerErrors.lines" class="text-xs text-red-600 dark:text-red-400" data-test="lines-error">
+        {{ headerErrors.lines === "required" ? t("documents.line.atLeastOneItem") : t(reasonKey(headerErrors.lines)) }}
+      </p>
       <LineEditor
         v-model="draft.lines"
         :vat-options="vatOptions"
@@ -118,12 +129,16 @@ async function onSubmit() {
         :vat-locked="vatLocked"
         :errors="lineErrors"
         :bases="bases"
+        :currency="draft.currency"
+        :vat-mode="draft.vatMode"
+        :related-document-id="draft.relatedDocumentId"
       />
     </section>
 
     <TotalsPanel
       :totals="compute.result.value?.totals ?? null"
       :currency="draft.currency"
+      :sign="isCreditNote ? -1 : 1"
       :exchange-rate="draft.exchangeRate || indicative.rate.value?.rate || null"
       :pending="compute.pending.value"
       :error="computeError"

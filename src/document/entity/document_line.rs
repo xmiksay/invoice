@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 /// One line; only raw inputs are stored — bases are recomputed on read.
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "document_lines")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -21,6 +21,9 @@ pub struct Model {
     pub vat_rate: Option<Decimal>,
     pub refs: Option<Vec<i32>>,
     pub collapse: bool,
+    pub advance_document_id: Option<Uuid>,
+    /// `advance` lines: the deducted `AdvanceRow`s.
+    pub advance_recap: Option<Json>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

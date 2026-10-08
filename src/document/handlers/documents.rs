@@ -3,13 +3,14 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use uuid::Uuid;
 
+use super::compute_input::{ComputeCtx, ComputeInput};
 use super::dto::{Computed, Document, DocumentList, ListQuery, lines_out};
 use super::fetch;
-use super::input::{ComputeInput, DocumentInput};
+use super::input::DocumentInput;
 use crate::app::AppState;
 use crate::contact::handlers::dto::ListQuery as Paging;
 use crate::document::line::Status;
-use crate::document::repo::{context, query, view, write};
+use crate::document::repo::{advance_sources, context, query, view, write};
 use crate::error::{AppError, ErrorBody};
 use crate::extract::{ApiJson, ApiPath, ApiQuery};
 use crate::settings::repo::company;
@@ -56,7 +57,8 @@ pub async fn create(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<DocumentInput>,
 ) -> Result<(StatusCode, Json<Document>), AppError> {
-    let ctx = context::load(&state.db, input.contact_id, true, today()).await?;
+    let ids = input.advance_ids();
+    let ctx = context::load(&state.db, input.contact_id, today(), None, &ids).await?;
     let (mut data, evaluated) = input.validate(&ctx)?;
     context::resolve_bank(&state.db, &mut data, true).await?;
     let id = write::create(&state.db, data, evaluated.totals).await?;
@@ -97,10 +99,13 @@ pub async fn update(
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<DocumentInput>,
 ) -> Result<Json<Document>, AppError> {
-    if view::status(&query::find(&state.db, id).await?)? != Status::Draft {
+    let doc = query::find(&state.db, id).await?;
+    if view::status(&doc)? != Status::Draft {
         return Err(AppError::DocumentLocked);
     }
-    let ctx = context::load(&state.db, input.contact_id, false, today()).await?;
+    let existing = Some(context::existing(&doc)?);
+    let ids = input.advance_ids();
+    let ctx = context::load(&state.db, input.contact_id, today(), existing, &ids).await?;
     let (mut data, evaluated) = input.validate(&ctx)?;
     context::resolve_bank(&state.db, &mut data, false).await?;
     write::update(&state.db, id, data, evaluated.totals).await?;
@@ -142,9 +147,23 @@ pub async fn compute(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<ComputeInput>,
 ) -> Result<Json<Computed>, AppError> {
-    let vat_payer = company::get(&state.db).await?.vat_payer;
-    let default_rate = context::default_vat_rate(&state.db).await?;
-    let (lines, evaluated) = input.validate(vat_payer, default_rate)?;
+    let company = company::get(&state.db).await?;
+    let existing = match input.document_id {
+        Some(id) => match query::find(&state.db, id).await {
+            Ok(doc) => Some(context::existing(&doc)?),
+            Err(AppError::NotFound) => None,
+            Err(e) => return Err(e),
+        },
+        None => None,
+    };
+    let ctx = ComputeCtx {
+        vat_payer: company.vat_payer,
+        default_rate: context::default_vat_rate(&state.db).await?,
+        default_locale: company.default_locale,
+        existing,
+        advances: advance_sources::load(&state.db, &input.advance_ids()).await?,
+    };
+    let (lines, evaluated) = input.validate(&ctx)?;
     Ok(Json(Computed {
         lines: lines_out(&lines, &evaluated.lines),
         totals: evaluated.totals.into(),

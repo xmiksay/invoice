@@ -155,3 +155,42 @@ pub fn dead_url() -> String {
 pub fn hits(counter: &Arc<AtomicUsize>) -> usize {
     counter.load(Ordering::SeqCst)
 }
+
+/// POST + issue; asserts both succeed and returns the issued document.
+pub async fn create_issued(app: &Router, body: Value) -> Value {
+    let doc = create_doc(app, body).await;
+    let (status, issued) = issue(app, &id(&doc)).await;
+    assert_eq!(status, StatusCode::OK, "{issued}");
+    issued
+}
+
+pub async fn get_doc(app: &Router, doc_id: &str) -> Value {
+    let (status, doc) = call(app, Method::GET, &format!("/api/documents/{doc_id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{doc}");
+    doc
+}
+
+/// POST a payment with `body` (date defaults to 2026-10-05).
+pub async fn pay(app: &Router, doc_id: &str, body: Value) -> (StatusCode, Value) {
+    let mut b = json!({ "date": "2026-10-05" });
+    if let (Some(o), Some(extra)) = (b.as_object_mut(), body.as_object()) {
+        o.extend(extra.clone());
+    }
+    call(
+        app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/payments"),
+        Some(b),
+    )
+    .await
+}
+
+pub async fn post_action(app: &Router, doc_id: &str, action: &str) -> (StatusCode, Value) {
+    call(
+        app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/{action}"),
+        None,
+    )
+    .await
+}

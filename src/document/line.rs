@@ -2,6 +2,8 @@
 //! pure computation, the repos and the handlers.
 
 use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// `10^exp` (`exp <= 19`) as a `Decimal`, usable in consts.
 const fn pow10(exp: u32) -> Decimal {
@@ -27,6 +29,30 @@ pub struct ItemData {
     pub vat_rate: Decimal,
 }
 
+/// One VAT rate of a deducted advance; amounts are the **positive** deducted
+/// values (stored as JSON on the line, negated in responses and totals).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdvanceRow {
+    pub vat_rate: Decimal,
+    pub base: Decimal,
+    pub vat: Decimal,
+    /// The advance document's own CZK amounts; `None` → converted at the
+    /// deducting document's rate.
+    pub base_czk: Option<Decimal>,
+    pub vat_czk: Option<Decimal>,
+}
+
+/// An `advance` line: deducts an issued DDPP (or, non-payer form, the paid
+/// amount of the settled proforma). `description` and `recap` are filled by
+/// the server from the referenced document.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AdvanceData {
+    pub document_id: Uuid,
+    pub description: String,
+    pub recap: Vec<AdvanceRow>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum LineData {
     Item(ItemData),
@@ -39,6 +65,7 @@ pub enum LineData {
         refs: Vec<i32>,
         collapse: bool,
     },
+    Advance(AdvanceData),
 }
 
 impl LineData {
@@ -47,6 +74,7 @@ impl LineData {
             LineData::Item(_) => "item",
             LineData::Text { .. } => "text",
             LineData::Subtotal { .. } => "subtotal",
+            LineData::Advance(_) => "advance",
         }
     }
 }

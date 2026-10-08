@@ -10,6 +10,7 @@ pub use sea_orm_migration::prelude::*;
 mod m20261008_000001_settings;
 mod m20261008_000002_contacts;
 mod m20261009_000001_documents;
+mod m20261010_000001_phase_1c;
 
 pub struct Migrator;
 
@@ -20,6 +21,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261008_000001_settings::Migration),
             Box::new(m20261008_000002_contacts::Migration),
             Box::new(m20261009_000001_documents::Migration),
+            Box::new(m20261010_000001_phase_1c::Migration),
         ]
     }
 }

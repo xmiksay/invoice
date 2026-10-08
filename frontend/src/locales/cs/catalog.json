@@ -1,0 +1,33 @@
+{
+  "title": "Katalog",
+  "tabs": {
+    "items": "Položky",
+    "groups": "Skupiny"
+  },
+  "noResults": "Nic nenalezeno.",
+  "items": {
+    "add": "Přidat položku",
+    "edit": "Upravit položku",
+    "name": "Název",
+    "note": "Poznámka",
+    "active": "Aktivní (nabízet v dokladech)",
+    "inactive": "neaktivní",
+    "searchPlaceholder": "Hledat podle názvu",
+    "confirmDelete": "Opravdu smazat položku „{name}“? Odebere se i ze skupin.",
+    "empty": "Zatím žádné položky."
+  },
+  "groups": {
+    "add": "Přidat skupinu",
+    "edit": "Upravit skupinu",
+    "name": "Název",
+    "nameHint": "Na dokladu se stane popisem mezisoučtu.",
+    "collapse": "Na dokladu zobrazit jen mezisoučet",
+    "members": "Položky skupiny",
+    "noMembers": "Přidejte alespoň jednu položku.",
+    "pickItem": "Vyberte položku…",
+    "noMoreItems": "Žádné další aktivní položky",
+    "searchPlaceholder": "Hledat podle názvu",
+    "confirmDelete": "Opravdu smazat skupinu „{name}“?",
+    "empty": "Zatím žádné skupiny."
+  }
+}

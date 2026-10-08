@@ -1,0 +1,16 @@
+{
+  "save": "Uložit",
+  "saving": "Ukládám…",
+  "saved": "Uloženo.",
+  "cancel": "Zrušit",
+  "delete": "Smazat",
+  "edit": "Upravit",
+  "add": "Přidat",
+  "actions": "Akce",
+  "loading": "Načítám…",
+  "search": "Hledat",
+  "notSet": "Nenastaveno",
+  "range": "{from}–{to} z {total}",
+  "prev": "Předchozí",
+  "next": "Další"
+}

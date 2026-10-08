@@ -10,7 +10,7 @@ use crate::ares::AresClient;
 use crate::cnb::CnbClient;
 use crate::error::AppError;
 use crate::secret::Secret;
-use crate::{ares, auth, cnb, contact, document, health, openapi, settings, spa};
+use crate::{ares, auth, catalog, cnb, contact, document, health, openapi, settings, spa};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -30,6 +30,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/contacts", contact::router())
         .route("/ares/{ico}", get(ares::handlers::lookup))
         .nest("/documents", document::router())
+        .nest("/catalog", catalog::router())
         .route("/exchange-rates/{currency}", get(cnb::handlers::get_rate))
         .fallback(api_not_found)
         .layer(middleware::from_fn_with_state(

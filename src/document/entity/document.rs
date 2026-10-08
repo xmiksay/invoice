@@ -56,6 +56,10 @@ pub struct Model {
     pub cancelled_at: Option<DateTimeWithTimeZone>,
     pub cancel_reason: Option<String>,
     pub related_document_id: Option<Uuid>,
+    /// DDPP only: the proforma payment it documents.
+    pub payment_id: Option<Uuid>,
+    /// Credit notes only.
+    pub correction_reason: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

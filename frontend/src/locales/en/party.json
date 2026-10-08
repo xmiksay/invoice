@@ -1,0 +1,14 @@
+{
+  "name": "Name",
+  "ico": "Company ID (IČO)",
+  "dic": "VAT ID (DIČ)",
+  "street": "Street and number",
+  "city": "City",
+  "zip": "Postal code",
+  "country": "Country",
+  "countryHint": "Two-letter code, e.g. CZ.",
+  "email": "E-mail",
+  "phone": "Phone",
+  "aresLoad": "Load from ARES",
+  "aresLoading": "Loading…"
+}

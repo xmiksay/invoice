@@ -1,0 +1,16 @@
+{
+  "invalidToken": "Invalid token.",
+  "unreachable": "The server is unreachable. Try again later.",
+  "unexpected": "Unexpected error ({code}).",
+  "notFound": "Record not found.",
+  "conflict": "The record conflicts with an existing one.",
+  "validation": "The form contains errors.",
+  "aresNotFound": "Subject not found in ARES.",
+  "aresUnavailable": "ARES is unavailable. Try again later.",
+  "documentLocked": "An issued document can no longer be changed.",
+  "invalidState": "This action is not possible in the document's current state.",
+  "cnbUnavailable": "The ČNB exchange rate service is unavailable. Enter the rate manually.",
+  "advanceSettled": "The payment cannot be deleted: its tax document is already deducted by an issued final invoice.",
+  "advanceInUse": "The payment cannot be deleted: its advance is deducted by a draft final invoice. Remove the advance line from that draft first.",
+  "catalogItemInUse": "The item cannot be deleted: it is the only item of a group. Edit or delete the group first."
+}

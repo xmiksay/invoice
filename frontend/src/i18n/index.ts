@@ -1,7 +1,29 @@
 import { createI18n } from "vue-i18n";
-import cs from "@/locales/cs.json";
-import en from "@/locales/en.json";
 import { readStorage, writeStorage } from "@/lib/storage";
+
+export type MessageTree = { [key: string]: string | MessageTree };
+
+/**
+ * Locale files are split per top-level namespace (`locales/<locale>/<namespace>.json`,
+ * file content = that namespace) to keep each file small; merged here so runtime keys
+ * stay `namespace.key`.
+ */
+const files = {
+  cs: import.meta.glob<MessageTree>("../locales/cs/*.json", { eager: true, import: "default" }),
+  en: import.meta.glob<MessageTree>("../locales/en/*.json", { eager: true, import: "default" }),
+};
+
+const namespaceOf = (path: string) => path.slice(path.lastIndexOf("/") + 1, -".json".length);
+
+/** Namespace → tree per locale (also used by the parity test). */
+export const localeFiles = Object.fromEntries(
+  Object.entries(files).map(([locale, modules]) => [
+    locale,
+    Object.fromEntries(Object.entries(modules).map(([path, tree]) => [namespaceOf(path), tree])),
+  ]),
+) as Record<"cs" | "en", Record<string, MessageTree>>;
+
+const { cs, en } = localeFiles;
 
 export const LOCALES = ["cs", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
