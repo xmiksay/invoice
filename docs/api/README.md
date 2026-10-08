@@ -22,6 +22,7 @@ Later phases add more codes (`document_locked`, `invalid_state`, `cnb_unavailabl
 | [settings-contacts.md](settings-contacts.md) | company, bank accounts, VAT rates, number series, contacts, ARES (1a) |
 | [documents.md](documents.md) | documents core: lines, computation, lifecycle, payments, ČNB (1b) |
 | [advances-credit-catalog.md](advances-credit-catalog.md) | proforma, DDPP, settlement, credit notes, catalog (1c) |
+| [pdf.md](pdf.md) | PDF via mdcast: design files, payload, QR, archive, preview (1d) |
 
 Each part ends with a "Clarifications (as implemented)" section — the authoritative record of behaviour beyond the
 original contract. Keep every file under 400 lines; add a new part rather than growing one past the cap.
