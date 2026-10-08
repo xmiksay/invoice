@@ -70,6 +70,13 @@ pub struct PartySnapshot {
     pub country: String,
     pub registration: Option<String>,
     pub vat_payer: Option<bool>,
+    /// Contact lines printed on the PDF (absent in pre-1d snapshots).
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub phone: Option<String>,
+    #[serde(default)]
+    pub web: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -133,8 +140,17 @@ pub struct Document {
     pub settled: Option<bool>,
     /// `-1` for credit notes (amounts are stored positive), else `1`.
     pub sign: i8,
+    /// The archived PDF (issued documents; a DDPP may lack it until its first download).
+    pub pdf: Option<PdfArchive>,
     pub created_at: DateTime<FixedOffset>,
     pub updated_at: DateTime<FixedOffset>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfArchive {
+    pub sha256: String,
+    pub rendered_at: DateTime<FixedOffset>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

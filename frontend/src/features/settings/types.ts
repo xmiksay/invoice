@@ -56,3 +56,17 @@ export interface NumberSeries {
   counters: NumberCounter[];
   nextNumberPreview: string;
 }
+
+/** `GET /api/pdf/design` — the effective design files (built-in ∪ `INVOICE__DESIGN_DIR`), sorted by path. */
+export interface DesignInfo {
+  /** null = only the built-in design. */
+  designDir: string | null;
+  files: DesignFile[];
+}
+export interface DesignFile {
+  path: string;
+  /** `custom` = from the design dir (overrides the built-in file of the same path). */
+  source: "custom" | "default";
+  /** Bytes. */
+  size: number;
+}

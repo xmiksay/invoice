@@ -1,4 +1,4 @@
-import { request } from "@/api/client";
+import { request, requestBlob } from "@/api/client";
 import type {
   ComputeRequest,
   ComputeResult,
@@ -46,6 +46,8 @@ export const documentsApi = {
   /** Credit-note draft for an issued invoice. */
   creditNote: (id: string, correctionReason: string | null) =>
     request<Document>(`${item(id)}/credit-note`, { method: "POST", body: correctionReason ? { correctionReason } : {} }),
+  /** Draft: rendered live with the watermark; issued/cancelled: the archived file. */
+  pdf: (id: string, download = false) => requestBlob(`${item(id)}/pdf${download ? "?download=1" : ""}`),
   payments: (id: string) => request<Payment[]>(`${item(id)}/payments`),
   addPayment: (id: string, input: PaymentInput) =>
     request<Payment>(`${item(id)}/payments`, { method: "POST", body: input }),

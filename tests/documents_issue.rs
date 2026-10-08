@@ -122,7 +122,8 @@ async fn issue_numbers_snapshots_and_locks() {
         a["supplier"],
         json!({ "name": "Dodavatel s.r.o.", "ico": "44444443", "dic": "CZ44444443",
                 "street": "Hlavní 1", "city": "Praha", "zip": "11000", "country": "CZ",
-                "registration": "C 123 vedená u MS v Praze", "vatPayer": true })
+                "registration": "C 123 vedená u MS v Praze", "vatPayer": true,
+                "email": null, "phone": null, "web": null })
     );
     assert_eq!(a["customer"]["name"], "Odběratel a.s.");
     assert_eq!(a["customer"]["registration"], Value::Null);

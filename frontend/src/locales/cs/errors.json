@@ -12,5 +12,7 @@
   "cnbUnavailable": "Kurzovní lístek ČNB je nedostupný. Zadejte kurz ručně.",
   "advanceSettled": "Platbu nelze smazat: její daňový doklad už je odečten ve vystavené vyúčtovací faktuře.",
   "advanceInUse": "Platbu nelze smazat: její zálohu odečítá koncept vyúčtovací faktury. Nejprve z něj odeberte řádek odpočtu zálohy.",
-  "catalogItemInUse": "Položku nelze smazat: je jedinou položkou skupiny. Nejprve upravte nebo smažte skupinu."
+  "catalogItemInUse": "Položku nelze smazat: je jedinou položkou skupiny. Nejprve upravte nebo smažte skupinu.",
+  "pdfUnavailable": "Služba pro PDF je nedostupná. Zkuste to později.",
+  "pdfRenderFailed": "Vykreslení PDF selhalo. Zkontrolujte šablonu designu."
 }

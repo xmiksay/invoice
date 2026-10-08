@@ -8,6 +8,7 @@ import { useCompanyStore } from "@/features/settings/stores";
 import DocumentActions from "../components/DocumentActions.vue";
 import DocumentInfoCard from "../components/DocumentInfoCard.vue";
 import DocumentLinesTable from "../components/DocumentLinesTable.vue";
+import DocumentPdf from "../components/DocumentPdf.vue";
 import InternalNoteCard from "../components/InternalNoteCard.vue";
 import PartiesCard from "../components/PartiesCard.vue";
 import PaymentsPanel from "../components/PaymentsPanel.vue";
@@ -74,6 +75,7 @@ const hasPayments = computed(() => !isDraft.value && doc.value?.docType !== "adv
       <p v-if="doc.docType === 'advance_tax_doc'" class="text-sm text-gray-600 dark:text-gray-400" data-test="ddpp-note">{{ t("documents.detail.ddppNote") }}</p>
 
       <DocumentActions :doc="doc" />
+      <DocumentPdf :doc="doc" />
 
       <PartiesCard :supplier="isDraft ? liveSupplier : doc.supplier" :customer="isDraft ? liveCustomer : doc.customer" />
       <RelatedDocumentsPanel :parent="doc.parent" :children="doc.relatedDocuments" :currency="doc.currency" />

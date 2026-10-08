@@ -102,6 +102,21 @@ pub enum AppError {
     #[error("the catalog item is the last member of a group")]
     CatalogItemInUse,
 
+    /// mdcast unreachable, token rejected, or a gateway answering for it.
+    #[error("PDF service unavailable: {0}")]
+    PdfUnavailable(String),
+
+    /// mdcast answered but the render failed; the message (typst diagnostics
+    /// of the user's own template) is returned to the client as `detail`.
+    #[error("PDF render failed: {0}")]
+    PdfRenderFailed(String),
+
+    /// mdcast failed in a way that is not the template's fault (its own
+    /// 500, an undecodable answer…): 502 `pdf_render_failed` without
+    /// `detail` — the upstream body is logged, never returned.
+    #[error("PDF service error: {0}")]
+    PdfUpstream(String),
+
     #[error("internal error: {0:#}")]
     Internal(#[from] anyhow::Error),
 
@@ -132,6 +147,10 @@ impl AppError {
             Self::AdvanceSettled => (StatusCode::CONFLICT, "advance_settled"),
             Self::AdvanceInUse => (StatusCode::CONFLICT, "advance_in_use"),
             Self::CatalogItemInUse => (StatusCode::CONFLICT, "catalog_item_in_use"),
+            Self::PdfUnavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "pdf_unavailable"),
+            Self::PdfRenderFailed(_) | Self::PdfUpstream(_) => {
+                (StatusCode::BAD_GATEWAY, "pdf_render_failed")
+            }
             Self::Internal(_) | Self::Database(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")
             }
@@ -201,6 +220,9 @@ pub struct ErrorBody {
     /// Only for `validation`: camelCase field name → reason code.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fields: Option<BTreeMap<String, String>>,
+    /// Only for `pdf_render_failed`: the render service's message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
 impl IntoResponse for AppError {
@@ -211,6 +233,9 @@ impl IntoResponse for AppError {
             }
             Self::AresUnavailable(_) => tracing::warn!(error = %self, "ARES lookup failed"),
             Self::CnbUnavailable(_) => tracing::warn!(error = %self, "ČNB lookup failed"),
+            Self::PdfUnavailable(_) | Self::PdfRenderFailed(_) | Self::PdfUpstream(_) => {
+                tracing::warn!(error = %self, "PDF render failed")
+            }
             Self::BadRequest(_) | Self::Conflict(_) => tracing::debug!(error = %self, "rejected"),
             _ => {}
         }
@@ -223,7 +248,19 @@ impl IntoResponse for AppError {
             ),
             _ => None,
         };
-        let mut resp = (status, Json(ErrorBody { code, fields })).into_response();
+        let detail = match &self {
+            Self::PdfRenderFailed(d) => Some(d.clone()),
+            _ => None,
+        };
+        let mut resp = (
+            status,
+            Json(ErrorBody {
+                code,
+                fields,
+                detail,
+            }),
+        )
+            .into_response();
         if matches!(self, Self::Unauthorized) {
             resp.headers_mut()
                 .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
@@ -233,141 +270,5 @@ impl IntoResponse for AppError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    async fn body(err: AppError) -> (StatusCode, serde_json::Value) {
-        let resp = err.into_response();
-        let status = resp.status();
-        let bytes = axum::body::to_bytes(resp.into_body(), 4096)
-            .await
-            .expect("read body");
-        (status, serde_json::from_slice(&bytes).expect("json"))
-    }
-
-    #[test]
-    fn maps_variants_to_status_and_code() {
-        let cases = [
-            (
-                AppError::Unauthorized,
-                StatusCode::UNAUTHORIZED,
-                "unauthorized",
-            ),
-            (AppError::NotFound, StatusCode::NOT_FOUND, "not_found"),
-            (
-                AppError::BadRequest("x".into()),
-                StatusCode::BAD_REQUEST,
-                "bad_request",
-            ),
-            (
-                AppError::field("name", "required"),
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "validation",
-            ),
-            (
-                AppError::Conflict("x".into()),
-                StatusCode::CONFLICT,
-                "conflict",
-            ),
-            (
-                AppError::AresNotFound,
-                StatusCode::NOT_FOUND,
-                "ares_not_found",
-            ),
-            (
-                AppError::AresUnavailable(anyhow::anyhow!("timeout")),
-                StatusCode::BAD_GATEWAY,
-                "ares_unavailable",
-            ),
-            (
-                AppError::DocumentLocked,
-                StatusCode::CONFLICT,
-                "document_locked",
-            ),
-            (
-                AppError::InvalidState,
-                StatusCode::CONFLICT,
-                "invalid_state",
-            ),
-            (
-                AppError::CnbUnavailable(anyhow::anyhow!("timeout")),
-                StatusCode::BAD_GATEWAY,
-                "cnb_unavailable",
-            ),
-            (
-                AppError::AdvanceSettled,
-                StatusCode::CONFLICT,
-                "advance_settled",
-            ),
-            (
-                AppError::AdvanceInUse,
-                StatusCode::CONFLICT,
-                "advance_in_use",
-            ),
-            (
-                AppError::CatalogItemInUse,
-                StatusCode::CONFLICT,
-                "catalog_item_in_use",
-            ),
-            (
-                AppError::from(anyhow::anyhow!("boom")),
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-            ),
-            (
-                AppError::from(DbErr::Custom("x".into())),
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-            ),
-        ];
-        for (err, status, code) in cases {
-            assert_eq!(err.status_and_code(), (status, code), "{err}");
-        }
-    }
-
-    #[test]
-    fn unauthorized_sets_www_authenticate() {
-        let resp = AppError::Unauthorized.into_response();
-        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-        assert_eq!(
-            resp.headers().get(header::WWW_AUTHENTICATE),
-            Some(&HeaderValue::from_static("Bearer"))
-        );
-    }
-
-    #[tokio::test]
-    async fn internal_error_does_not_leak_detail() {
-        let (_, json) = body(AppError::from(anyhow::anyhow!("password=hunter2"))).await;
-        assert_eq!(json, serde_json::json!({ "code": "internal" }));
-        let (_, json) = body(AppError::AresUnavailable(anyhow::anyhow!("dns fail"))).await;
-        assert_eq!(json, serde_json::json!({ "code": "ares_unavailable" }));
-        let (_, json) = body(AppError::Conflict("contacts_pkey".into())).await;
-        assert_eq!(json, serde_json::json!({ "code": "conflict" }));
-    }
-
-    #[tokio::test]
-    async fn validation_lists_fields() {
-        let mut errors = FieldErrors::new();
-        errors.add("name", "required");
-        errors.add("name", "too_long");
-        errors.add("ico", "invalid_ico");
-        let (status, json) = body(AppError::Validation(errors)).await;
-        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-        assert_eq!(
-            json,
-            serde_json::json!({
-                "code": "validation",
-                "fields": { "ico": "invalid_ico", "name": "required" }
-            })
-        );
-    }
-
-    #[test]
-    fn field_errors_check_and_result() {
-        let mut errors = FieldErrors::new();
-        assert_eq!(errors.check("a", Ok::<_, &'static str>(1)), Some(1));
-        assert!(errors.clone().into_result().is_ok());
-        assert_eq!(errors.check::<()>("b", Err("invalid")), None);
-        assert!(matches!(errors.into_result(), Err(AppError::Validation(_))));
-    }
-}
+#[path = "error_tests.rs"]
+mod tests;

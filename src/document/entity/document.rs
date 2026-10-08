@@ -60,6 +60,10 @@ pub struct Model {
     pub payment_id: Option<Uuid>,
     /// Credit notes only.
     pub correction_reason: Option<String>,
+    /// Archived PDF, relative to `INVOICE__STORAGE_DIR`; immutable once set.
+    pub pdf_path: Option<String>,
+    pub pdf_sha256: Option<String>,
+    pub pdf_rendered_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

@@ -1,0 +1,27 @@
+{
+  "open": "PDF",
+  "preview": "PDF preview",
+  "download": "Download PDF",
+  "loading": "Preparing PDF…",
+  "draftHint": "Draft: the PDF is only a preview with a “DRAFT” watermark and is not stored.",
+  "archivedAt": "PDF archived {date}",
+  "issueUnavailable": "The PDF service is unavailable – the document was not issued.",
+  "issueRenderFailed": "Rendering the PDF failed – the document was not issued.",
+  "design": {
+    "dir": "Design directory",
+    "builtIn": "built-in design",
+    "help": "The default design is built into the application. Files in the INVOICE__DESIGN_DIR directory override it file by file (the same relative path wins): the invoice.typ template, fonts in fonts/, the logo logo.svg or logo.png, a stamp or signature signature.png. Changes apply on the next render without a restart; already archived PDFs stay unchanged.",
+    "files": "Effective files",
+    "path": "Path",
+    "source": "Source",
+    "size": "Size",
+    "sources": {
+      "custom": "custom",
+      "default": "default"
+    },
+    "empty": "No files.",
+    "previewCs": "Preview CZ",
+    "previewEn": "Preview EN",
+    "previewHint": "A sample invoice with your company details; nothing is stored."
+  }
+}

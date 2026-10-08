@@ -12,5 +12,6 @@
   "notSet": "Not set",
   "range": "{from}–{to} of {total}",
   "prev": "Previous",
-  "next": "Next"
+  "next": "Next",
+  "details": "Details"
 }

@@ -45,6 +45,9 @@ use utoipa::{Modify, OpenApi};
         crate::document::handlers::payments::create,
         crate::document::handlers::payments::delete,
         crate::cnb::handlers::get_rate,
+        crate::pdf::handlers::document_pdf,
+        crate::pdf::handlers::preview,
+        crate::pdf::handlers::design,
         crate::catalog::handlers::items::list,
         crate::catalog::handlers::items::create,
         crate::catalog::handlers::items::get,
@@ -110,6 +113,9 @@ mod tests {
             "/api/catalog/groups",
             "/api/catalog/groups/{id}",
             "/api/exchange-rates/{currency}",
+            "/api/documents/{id}/pdf",
+            "/api/pdf/preview",
+            "/api/pdf/design",
         ] {
             assert!(doc.paths.paths.contains_key(path), "{path}");
         }

@@ -19,6 +19,7 @@ use crate::document::handlers::dto::{BankSnapshot, PartySnapshot};
 use crate::document::handlers::input;
 use crate::document::line::{LineData, PaymentMethod, Status, VatMode};
 use crate::error::{AppError, FieldErrors};
+use crate::pdf::{PdfService, archive};
 use crate::settings::doc_type::DocType;
 use crate::settings::entity::{bank_account, company};
 use crate::settings::repo::{company as company_repo, number_series};
@@ -81,9 +82,12 @@ struct Prepared {
     evaluated: Evaluated,
 }
 
+/// Issue the draft and archive its PDF in the same transaction: a render
+/// failure leaves the draft (and the number counter) untouched.
 pub async fn issue(
     db: &DatabaseConnection,
     cnb: &CnbClient,
+    pdf: &PdfService,
     id: Uuid,
     today: NaiveDate,
 ) -> Result<(), AppError> {
@@ -134,9 +138,23 @@ pub async fn issue(
         rate,
         evaluated,
     };
-    Ok(db
-        .transaction(|txn| Box::pin(issue_in(txn, id, prepared)))
-        .await?)
+    let txn = db.begin().await?;
+    let stored = match issue_in(&txn, id, prepared, pdf).await {
+        Ok(stored) => stored,
+        Err(e) => {
+            if let Err(r) = txn.rollback().await {
+                tracing::warn!(error = %r, "rollback issue");
+            }
+            return Err(e);
+        }
+    };
+    if let Err(e) = txn.commit().await {
+        if let Some(rel) = stored {
+            pdf.remove(&rel).await;
+        }
+        return Err(e.into());
+    }
+    Ok(())
 }
 
 /// The issue validations (422 with every failing field).
@@ -190,7 +208,7 @@ pub fn variable_symbol(number: &str) -> String {
     digits[digits.len().saturating_sub(10)..].iter().collect()
 }
 
-fn supplier(c: &company::Model) -> PartySnapshot {
+pub(crate) fn supplier(c: &company::Model) -> PartySnapshot {
     PartySnapshot {
         name: c.name.clone(),
         ico: c.ico.clone(),
@@ -201,10 +219,13 @@ fn supplier(c: &company::Model) -> PartySnapshot {
         country: c.country.clone(),
         registration: c.registration.clone(),
         vat_payer: Some(c.vat_payer),
+        email: c.email.clone(),
+        phone: c.phone.clone(),
+        web: c.web.clone(),
     }
 }
 
-fn customer(c: &contact::Model) -> PartySnapshot {
+pub(crate) fn customer(c: &contact::Model) -> PartySnapshot {
     PartySnapshot {
         name: c.name.clone(),
         ico: c.ico.clone(),
@@ -215,6 +236,9 @@ fn customer(c: &contact::Model) -> PartySnapshot {
         country: c.country.clone(),
         registration: None,
         vat_payer: None,
+        email: c.email.clone(),
+        phone: c.phone.clone(),
+        web: None,
     }
 }
 
@@ -222,7 +246,12 @@ fn json<T: serde::Serialize>(v: &T) -> Result<serde_json::Value, AppError> {
     Ok(serde_json::to_value(v).map_err(anyhow::Error::from)?)
 }
 
-async fn issue_in(txn: &DatabaseTransaction, id: Uuid, p: Prepared) -> Result<(), AppError> {
+async fn issue_in(
+    txn: &DatabaseTransaction,
+    id: Uuid,
+    p: Prepared,
+    pdf: &PdfService,
+) -> Result<Option<String>, AppError> {
     let doc = query::lock(txn, id).await?;
     if view::status(&doc)? != Status::Draft {
         return Err(AppError::InvalidState);
@@ -274,7 +303,10 @@ async fn issue_in(txn: &DatabaseTransaction, id: Uuid, p: Prepared) -> Result<()
         lines::replace(txn, id, &p.lines).await?;
     }
     lines::replace_recap(txn, id, &totals).await?;
-    Ok(())
+    // The render runs while the document row (and counter) stay locked, up to
+    // the 60 s mdcast timeout: accepted for a single-user app, because it is
+    // what makes "mdcast down → nothing issued, no number used" atomic.
+    archive::archive_in(txn, pdf, id).await
 }
 
 #[cfg(test)]

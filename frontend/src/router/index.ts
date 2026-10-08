@@ -98,6 +98,11 @@ const routes = [
         name: "settings-number-series",
         component: () => import("@/features/settings/views/NumberSeriesTab.vue"),
       },
+      {
+        path: "design",
+        name: "settings-design",
+        component: () => import("@/features/settings/views/DesignTab.vue"),
+      },
     ],
   },
   { path: "/:pathMatch(.*)*", redirect: "/" },

@@ -2,8 +2,10 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
+import { ApiError } from "@/api/client";
+import ErrorDetail from "@/components/ErrorDetail.vue";
 import { useErrorText } from "@/composables/useAction";
-import { fieldErrorsOf } from "@/lib/formErrors";
+import { errorDetailOf, fieldErrorsOf } from "@/lib/formErrors";
 import { describeFieldErrors } from "../fieldMessages";
 import { editLocation, listLocation } from "../routes";
 import { useDocumentStore } from "../store";
@@ -19,6 +21,17 @@ const errorText = useErrorText();
 const busy = ref(false);
 const error = ref<string | null>(null);
 const reasons = ref<string[]>([]);
+const detail = ref<string | null>(null);
+
+// Issue renders + archives the PDF in its transaction: a PDF failure means nothing was issued.
+const ISSUE_PDF_MESSAGES: Record<string, string> = {
+  pdf_unavailable: "pdf.issueUnavailable",
+  pdf_render_failed: "pdf.issueRenderFailed",
+};
+const issueErrorText = (err: unknown): string | null => {
+  const key = err instanceof ApiError ? ISSUE_PDF_MESSAGES[err.code] : undefined;
+  return key ? t(key) : null;
+};
 
 const issued = computed(() => props.doc.status === "issued");
 // A DDPP is created and cancelled by its proforma's payments; only its delivery is tracked here.
@@ -26,17 +39,20 @@ const isDdpp = computed(() => props.doc.docType === "advance_tax_doc");
 const canCreditNote = computed(() => issued.value && props.doc.docType === "invoice");
 const canSettle = computed(() => issued.value && props.doc.docType === "proforma" && !props.doc.settled);
 
-async function act(action: () => Promise<void>): Promise<void> {
+/** `message` overrides the generic error text for codes the action explains better. */
+async function act(action: () => Promise<void>, message?: (err: unknown) => string | null): Promise<void> {
   if (busy.value) return;
   busy.value = true;
   error.value = null;
   reasons.value = [];
+  detail.value = null;
   try {
     await action();
   } catch (err) {
     const fields = fieldErrorsOf(err);
-    error.value = fields ? t("documents.detail.cannotProceed") : errorText(err);
+    error.value = fields ? t("documents.detail.cannotProceed") : (message?.(err) ?? errorText(err));
     reasons.value = fields ? describeFieldErrors(fields, t) : [];
+    detail.value = errorDetailOf(err);
   } finally {
     busy.value = false;
   }
@@ -44,7 +60,7 @@ async function act(action: () => Promise<void>): Promise<void> {
 
 function issue() {
   if (!window.confirm(t("documents.detail.confirmIssue"))) return;
-  void act(store.issue);
+  void act(store.issue, issueErrorText);
 }
 
 function remove() {
@@ -106,6 +122,7 @@ function settle() {
       <ul v-if="reasons.length" class="mt-1 list-disc pl-5">
         <li v-for="r in reasons" :key="r">{{ r }}</li>
       </ul>
+      <ErrorDetail :detail="detail" />
     </div>
   </div>
 </template>

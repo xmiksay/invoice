@@ -4,7 +4,8 @@
     "company": "Firma",
     "bankAccounts": "Bankovní účty",
     "vatRates": "Sazby DPH",
-    "numberSeries": "Číselné řady"
+    "numberSeries": "Číselné řady",
+    "design": "Design"
   },
   "company": {
     "vatPayer": "Plátce DPH",

@@ -135,3 +135,53 @@ Fetch the PDF with the Bearer header (blob → object URL); a plain link cannot 
 | `INVOICE__STORAGE_DIR` | `./data` | created at start; Docker image uses `/data` (volume) |
 
 mdcast HTTP timeout 60 s.
+
+## Clarifications (as implemented)
+
+- **Party snapshots** gained optional `email`, `phone`, `web` (company: all three, contact: email + phone); snapshots
+  from before 1d read them as `null`. `Party.contact` is built from them; `Party.lines` adds the country name (16
+  common codes in cs/en, else the code) unless `CZ`. A draft without a contact gets an empty customer party.
+- **Extra payload fields** (so the template stays free of text): `watermark` (`"NÁVRH"`/`"DRAFT"` on a draft,
+  `"STORNO"`/`"CANCELLED"` on a cancelled document rendered without an archive, else `null`); recaps carry `columns: { rate, base, vat, total }` header labels and `rateNote` (`null` on `vatRecap`);
+  a recap `total` row's `rate` holds the "Celkem"/"Total" label; `columns.base` is "Základ"/"Net", for a non-payer
+  "Celkem"/"Amount".
+- **Empty env values** mean the default: `INVOICE__MDCAST_URL`, `INVOICE__MDCAST_TOKEN`, `INVOICE__DESIGN_DIR`,
+  `INVOICE__STORAGE_DIR`.
+- **Formatting**: negative money `-1 234,50 Kč` / `CZK -1,234.50`; `en` percent without a space (`21%`), `cs` with
+  NBSP (`21 %`); dates use plain spaces; exchange rates print with at least 3 decimals.
+- **Lines**: collapsed subtotals hide their members recursively (a member that is itself a subtotal hides its own
+  members too). `vatRate` is `null` when `showVat` is false; `discount` is `null` for 0 %. An advance line prints as
+  one row (description + negative base, no rate). Credit notes negate unit price, base, recaps and totals; the
+  quantity stays positive.
+- **Totals rows**: stored totals are net of advance deductions, so with advance lines the rows show total excl. VAT /
+  VAT / total incl. VAT *before* the deduction, then "Odpočet záloh" (negative gross), then rounding (only when
+  non-zero) and the payable (`strong`). Non-payer: one "Celkem" row instead of the three. DDPP: excl. VAT, VAT,
+  total incl. VAT (`strong`), no payable row. The payable label is "K úhradě"/"Amount due" for every type (negative
+  on a credit note).
+- **Rows**: `payment` lists account number / IBAN (grouped by 4) / BIC only for `bank_transfer`; VS, KS and order
+  reference whenever set. The DDPP "payment date" row is its tax point date.
+- **Exchange-rate note** for `original` (credit notes): the original invoice's source and date are used (ČNB → dated
+  note, manual → "Kurz …").
+- **Archive on first download** applies to any issued/cancelled document without an archive (DDPPs, and documents
+  issued before 1d), not only DDPPs. A cancelled one renders with the "STORNO" watermark and never a QR (the QR rule
+  requires status `issued`). The DDPP archive after a payment runs in a background task once the payment has
+  committed — the 201 is not delayed; a failure is only logged. The loser of the `WHERE pdf_path IS NULL` race
+  serves the winner's stored file (not its own render), so every download returns the archived bytes.
+- **Download**: `download=1` or `download=true` → `attachment`. The filename stem is reduced to `[A-Za-z0-9._-]`
+  (others → `_`). A missing archive file → 500 `{"code":"internal"}`.
+- **Error detail**: `detail` is only returned for genuine template failures (mdcast `render_failed`, i.e. typst
+  diagnostics of the user's template) and our own design checks (file > 10 MB, non-UTF-8 `invoice.typ`). Any other
+  mdcast failure (its 500 / `internal`, `payload_too_large`, an undecodable or unexpected answer) is 502
+  `pdf_render_failed` **without** `detail`; the upstream body is logged only.
+- **Design**: font files are bundled too (request `fonts` are keys into the bundle); `invoice.typ` is sent as the
+  template source, not as an asset; `GET /api/pdf/design` also lists files over 10 MB (they only fail a render). An
+  unreadable design dir → 500 `internal`. Symlinks are followed (files and dirs), each real directory is entered
+  once, so a link back into the tree (`shared -> .`) cannot loop. Embedded default files are passed to the bundle
+  without copying in release builds; only `INVOICE__DESIGN_DIR` files are read per render. (The client still
+  hashes every asset per render to build the manifest — inherent to `AssetBundle`.) A non-UTF-8 `invoice.typ` → `pdf_render_failed`.
+- **mdcast token**: without `INVOICE__MDCAST_TOKEN` a placeholder Bearer is sent (`mdcast-client` requires one; a
+  server without a gate ignores it). `https://mdcast.nexial.cz` requires a real token for renders — without it every
+  render is 503 `pdf_unavailable` (401 maps there).
+- **Preview**: VAT mode `standard` and CZK regardless of the company's payer flag; due date = today + 14 days;
+  supplier placeholder "Vaše firma s.r.o." / "Your Company Ltd." when the company name is empty; the bank is the
+  default CZK account; VS = the sample number.

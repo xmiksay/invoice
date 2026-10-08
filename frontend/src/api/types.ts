@@ -7,10 +7,14 @@ export interface HealthResponse {
 /** Field name (camelCase wire name) → reason code, e.g. `{ ico: "invalid_ico" }`. */
 export type FieldErrors = Record<string, string>;
 
-/** Error body returned by every `/api/*` endpoint; `fields` only on 422 `validation`. */
+/**
+ * Error body returned by every `/api/*` endpoint; `fields` only on 422 `validation`,
+ * `detail` only on 502 `pdf_render_failed`.
+ */
 export interface ApiErrorBody {
   code: string;
   fields?: FieldErrors;
+  detail?: string;
 }
 
 export type DocLocale = "cs" | "en";
