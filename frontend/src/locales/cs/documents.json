@@ -5,7 +5,8 @@
   "status": {
     "draft": "Koncept",
     "issued": "Vystaveno",
-    "cancelled": "Stornováno"
+    "cancelled": "Stornováno",
+    "recorded": "Zaevidováno"
   },
   "paymentState": {
     "unpaid": "Neuhrazeno",
@@ -94,7 +95,13 @@
       "proforma": "Zálohové faktury",
       "credit_note": "Dobropisy",
       "advance_tax_doc": "Daňové doklady k platbě"
-    }
+    },
+    "noPdf": "bez PDF",
+    "anyCategory": "Všechny kategorie",
+    "origin": "Původ",
+    "anyOrigin": "Vystavené i importované",
+    "nativeOnly": "Jen vystavené zde",
+    "importedOnly": "Jen importované"
   },
   "editor": {
     "newTitle": {
@@ -220,7 +227,15 @@
   "related": {
     "title": "Související doklady",
     "parent": "Vychází z",
-    "child": "Navazující"
+    "child": "Navazující",
+    "pick": {
+      "proforma": "Navazuje na zálohovou fakturu",
+      "invoice": "Opravuje fakturu"
+    },
+    "pickHint": "Jen informativní propojení, částky se nepřepočítávají.",
+    "none": "Bez vazby",
+    "search": "Hledat podle čísla, odběratele či dodavatele…",
+    "more": "Zobrazeno prvních {n} — upřesněte hledání."
   },
   "catalog": {
     "add": "Z katalogu",
@@ -230,5 +245,18 @@
     "memberCount": "položek: {n}",
     "noResults": "V katalogu nic nenalezeno.",
     "unpriced": "Cena není vyplněna u: {names} — katalogová cena je v jiné měně než {currency}, doplňte ji ručně."
+  },
+  "imported": "Importovaný",
+  "import": {
+    "action": "Importovat existující doklad",
+    "hint": "Importovaný doklad: zadejte jeho vlastní číslo. Při vystavení se nepřiděluje číslo z řady a nevykresluje PDF — originál PDF můžete nahrát v detailu.",
+    "number": "Číslo dokladu",
+    "confirmIssue": "Vystavit importovaný doklad? Ponechá si své číslo, PDF se nevykresluje a doklad už nepůjde upravit.",
+    "title": {
+      "invoice": "Import faktury",
+      "proforma": "Import zálohové faktury",
+      "credit_note": "Import dobropisu",
+      "advance_tax_doc": "Import daňového dokladu k platbě"
+    }
   }
 }

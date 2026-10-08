@@ -3,13 +3,13 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { FieldErrors } from "@/api/types";
 import FormField from "@/components/form/FormField.vue";
-import { ApiError } from "@/api/client";
 import { reasonKey } from "@/lib/formErrors";
 import { LOCALES } from "@/i18n";
 import type { BankAccount } from "@/features/settings/types";
 import { changeCurrency, type DocumentDraft } from "../form";
-import { formatDate, formatNumber } from "../format";
+import { formatNumber } from "../format";
 import { PAYMENT_METHODS, VAT_MODES, type ExchangeRate } from "../types";
+import IndicativeRateNote from "./IndicativeRateNote.vue";
 
 const model = defineModel<DocumentDraft>({ required: true });
 const props = defineProps<{
@@ -25,27 +25,14 @@ const { t, locale } = useI18n();
 
 const isCzk = computed(() => model.value.currency === "CZK");
 const isProforma = computed(() => model.value.docType === "proforma");
-/** A credit note keeps its invoice's currency and rate. */
-const isCreditNote = computed(() => model.value.docType === "credit_note");
+/** A native credit note keeps its invoice's currency and rate; an imported one is entered as printed. */
+const isCreditNote = computed(() => model.value.docType === "credit_note" && !model.value.imported);
 const accounts = computed(() => props.bankAccounts.filter((a) => a.currency === model.value.currency));
 const accountLabel = (a: BankAccount) => [a.label, a.accountNumber ?? a.iban].filter(Boolean).join(" — ");
 
 function onCurrency(event: Event) {
   model.value = changeCurrency(model.value, (event.target as HTMLInputElement).value, props.bankAccounts);
 }
-
-/** ČNB not reachable or not listing the currency: a note only, the manual rate or issue covers it. */
-const indicativeNote = computed(() => {
-  if (props.indicativeLoading) return t("documents.editor.indicativeRateLoading");
-  const r = props.indicativeRate;
-  if (r) {
-    return t("documents.editor.indicativeRate", { date: formatDate(r.date, locale.value), rate: formatNumber(r.rate, locale.value, 6) });
-  }
-  if (props.indicativeError instanceof ApiError && props.indicativeError.status === 404) {
-    return t("documents.editor.indicativeRateUnknown", { currency: model.value.currency });
-  }
-  return props.indicativeError ? t("documents.editor.indicativeRateUnavailable") : null;
-});
 
 const cls = (field: string) => ({ "input-error": props.errors[field] });
 </script>
@@ -76,7 +63,13 @@ const cls = (field: string) => ({ "input-error": props.errors[field] });
       <FormField :label="t('documents.editor.manualRate')" for="doc-exchangeRate" :error="errors.exchangeRate" :hint="t('documents.editor.manualRateHint')">
         <input id="doc-exchangeRate" v-model="model.exchangeRate" inputmode="decimal" class="input" :class="cls('exchangeRate')" autocomplete="off" />
       </FormField>
-      <p v-if="indicativeNote" class="text-xs text-gray-600 dark:text-gray-400" data-test="indicative-rate">{{ indicativeNote }}</p>
+      <IndicativeRateNote
+        :rate="indicativeRate"
+        :error="indicativeError"
+        :loading="indicativeLoading"
+        :currency="model.currency"
+        message-key="documents.editor.indicativeRate"
+      />
     </div>
     <div class="flex flex-col justify-end pb-2" :class="{ 'sm:col-span-2': isCzk && !isProforma, 'sm:col-span-3': !isCzk || isProforma }">
       <label class="flex items-center gap-2 text-sm" :class="{ 'opacity-60': !isCzk }">

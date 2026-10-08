@@ -189,6 +189,18 @@ async fn deleting_the_payment_cancels_its_ddpp() {
     let p = two_rate_proforma(&app).await;
     let (_, payment) = pay(&app, &id(&p), json!({ "amount": "500" })).await;
     let ddpp = ddpp_id(&payment);
+    // A native DDPP is cancelled only through its payment.
+    let (status, e) = call(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{ddpp}/cancel"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        (status, &e["code"]),
+        (StatusCode::CONFLICT, &json!("invalid_state"))
+    );
     let uri = format!(
         "/api/documents/{}/payments/{}",
         id(&p),

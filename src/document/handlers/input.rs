@@ -10,14 +10,19 @@ use uuid::Uuid;
 
 pub use super::existing::Existing;
 use super::existing::doc_type;
-use super::line_input::{LineInput, Texts, decimal, validate_lines};
+pub use super::fields::{digits, exchange_rate, parse_vat_mode};
+use super::imported;
+use super::line_input::{LineInput, Texts, validate_lines};
+use super::meta::{self, Meta, MetaCtx};
 use crate::contact::entity::contact;
 use crate::document::advance::{self, AdvanceCtx, AdvanceSource};
 use crate::document::compute::{self, Evaluated, Params};
+use crate::document::custom_fields::Values;
 use crate::document::defaults;
-use crate::document::line::{LineData, MAX_RATE, PaymentMethod, VatMode};
+use crate::document::entity::document;
+use crate::document::line::{LineData, PaymentMethod, VatMode};
 use crate::error::{AppError, FieldErrors};
-use crate::settings::doc_type::DocType;
+use crate::settings::doc_type::{DocType, ISSUED};
 use crate::settings::entity::company;
 use crate::validation::{self as v, Check};
 
@@ -54,6 +59,15 @@ pub struct DocumentInput {
     /// Credit notes only (ignored otherwise); at most 500 characters.
     pub correction_reason: Option<String>,
     pub lines: Vec<LineInput>,
+    /// Manual import (create only, default `false`; immutable).
+    pub imported: Option<bool>,
+    /// Imported documents only (required there, <= 40, unique per type).
+    pub number: Option<String>,
+    /// Imported documents only; ignored on native drafts.
+    pub related_document_id: Option<Uuid>,
+    pub category_id: Option<Uuid>,
+    #[schema(value_type = Object)]
+    pub custom_fields: Option<Values>,
 }
 
 impl DocumentInput {
@@ -96,6 +110,10 @@ pub struct DocumentData {
     pub internal_note: Option<String>,
     pub round_total: bool,
     pub lines: Vec<LineData>,
+    pub imported: bool,
+    /// Imported documents: their own number.
+    pub number: Option<String>,
+    pub meta: Meta,
 }
 
 impl DocumentData {
@@ -122,6 +140,9 @@ pub struct Context {
     pub existing: Option<Existing>,
     /// Documents referenced by `advance` lines, by id.
     pub advances: HashMap<Uuid, AdvanceSource>,
+    /// The document named by `relatedDocumentId`, if it exists.
+    pub related: Option<document::Model>,
+    pub meta: MetaCtx,
 }
 
 /// Resolve advance lines, then compute; errors of both are reported together.
@@ -141,28 +162,6 @@ pub fn evaluate(
     }
 }
 
-fn digits(s: Option<&str>, max: usize) -> Check<Option<String>> {
-    let s = v::opt_text(s, max)?;
-    match s {
-        Some(d) if !d.bytes().all(|c| c.is_ascii_digit()) => Err("invalid"),
-        other => Ok(other),
-    }
-}
-
-pub fn exchange_rate(s: Option<&str>) -> Check<Option<Decimal>> {
-    match s.map(str::trim).filter(|s| !s.is_empty()) {
-        None => Ok(None),
-        Some(s) => {
-            let r = decimal(s, 6, MAX_RATE)?;
-            if r <= Decimal::ZERO {
-                Err("invalid")
-            } else {
-                Ok(Some(r))
-            }
-        }
-    }
-}
-
 /// `value`, else the default when allowed, else `required`.
 fn or_default<T>(value: Option<T>, ctx: &Context, default: impl FnOnce() -> T) -> Check<T> {
     match value {
@@ -172,23 +171,30 @@ fn or_default<T>(value: Option<T>, ctx: &Context, default: impl FnOnce() -> T) -
     }
 }
 
-pub fn parse_vat_mode(s: &str) -> Check<VatMode> {
-    VatMode::parse(s.trim()).ok_or("invalid")
-}
-
 impl DocumentInput {
     /// Normalize and validate every field (all failures at once) and run the
     /// computation rules. The bank account is checked by the repo.
     pub fn validate(self, ctx: &Context) -> Result<(DocumentData, Evaluated), AppError> {
         let mut e = FieldErrors::new();
         let existing = ctx.existing.as_ref();
+        let imported = imported::flag(self.imported, existing, &mut e);
         let doc_type = match self.direction.as_deref().map(str::trim) {
-            None | Some("issued") => {
-                e.check("docType", doc_type(self.doc_type.as_deref(), existing))
-            }
+            None | Some("issued") => e.check(
+                "docType",
+                doc_type(self.doc_type.as_deref(), existing, imported),
+            ),
             Some(_) => e.check("docType", Err("invalid")),
         }
         .unwrap_or(DocType::Invoice);
+        let (number, related_document_id) =
+            imported::fields(imported, doc_type, &self, ctx, &mut e);
+        let meta = meta::validate(
+            self.category_id,
+            self.custom_fields.as_ref(),
+            ISSUED,
+            &ctx.meta,
+            &mut e,
+        );
         if self.contact_id.is_some() && ctx.contact.is_none() {
             e.add("contactId", "invalid");
         }
@@ -229,7 +235,8 @@ impl DocumentInput {
             .check("exchangeRate", exchange_rate(self.exchange_rate.as_deref()))
             .flatten()
             .filter(|_| currency != "CZK");
-        let credit_note = existing.filter(|_| doc_type == DocType::CreditNote);
+        // A native credit note is bound to its invoice; an imported one is not.
+        let credit_note = existing.filter(|_| doc_type == DocType::CreditNote && !imported);
         let rate = credit_note.map_or(rate, |x| x.exchange_rate);
         let correction_reason = if doc_type == DocType::CreditNote {
             e.check(
@@ -283,7 +290,7 @@ impl DocumentInput {
         );
         let mut data = DocumentData {
             doc_type,
-            related_document_id: existing.and_then(|x| x.related_document_id),
+            related_document_id,
             correction_reason,
             contact_id: self.contact_id,
             issue_date,
@@ -321,6 +328,9 @@ impl DocumentInput {
                 .flatten(),
             round_total: self.round_total.unwrap_or(false),
             lines,
+            imported,
+            number,
+            meta,
         };
         // Line-level rules only make sense on well-formed lines.
         if !e.is_empty() {

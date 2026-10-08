@@ -15,7 +15,7 @@ use crate::document::entity::document;
 use crate::document::handlers::input::{self, DocumentData};
 use crate::document::line::{AdvanceData, LineData, PaymentMethod, Status};
 use crate::error::AppError;
-use crate::settings::doc_type::DocType;
+use crate::settings::doc_type::{DocType, ISSUED};
 
 /// Whether a non-cancelled invoice settles the proforma `id`.
 async fn settled<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<bool, AppError> {
@@ -29,7 +29,10 @@ async fn settled<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<bool, AppError>
 }
 
 fn settleable(doc: &document::Model) -> Result<(), AppError> {
-    if doc.doc_type != DocType::Proforma.as_str() || view::status(doc)? != Status::Issued {
+    if doc.doc_type != DocType::Proforma.as_str()
+        || doc.direction != ISSUED
+        || view::status(doc)? != Status::Issued
+    {
         return Err(AppError::InvalidState);
     }
     Ok(())
@@ -109,6 +112,9 @@ pub async fn settle(
         internal_note: None,
         round_total: p.round_total,
         lines: Vec::new(),
+        imported: false,
+        number: None,
+        meta: Default::default(),
     };
     let adv = AdvanceCtx {
         doc_type: DocType::Invoice,

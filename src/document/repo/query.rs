@@ -123,8 +123,13 @@ fn search(term: &str) -> Condition {
     Condition::any()
         .add(Expr::col(Column::Number).ilike(pattern.clone()))
         .add(Expr::col(Column::VariableSymbol).ilike(pattern.clone()))
+        .add(Expr::col(Column::SupplierNumber).ilike(pattern.clone()))
         .add(Expr::cust_with_values(
             "customer_snapshot->>'name' ILIKE $1",
+            [pattern.clone()],
+        ))
+        .add(Expr::cust_with_values(
+            "direction = 'received' AND supplier_snapshot->>'name' ILIKE $1",
             [pattern],
         ))
         .add(live_name)
@@ -151,6 +156,12 @@ fn filtered(q: &ListQuery, term: Option<&str>, today: NaiveDate) -> Select<Entit
     }
     if let Some(c) = q.contact_id {
         cond = cond.add(Column::ContactId.eq(c));
+    }
+    if let Some(c) = q.category_id {
+        cond = cond.add(Column::CategoryId.eq(c));
+    }
+    if let Some(i) = q.imported {
+        cond = cond.add(Column::Imported.eq(i));
     }
     if let Some(t) = term {
         cond = cond.add(search(t));
@@ -194,10 +205,12 @@ pub async fn highest_issued_seq<C: ConnectionTrait>(
     doc_type: crate::settings::doc_type::DocType,
     year: i32,
 ) -> Result<Option<i32>, AppError> {
+    let (direction, doc_type) = doc_type.numbered();
     let max: Option<Option<i32>> = Entity::find()
         .select_only()
         .column_as(Column::NumberSeq.max(), "max")
-        .filter(Column::DocType.eq(doc_type.as_str()))
+        .filter(Column::Direction.eq(direction))
+        .filter(Column::DocType.eq(doc_type))
         .filter(Column::NumberYear.eq(year))
         .filter(Column::Imported.eq(false))
         .into_tuple()

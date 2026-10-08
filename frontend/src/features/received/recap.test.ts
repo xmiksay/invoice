@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest";
+import { enforceRecapVatMode, fromCents, newRecapRow, recapTotal, sameAmount, suggestVat, toCents, updateRow, validateRecap } from "./recap";
+
+describe("recap amounts", () => {
+  it("parses and formats cents exactly, accepting a decimal comma", () => {
+    expect(toCents("1210,5")).toBe(121050n);
+    expect(toCents("-0.05")).toBe(-5n);
+    expect(toCents("1.234")).toBeNull();
+    expect(toCents("")).toBeNull();
+    expect(fromCents(-5n)).toBe("-0.05");
+    expect(fromCents(121050n)).toBe("1210.50");
+  });
+
+  it("suggests VAT as round2(base × rate / 100), half away from zero", () => {
+    expect(suggestVat("1000", "21")).toBe("210.00");
+    expect(suggestVat("0.05", "10")).toBe("0.01");
+    expect(suggestVat("-0.05", "10")).toBe("-0.01");
+    expect(suggestVat("99.99", "12")).toBe("12.00");
+    expect(suggestVat("100", "12.5")).toBe("12.50");
+    expect(suggestVat("", "21")).toBe("");
+    expect(suggestVat("100", "101")).toBe("");
+  });
+
+  it("sums base + vat + rounding, null while incomplete", () => {
+    const rows = [
+      { base: "1000", vat: "210" },
+      { base: "100,5", vat: "" },
+    ];
+    expect(recapTotal(rows, "-0.5")).toBe("1310.00");
+    expect(recapTotal([{ base: "x", vat: "0" }], "0")).toBeNull();
+    expect(sameAmount("210", "210.00")).toBe(true);
+    expect(sameAmount(null, "0")).toBe(false);
+  });
+});
+
+describe("recap rows", () => {
+  it("auto-suggests VAT until the user types one; clearing it resumes the suggestion", () => {
+    let row = updateRow(newRecapRow("21"), { base: "100" }, "standard");
+    expect(row).toMatchObject({ vat: "21.00", vatAuto: true });
+    row = updateRow(row, { vat: "20.99" }, "standard");
+    expect(row).toMatchObject({ vat: "20.99", vatAuto: false });
+    row = updateRow(row, { base: "200" }, "standard");
+    expect(row.vat).toBe("20.99");
+    row = updateRow(row, { vat: "" }, "standard");
+    expect(row).toMatchObject({ vat: "42.00", vatAuto: true });
+  });
+
+  it("forces VAT 0 outside the standard mode and restores suggestions back in it", () => {
+    const rows = [updateRow(newRecapRow("21"), { base: "100" }, "standard"), { ...newRecapRow("12"), base: "50", vat: "7", vatAuto: false }];
+    const exempt = enforceRecapVatMode(rows, "exempt");
+    expect(exempt.map((r) => r.vat)).toEqual(["0", "0"]);
+    expect(updateRow(exempt[0]!, { vat: "5" }, "exempt").vat).toBe("0");
+    expect(enforceRecapVatMode(exempt, "standard").map((r) => r.vat)).toEqual(["21.00", "6.00"]);
+  });
+
+  it("validates rows with the server's 422 keys", () => {
+    const rows = [
+      { ...newRecapRow("21"), base: "100", vat: "21" },
+      { ...newRecapRow("21.00"), base: "", vat: "x" },
+      { ...newRecapRow("150"), base: "1", vat: "0" },
+    ];
+    expect(validateRecap(rows, "standard")).toEqual({
+      "vatRecap.1.rate": "duplicate",
+      "vatRecap.1.base": "required",
+      "vatRecap.1.vat": "invalid",
+      "vatRecap.2.rate": "invalid",
+    });
+    expect(validateRecap([{ ...newRecapRow("0"), base: "1", vat: "1" }], "reverse_charge")).toEqual({ "vatRecap.0.vat": "invalid" });
+    expect(validateRecap([], "standard")).toEqual({ vatRecap: "required" });
+  });
+});

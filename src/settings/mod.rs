@@ -1,4 +1,5 @@
-//! Settings: own company profile, bank accounts, VAT rates, number series.
+//! Settings: own company profile, bank accounts, VAT rates, number series,
+//! categories, custom field definitions.
 
 pub mod doc_type;
 pub mod entity;
@@ -10,7 +11,7 @@ use axum::Router;
 use axum::routing::{get, put};
 
 use crate::app::AppState;
-use handlers::{bank_accounts, company, number_series, vat_rates};
+use handlers::{bank_accounts, categories, company, custom_fields, number_series, vat_rates};
 
 /// Routes relative to `/api/settings`.
 pub fn router() -> Router<AppState> {
@@ -31,6 +32,22 @@ pub fn router() -> Router<AppState> {
         .route(
             "/vat-rates/{id}",
             put(vat_rates::update).delete(vat_rates::delete),
+        )
+        .route(
+            "/categories",
+            get(categories::list).post(categories::create),
+        )
+        .route(
+            "/categories/{id}",
+            put(categories::update).delete(categories::delete),
+        )
+        .route(
+            "/custom-fields",
+            get(custom_fields::list).post(custom_fields::create),
+        )
+        .route(
+            "/custom-fields/{id}",
+            put(custom_fields::update).delete(custom_fields::delete),
         )
         .route("/number-series", get(number_series::list))
         .route("/number-series/{doc_type}", put(number_series::put_pattern))

@@ -13,5 +13,7 @@
   "range": "{from}–{to} z {total}",
   "prev": "Předchozí",
   "next": "Další",
-  "details": "Podrobnosti"
+  "details": "Podrobnosti",
+  "yes": "Ano",
+  "no": "Ne"
 }

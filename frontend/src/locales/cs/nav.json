@@ -1,7 +1,8 @@
 {
-  "invoices": "Faktury",
+  "invoices": "Vydané",
   "main": "Hlavní navigace",
   "contacts": "Kontakty",
   "settings": "Nastavení",
-  "catalog": "Katalog"
+  "catalog": "Katalog",
+  "received": "Přijaté"
 }

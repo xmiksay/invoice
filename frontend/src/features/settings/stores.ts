@@ -1,7 +1,20 @@
 import { defineStore } from "pinia";
 import { ref, type Ref } from "vue";
-import { bankAccountsApi, companyApi, numberSeriesApi, pdfApi, vatRatesApi, type CrudApi } from "./api";
-import type { BankAccount, BankAccountInput, Company, DesignInfo, DocType, NumberSeries, VatRate, VatRateInput } from "./types";
+import { bankAccountsApi, categoriesApi, companyApi, customFieldsApi, numberSeriesApi, pdfApi, vatRatesApi, type CrudApi } from "./api";
+import type {
+  BankAccount,
+  BankAccountInput,
+  Category,
+  CategoryInput,
+  Company,
+  CustomField,
+  CustomFieldInput,
+  DesignInfo,
+  DocType,
+  NumberSeries,
+  VatRate,
+  VatRateInput,
+} from "./types";
 
 export const useCompanyStore = defineStore("settings/company", () => {
   const company = ref<Company | null>(null);
@@ -54,6 +67,8 @@ export const useBankAccountsStore = defineCrudStore<BankAccount, BankAccountInpu
 );
 
 export const useVatRatesStore = defineCrudStore<VatRate, VatRateInput>("settings/vatRates", vatRatesApi);
+export const useCategoriesStore = defineCrudStore<Category, CategoryInput>("settings/categories", categoriesApi);
+export const useCustomFieldsStore = defineCrudStore<CustomField, CustomFieldInput>("settings/customFields", customFieldsApi);
 
 export const useNumberSeriesStore = defineStore("settings/numberSeries", () => {
   const series = ref<NumberSeries[]>([]);

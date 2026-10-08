@@ -26,8 +26,13 @@ const settled = computed(() => props.doc.paymentState === "paid" || props.doc.pa
 const addAnother = ref(false);
 const remaining = computed(() => remainingAmount(props.doc.totals.payable, props.doc.paid));
 const money = (v: string) => formatMoney(v, props.doc.currency, locale.value);
-/** A foreign-currency proforma payment may fix the DDPP's rate; empty = ČNB for the payment date. */
-const withRate = computed(() => props.doc.docType === "proforma" && props.doc.currency !== "CZK");
+/**
+ * A foreign-currency proforma payment may fix the DDPP's rate; empty = ČNB for the payment date.
+ * Received and imported proformas never create a DDPP.
+ */
+const withRate = computed(
+  () => props.doc.docType === "proforma" && props.doc.currency !== "CZK" && props.doc.direction === "issued" && !props.doc.imported,
+);
 
 const date = ref(todayIso());
 const amount = ref(remaining.value);

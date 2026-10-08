@@ -1,7 +1,7 @@
 import type { DocLocale } from "@/api/types";
 import type { DocType } from "@/features/settings/types";
 
-/** Wire types for `/api/documents` (Phases 1b/1c). Decimals are strings, dates `YYYY-MM-DD`. */
+/** Wire types for `/api/documents` (Phases 1b–1e). Decimals are strings, dates `YYYY-MM-DD`. */
 
 export type Direction = "issued" | "received";
 export const DOC_STATUSES = ["draft", "issued", "cancelled"] as const;
@@ -61,8 +61,25 @@ export type ComputedLine =
   | (SubtotalLine & { position: number; base: string; vatRate?: string | null })
   | (AdvanceLine & AdvanceDisplay & { position: number });
 
-/** Doc types the editor can create or edit (DDPPs are server-made, credit notes come from an invoice). */
-export type EditableDocType = "invoice" | "proforma" | "credit_note";
+/**
+ * Doc types the issued editor can create or edit. Natively DDPPs are server-made and credit notes
+ * come from an invoice; an imported document (`imported: true`) may be any of the four.
+ */
+export type EditableDocType = "invoice" | "proforma" | "credit_note" | "advance_tax_doc";
+
+/** The four document types; received documents use the same values (told apart by `direction`). */
+export const DOCUMENT_TYPES = ["invoice", "proforma", "credit_note", "advance_tax_doc"] as const;
+export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+
+/** `{ [customField.key]: value }` — text/number (decimal)/date/select strings, bool booleans; null = empty. */
+export type CustomFieldValues = Record<string, string | boolean | null>;
+
+/** Category, custom fields and internal note: editable in every status (`PUT …/metadata`). */
+export interface MetadataInput {
+  categoryId: string | null;
+  customFields: CustomFieldValues;
+  internalNote: string | null;
+}
 
 export interface DocumentInput {
   docType: DocType;
@@ -86,7 +103,57 @@ export interface DocumentInput {
   roundTotal: boolean;
   /** Credit notes only; required at issue. */
   correctionReason: string | null;
+  /** Manual import of an existing document: keeps its own `number`, issue renders no PDF. Immutable. */
+  imported: boolean;
+  /** Required iff imported, else null. */
+  number: string | null;
+  /** Imported only (DDPP / final invoice → proforma, credit note → invoice); natively set by settle / credit note. */
+  relatedDocumentId?: string | null;
+  categoryId: string | null;
+  customFields: CustomFieldValues;
   lines: DocumentLine[];
+}
+
+/** One row of a received document's VAT recap, as entered from the supplier's document (positive for credit notes). */
+export interface VatRecapEntry {
+  rate: string;
+  base: string;
+  vat: string;
+}
+
+/** Body of create / PUT for `direction: "received"`: no lines, no draft (saved = recorded). */
+export interface ReceivedDocumentInput {
+  direction: "received";
+  docType: DocumentType;
+  contactId: string | null;
+  supplierNumber: string;
+  issueDate: string;
+  /** null for a proforma. */
+  taxPointDate: string | null;
+  receivedDate: string;
+  /** null for a DDPP. */
+  dueDate: string | null;
+  currency: string;
+  exchangeRate: string | null;
+  vatMode: VatMode;
+  vatRecap: VatRecapEntry[];
+  rounding: string;
+  payable: string;
+  vatDeductible: boolean;
+  variableSymbol: string | null;
+  constantSymbol: string | null;
+  supplierAccount: string | null;
+  relatedDocumentId: string | null;
+  categoryId: string | null;
+  customFields: CustomFieldValues;
+  internalNote: string | null;
+}
+
+/** The uploaded original PDF of a received / imported document. */
+export interface OriginalPdf {
+  sha256: string;
+  size: number;
+  uploadedAt: string;
 }
 
 export interface RecapRow {
@@ -125,9 +192,11 @@ export interface BankSnapshot {
   bic: string | null;
 }
 
-export interface Document extends Omit<DocumentInput, "lines"> {
+export interface Document extends Omit<DocumentInput, "lines" | "dueDate" | "number" | "relatedDocumentId"> {
   id: string;
   number: string | null;
+  /** null for a received DDPP. */
+  dueDate: string | null;
   status: DocStatus;
   paymentState: PaymentState | null;
   overdue: boolean;
@@ -155,8 +224,19 @@ export interface Document extends Omit<DocumentInput, "lines"> {
   settled: boolean | null;
   /** -1 for credit notes: amounts are stored positive, shown negated. */
   sign: Sign;
-  /** The archived PDF (written at issue; a DDPP's possibly on first download). Drafts: null. */
+  /** The archived PDF (written at issue; a DDPP's possibly on first download). Drafts, received, imported: null. */
   pdf: PdfArchive | null;
+  /** Received / imported only: the uploaded original. */
+  original: OriginalPdf | null;
+  // Received documents only (absent / null on issued ones).
+  supplierNumber?: string | null;
+  receivedDate?: string | null;
+  vatRecap?: VatRecapEntry[] | null;
+  rounding?: string | null;
+  total?: string | null;
+  payable?: string | null;
+  vatDeductible?: boolean | null;
+  supplierAccount?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -174,6 +254,8 @@ export interface RelatedDocument {
   number: string | null;
   status: DocStatus;
   payable: string;
+  /** Linked received documents may differ in currency (a CZK DDPP of a EUR proforma); absent = this document's. */
+  currency?: string;
 }
 
 export interface DocumentSummary {
@@ -185,15 +267,21 @@ export interface DocumentSummary {
   paymentState: PaymentState | null;
   overdue: boolean;
   contactId: string | null;
+  /** The counterparty: customer of an issued, supplier of a received document. */
   customerName: string | null;
   issueDate: string;
-  dueDate: string;
+  dueDate: string | null;
   currency: string;
   payable: string;
   paid: string;
   sentAt: string | null;
   sign: Sign;
   relatedDocumentId: string | null;
+  supplierNumber?: string | null;
+  categoryId?: string | null;
+  /** Rendered archive or uploaded original present. */
+  hasPdf?: boolean;
+  imported?: boolean;
 }
 
 export interface DocumentPage {
@@ -208,6 +296,8 @@ export interface DocumentListQuery {
   paymentState?: PaymentState;
   overdue?: boolean;
   contactId?: string;
+  categoryId?: string;
+  imported?: boolean;
   q?: string;
   from?: string;
   to?: string;

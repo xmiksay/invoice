@@ -42,6 +42,7 @@ export const ctx = (overrides: Partial<DraftContext> = {}): DraftContext => ({
   company,
   vatRates,
   bankAccounts,
+  fieldDefs: [],
   today: "2026-10-08",
   ...overrides,
 });
@@ -122,6 +123,10 @@ export const document = (overrides: Partial<Document> = {}): Document => ({
   settled: null,
   sign: 1,
   pdf: null,
+  original: null,
+  imported: false,
+  categoryId: null,
+  customFields: {},
   createdAt: "",
   updatedAt: "",
   ...overrides,

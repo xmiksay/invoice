@@ -78,8 +78,8 @@ fn pdf_response(bytes: Vec<u8>, stem: &str, download: bool) -> Response {
     security(("bearer" = [])),
     params(("id" = Uuid, Path), DownloadQuery),
     responses(
-        (status = 200, description = "The PDF: a draft rendered live (watermark, no QR, never stored), otherwise the archive", content_type = "application/pdf"),
-        (status = 404, body = ErrorBody),
+        (status = 200, description = "The PDF: received / imported → the uploaded original; a draft rendered live (watermark, no QR, never stored); otherwise the archive", content_type = "application/pdf"),
+        (status = 404, description = "`not_found`, or `pdf_missing` (received / imported without an original)", body = ErrorBody),
         (status = 502, description = "`pdf_render_failed` (+ `detail`)", body = ErrorBody),
         (status = 503, description = "`pdf_unavailable`", body = ErrorBody),
     )
@@ -90,7 +90,9 @@ pub async fn document_pdf(
     ApiQuery(q): ApiQuery<DownloadQuery>,
 ) -> Result<Response, AppError> {
     let (row, bytes) = archive::document_pdf(&state.db, &state.pdf, id).await?;
-    let stem = match (&row.number, row.status == Status::Draft.as_str()) {
+    // An imported draft already has its own number.
+    let unnumbered = row.status == Status::Draft.as_str() && !row.imported;
+    let stem = match (&row.number, unnumbered) {
         (Some(number), false) => number.clone(),
         _ => format!("draft-{}", &id.simple().to_string()[..8]),
     };

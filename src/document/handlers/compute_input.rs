@@ -67,9 +67,9 @@ impl ComputeInput {
         let rate = e
             .check("exchangeRate", exchange_rate(self.exchange_rate.as_deref()))
             .flatten();
-        // Same as save / issue: a credit note keeps its invoice's rate.
+        // Same as save / issue: a native credit note keeps its invoice's rate.
         let rate = match &ctx.existing {
-            Some(x) if x.doc_type == DocType::CreditNote => x.exchange_rate,
+            Some(x) if x.doc_type == DocType::CreditNote && !x.imported => x.exchange_rate,
             _ => rate,
         };
         let doc_type = match self.doc_type.as_deref() {

@@ -36,6 +36,7 @@ const issueErrorText = (err: unknown): string | null => {
 const issued = computed(() => props.doc.status === "issued");
 // A DDPP is created and cancelled by its proforma's payments; only its delivery is tracked here.
 const isDdpp = computed(() => props.doc.docType === "advance_tax_doc");
+// Also for imported invoices / proformas: the native flows create our own drafts from them.
 const canCreditNote = computed(() => issued.value && props.doc.docType === "invoice");
 const canSettle = computed(() => issued.value && props.doc.docType === "proforma" && !props.doc.settled);
 
@@ -59,7 +60,7 @@ async function act(action: () => Promise<void>, message?: (err: unknown) => stri
 }
 
 function issue() {
-  if (!window.confirm(t("documents.detail.confirmIssue"))) return;
+  if (!window.confirm(t(props.doc.imported ? "documents.import.confirmIssue" : "documents.detail.confirmIssue"))) return;
   void act(store.issue, issueErrorText);
 }
 
@@ -114,7 +115,7 @@ function settle() {
         <button v-if="canCreditNote" type="button" class="btn" :disabled="busy" data-test="credit-note" @click="creditNote">
           {{ t("documents.detail.creditNote") }}
         </button>
-        <button v-if="!isDdpp" type="button" class="btn btn-danger" :disabled="busy" data-test="cancel" @click="cancel">{{ t("documents.detail.cancel") }}</button>
+        <button v-if="!isDdpp || doc.imported" type="button" class="btn btn-danger" :disabled="busy" data-test="cancel" @click="cancel">{{ t("documents.detail.cancel") }}</button>
       </template>
     </div>
     <div v-if="error" role="alert" class="alert-error" data-test="action-error">

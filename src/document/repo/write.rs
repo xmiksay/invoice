@@ -11,7 +11,7 @@ use crate::document::compute::Totals;
 use crate::document::entity::document::{ActiveModel, Entity};
 use crate::document::handlers::input::DocumentData;
 use crate::document::line::Status;
-use crate::error::AppError;
+use crate::error::{AppError, number_violation};
 use crate::settings::doc_type::DocType;
 
 /// Header fields an edit sets, shared by create and update.
@@ -19,13 +19,13 @@ fn apply(row: &mut ActiveModel, d: &DocumentData) {
     row.contact_id = Set(d.contact_id);
     row.issue_date = Set(d.issue_date);
     row.tax_point_date = Set(d.tax_point_date);
-    row.due_date = Set(d.due_date);
+    row.due_date = Set(Some(d.due_date));
     row.currency = Set(d.currency.clone());
     row.exchange_rate = Set(d.exchange_rate);
     row.exchange_rate_date = Set(None);
     // A credit note's rate is copied from its invoice, never entered.
     let source = match d.doc_type {
-        DocType::CreditNote => "original",
+        DocType::CreditNote if !d.imported => "original",
         _ => "manual",
     };
     row.exchange_rate_source = Set(d.exchange_rate.map(|_| source.to_string()));
@@ -41,6 +41,15 @@ fn apply(row: &mut ActiveModel, d: &DocumentData) {
     row.footer_note = Set(d.footer_note.clone());
     row.internal_note = Set(d.internal_note.clone());
     row.round_total = Set(d.round_total);
+    row.number = Set(d.number.clone());
+    row.related_document_id = Set(d.related_document_id);
+    row.category_id = Set(d.meta.category_id);
+    row.custom_fields = Set(serde_json::Value::Object(d.meta.custom_fields.clone()));
+}
+
+/// An imported draft's number already used by another issued document.
+fn duplicate_number(e: sea_orm::DbErr) -> AppError {
+    number_violation(e, || AppError::field("number", "duplicate"))
 }
 
 pub fn apply_totals(row: &mut ActiveModel, t: &Totals) {
@@ -75,10 +84,9 @@ pub async fn create_in(
         direction: Set("issued".into()),
         doc_type: Set(data.doc_type.as_str().into()),
         status: Set(Status::Draft.as_str().into()),
-        number: Set(None),
         number_year: Set(None),
         number_seq: Set(None),
-        imported: Set(false),
+        imported: Set(data.imported),
         supplier_snapshot: Set(None),
         customer_snapshot: Set(None),
         bank_snapshot: Set(None),
@@ -86,7 +94,6 @@ pub async fn create_in(
         sent_at: Set(None),
         cancelled_at: Set(None),
         cancel_reason: Set(None),
-        related_document_id: Set(data.related_document_id),
         payment_id: Set(None),
         created_at: Set(now),
         updated_at: Set(now),
@@ -95,7 +102,7 @@ pub async fn create_in(
     apply(&mut row, &data);
     apply_totals(&mut row, &totals);
     advance_sources::lock_and_recheck(txn, id, &data.lines).await?;
-    row.insert(txn).await?;
+    row.insert(txn).await.map_err(duplicate_number)?;
     lines::replace(txn, id, &data.lines).await?;
     lines::replace_recap(txn, id, &totals).await?;
     Ok(id)
@@ -125,19 +132,21 @@ async fn update_in(
     apply(&mut row, &data);
     apply_totals(&mut row, &totals);
     row.updated_at = Set(chrono::Utc::now().into());
-    row.update(txn).await?;
+    row.update(txn).await.map_err(duplicate_number)?;
     lines::replace(txn, id, &data.lines).await?;
     lines::replace_recap(txn, id, &totals).await?;
     Ok(())
 }
 
-pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<(), AppError> {
+/// Returns the uploaded original's path (imported drafts) for the caller to
+/// remove once the delete committed.
+pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<Option<String>, AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                locked_draft(txn, id).await?;
+                let doc = locked_draft(txn, id).await?;
                 Entity::delete_by_id(id).exec(txn).await?;
-                Ok(())
+                Ok(doc.original_path)
             })
         })
         .await?)

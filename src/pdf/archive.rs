@@ -9,6 +9,7 @@ use crate::document::entity::document;
 use crate::document::line::Status;
 use crate::document::repo::query;
 use crate::error::AppError;
+use crate::settings::doc_type::RECEIVED;
 
 /// Render the document as stored in `db` (draft → live data and watermark,
 /// cancelled → "STORNO" watermark; neither gets a QR code).
@@ -118,14 +119,21 @@ pub fn spawn_archive_ddpp(db: DatabaseConnection, pdf: PdfService, id: Uuid) {
     tokio::spawn(async move { try_archive_ddpp(&db, &pdf, id).await });
 }
 
-/// The PDF for `GET /api/documents/{id}/pdf`: a draft is rendered live and
-/// never stored; an issued or cancelled document serves its archive.
+/// The PDF for `GET /api/documents/{id}/pdf`: a received or imported
+/// document serves its uploaded original (none → `pdf_missing`), never a
+/// render; a draft is rendered live and never stored; an issued or cancelled
+/// document serves its archive.
 pub async fn document_pdf(
     db: &DatabaseConnection,
     pdf: &PdfService,
     id: Uuid,
 ) -> Result<(document::Model, Vec<u8>), AppError> {
     let row = query::find(db, id).await?;
+    if row.direction == RECEIVED || row.imported {
+        let rel = row.original_path.as_deref().ok_or(AppError::PdfMissing)?;
+        let bytes = pdf.read(rel).await?;
+        return Ok((row, bytes));
+    }
     if row.status == Status::Draft.as_str() {
         return render(db, pdf, id).await;
     }

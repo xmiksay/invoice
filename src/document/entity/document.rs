@@ -18,7 +18,8 @@ pub struct Model {
     pub contact_id: Option<Uuid>,
     pub issue_date: Date,
     pub tax_point_date: Option<Date>,
-    pub due_date: Date,
+    /// `None` only for a received advance tax document.
+    pub due_date: Option<Date>,
     pub currency: String,
     #[sea_orm(column_type = "Decimal(Some((18, 6)))", nullable)]
     pub exchange_rate: Option<Decimal>,
@@ -64,6 +65,20 @@ pub struct Model {
     pub pdf_path: Option<String>,
     pub pdf_sha256: Option<String>,
     pub pdf_rendered_at: Option<DateTimeWithTimeZone>,
+    /// Received documents: the supplier's own number and the receipt date.
+    pub supplier_number: Option<String>,
+    pub received_date: Option<Date>,
+    pub vat_deductible: bool,
+    pub supplier_account: Option<String>,
+    pub category_id: Option<Uuid>,
+    /// `{ key: value }` of custom fields (see `document::custom_fields`).
+    pub custom_fields: Json,
+    /// Uploaded original PDF (received / imported documents), relative to
+    /// `INVOICE__STORAGE_DIR`.
+    pub original_path: Option<String>,
+    pub original_sha256: Option<String>,
+    pub original_size: Option<i64>,
+    pub original_uploaded_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

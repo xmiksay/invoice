@@ -4,20 +4,23 @@
 pub mod advance;
 pub mod compute;
 pub mod credit;
+pub mod custom_fields;
 pub mod ddpp;
 pub mod defaults;
 pub mod entity;
 pub mod handlers;
 pub mod line;
+pub mod received;
 pub mod repo;
 pub mod state;
 pub mod subtotals;
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post, put};
 
 use crate::app::AppState;
-use handlers::{actions, documents, payments};
+use handlers::{actions, documents, original, payments};
 
 /// Routes relative to `/api/documents`.
 pub fn router() -> Router<AppState> {
@@ -35,6 +38,13 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/cancel", post(actions::cancel))
         .route("/{id}/mark-sent", post(actions::mark_sent))
         .route("/{id}/internal-note", put(actions::internal_note))
+        .route("/{id}/metadata", put(actions::metadata))
+        .route(
+            "/{id}/original",
+            put(original::put)
+                .delete(original::delete)
+                .layer(DefaultBodyLimit::max(original::BODY_LIMIT)),
+        )
         .route("/{id}/settle", post(actions::settle))
         .route("/{id}/credit-note", post(actions::credit_note))
         .route("/{id}/payments", get(payments::list).post(payments::create))

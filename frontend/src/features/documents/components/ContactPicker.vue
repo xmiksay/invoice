@@ -10,7 +10,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 const RESULTS = 10;
 
 /** `locked`: the contact is fixed (a credit note keeps its invoice's customer). */
-const props = defineProps<{ contactId: string | null; error?: string; locked?: boolean }>();
+const props = defineProps<{ contactId: string | null; error?: string; locked?: boolean; /** Default: "Odběratel". */ label?: string }>();
 const emit = defineEmits<{ pick: [contact: Contact]; clear: [] }>();
 
 const { t } = useI18n();
@@ -62,7 +62,7 @@ onBeforeUnmount(() => clearTimeout(timer));
 <template>
   <div class="space-y-2">
     <div class="flex items-center justify-between gap-2">
-      <span id="contact-picker-label" class="text-sm font-medium">{{ t("documents.fields.customer") }}</span>
+      <span id="contact-picker-label" class="text-sm font-medium">{{ label ?? t("documents.fields.customer") }}</span>
       <RouterLink v-if="!locked" :to="{ name: 'contact-new' }" target="_blank" class="text-xs text-blue-600 hover:underline dark:text-blue-400">
         {{ t("documents.editor.newContact") }}
       </RouterLink>

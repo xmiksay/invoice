@@ -170,7 +170,7 @@ describe("detail per document type", () => {
     expect(w.find('[data-test="action-error"] li').text()).toBe("Lines: Credit notes would exceed the original invoice for some VAT rate.");
   });
 
-  it("DDPP is read-only except mark-sent and the internal note", async () => {
+  it("DDPP is read-only except mark-sent and the metadata", async () => {
     const ddpp = document({
       id: "dd1",
       docType: "advance_tax_doc",
@@ -183,6 +183,8 @@ describe("detail per document type", () => {
     const fetch = mockFetchRoutes({
       "GET /api/documents/dd1": ddpp,
       "POST /api/documents/dd1/mark-sent": { ...ddpp, sentAt: "2026-10-08T10:00:00Z" },
+      "GET /api/settings/categories": [],
+      "GET /api/settings/custom-fields": [],
     });
     const { w } = await mountDetail("dd1");
     expect(w.find("h1").text()).toContain("Tax document for a received payment");
@@ -192,9 +194,37 @@ describe("detail per document type", () => {
     expect(calls(fetch)).toContain("POST /api/documents/dd1/mark-sent");
     expect(w.find('[data-test="mark-sent"]').text()).toBe("Mark as sent again");
     expect(w.find('[data-test="payments-panel"]').exists()).toBe(false);
-    expect(w.find("#internal-note").exists()).toBe(true);
+    expect(w.find("#meta-internalNote").exists()).toBe(true);
     expect(w.find('[data-test="related-parent"]').text()).toContain("Proforma invoice ZF20260001");
     // The parent comes with the document; nothing else is fetched.
-    expect(calls(fetch).filter((c) => c.startsWith("GET"))).toEqual(["GET /api/documents/dd1"]);
+    expect(calls(fetch).filter((c) => c.startsWith("GET /api/documents"))).toEqual(["GET /api/documents/dd1"]);
+  });
+
+  it("imported proforma: original PDF panel instead of ours, settle still offered, no DDPP rate, imported issue confirm", async () => {
+    const draft = proforma({ status: "draft", number: "EXT-1", imported: true, paymentState: null, currency: "EUR", exchangeRate: "24.5" });
+    const fetch = mockFetchRoutes({
+      "GET /api/documents/pf1": draft,
+      "GET /api/contacts/c1": { id: "c1", name: "Acme", street: "", city: "", zip: "", country: "CZ", ico: null, dic: null },
+      "GET /api/settings/company": { name: "Me", street: "", city: "", zip: "", country: "CZ", ico: null, dic: null },
+      "GET /api/settings/categories": [],
+      "GET /api/settings/custom-fields": [],
+      "POST /api/documents/pf1/issue": { ...draft, status: "issued", paymentState: "unpaid" },
+      "GET /api/documents/pf1/payments": [],
+    });
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    const { w } = await mountDetail("pf1");
+    expect(w.find('[data-test="imported-badge"]').exists()).toBe(true);
+    expect(w.find('[data-test="original-pdf"]').exists()).toBe(true);
+    expect(w.find('[data-test="pdf-open"]').exists()).toBe(false);
+
+    await w.find('[data-test="issue"]').trigger("click");
+    await flushPromises();
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("keeps its number, no PDF is rendered"));
+    expect(calls(fetch)).toContain("POST /api/documents/pf1/issue");
+    expect(w.find('[data-test="settle"]').exists()).toBe(true);
+    expect(w.find('[data-test="payments-panel"]').exists()).toBe(true);
+    expect(w.find("#payment-rate").exists()).toBe(false);
   });
 });
+

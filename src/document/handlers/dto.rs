@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 pub use super::line_out::{Line, lines_out};
 use crate::document::compute::{self, RecapRow};
+use crate::document::custom_fields::Values;
 use crate::document::line::{PaymentState, Status};
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -100,7 +101,8 @@ pub struct Document {
     pub contact_id: Option<Uuid>,
     pub issue_date: NaiveDate,
     pub tax_point_date: Option<NaiveDate>,
-    pub due_date: NaiveDate,
+    /// `null` only on a received advance tax document.
+    pub due_date: Option<NaiveDate>,
     pub currency: String,
     pub exchange_rate: Option<Decimal>,
     pub exchange_rate_date: Option<NaiveDate>,
@@ -142,8 +144,43 @@ pub struct Document {
     pub sign: i8,
     /// The archived PDF (issued documents; a DDPP may lack it until its first download).
     pub pdf: Option<PdfArchive>,
+    /// Manually imported issued document (keeps its own number, no rendered PDF).
+    pub imported: bool,
+    /// Received: the supplier's own document number.
+    pub supplier_number: Option<String>,
+    pub received_date: Option<NaiveDate>,
+    pub vat_deductible: bool,
+    pub supplier_account: Option<String>,
+    pub category_id: Option<Uuid>,
+    #[schema(value_type = Object)]
+    pub custom_fields: Values,
+    /// Uploaded original PDF (received / imported documents).
+    pub original: Option<OriginalPdf>,
+    /// Received: the recap as entered (`null` for issued documents).
+    pub vat_recap: Option<Vec<EnteredRecap>>,
+    /// `totals.rounding` / `totals.payable`; `total` = `totals.total`, except
+    /// for received documents: Σ(base + vat) + rounding (as entered).
+    pub rounding: Decimal,
+    pub total: Decimal,
+    pub payable: Decimal,
     pub created_at: DateTime<FixedOffset>,
     pub updated_at: DateTime<FixedOffset>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OriginalPdf {
+    pub sha256: String,
+    pub size: i64,
+    pub uploaded_at: DateTime<FixedOffset>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct EnteredRecap {
+    pub rate: Decimal,
+    pub base: Decimal,
+    pub vat: Decimal,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -161,6 +198,8 @@ pub struct RelatedDocument {
     pub number: Option<String>,
     pub status: Status,
     pub payable: Decimal,
+    /// The related document's own currency.
+    pub currency: String,
 }
 
 /// `-1` for credit notes.
@@ -179,16 +218,22 @@ pub struct DocumentSummary {
     pub payment_state: Option<PaymentState>,
     pub overdue: bool,
     pub contact_id: Option<Uuid>,
-    /// Snapshot name once issued, the live contact name for drafts.
+    /// The counterparty (received: the supplier): snapshot name once
+    /// issued / recorded, the live contact name for drafts.
     pub customer_name: Option<String>,
     pub issue_date: NaiveDate,
-    pub due_date: NaiveDate,
+    pub due_date: Option<NaiveDate>,
     pub currency: String,
     pub payable: Decimal,
     pub paid: Decimal,
     pub sent_at: Option<DateTime<FixedOffset>>,
     pub sign: i8,
     pub related_document_id: Option<Uuid>,
+    pub imported: bool,
+    pub supplier_number: Option<String>,
+    pub category_id: Option<Uuid>,
+    /// A rendered archive or an uploaded original exists.
+    pub has_pdf: bool,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -208,7 +253,10 @@ pub struct ListQuery {
     /// `true`: only overdue; `false`: only not overdue.
     pub overdue: Option<bool>,
     pub contact_id: Option<Uuid>,
-    /// Case-insensitive substring of number, customer name or variable symbol.
+    pub category_id: Option<Uuid>,
+    pub imported: Option<bool>,
+    /// Case-insensitive substring of number, counterparty name, variable
+    /// symbol or supplier number.
     pub q: Option<String>,
     /// Inclusive `issueDate` range.
     pub from: Option<NaiveDate>,

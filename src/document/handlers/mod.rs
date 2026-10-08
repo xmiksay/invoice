@@ -3,10 +3,16 @@ pub mod compute_input;
 pub mod documents;
 pub mod dto;
 pub mod existing;
+pub mod fields;
+pub mod imported;
 pub mod input;
 pub mod line_input;
 pub mod line_out;
+pub mod meta;
+pub mod original;
 pub mod payments;
+pub mod received;
+pub mod received_input;
 
 use uuid::Uuid;
 

@@ -9,18 +9,19 @@ use uuid::Uuid;
 
 use anyhow::Context as _;
 
-use super::{advance_sources, context, credit, lines, query, view, write};
+use super::{advance_sources, context, credit, lines, meta, query, view, write};
 use crate::cnb::{self, CnbClient};
 use crate::contact::entity::contact;
 use crate::document::advance::{self, AdvanceCtx};
 use crate::document::compute::{Evaluated, Params};
+use crate::document::custom_fields;
 use crate::document::entity::document;
 use crate::document::handlers::dto::{BankSnapshot, PartySnapshot};
 use crate::document::handlers::input;
 use crate::document::line::{LineData, PaymentMethod, Status, VatMode};
-use crate::error::{AppError, FieldErrors};
+use crate::error::{AppError, FieldErrors, number_violation};
 use crate::pdf::{PdfService, archive};
-use crate::settings::doc_type::DocType;
+use crate::settings::doc_type::{DocType, ISSUED};
 use crate::settings::entity::{bank_account, company};
 use crate::settings::repo::{company as company_repo, number_series};
 
@@ -98,7 +99,7 @@ pub async fn issue(
     let doc_type = context::existing(&doc)?.doc_type;
     let mut lines = query::load_lines(db, id).await?;
     let (customer, bank) = check(db, &doc, doc_type, &lines).await?;
-    let rate = if doc_type == DocType::CreditNote {
+    let rate = if doc_type == DocType::CreditNote && !doc.imported {
         Rate {
             rate: doc.exchange_rate,
             date: None,
@@ -175,9 +176,13 @@ async fn check(
     if !lines.iter().any(|l| matches!(l, LineData::Item(_))) {
         e.add("lines", "required");
     }
-    if doc.due_date < doc.issue_date {
+    if doc.due_date.is_none_or(|d| d < doc.issue_date) {
         e.add("dueDate", "invalid");
     }
+    // Definitions may have changed since the draft was saved.
+    let stored = meta::stored_fields(doc);
+    let defs = meta::defs(db, ISSUED).await?;
+    custom_fields::validate(&stored, &defs, &stored, &mut e);
     match (doc_type, doc.tax_point_date) {
         (DocType::Proforma, Some(_)) => e.add("taxPointDate", "invalid"),
         (DocType::Proforma, None) | (_, Some(_)) => {}
@@ -262,14 +267,23 @@ async fn issue_in(
     }
     let totals = p.evaluated.totals;
     advance_sources::lock_and_recheck(txn, id, &p.lines).await?;
-    if p.doc_type == DocType::CreditNote {
+    // An imported credit note documents amounts as they were: no cap.
+    if p.doc_type == DocType::CreditNote && !doc.imported {
         let invoice = doc
             .related_document_id
             .context("credit note without an invoice")?;
         credit::check_cap(txn, id, invoice, &totals).await?;
     }
-    let (number, seq) =
-        number_series::allocate_number(txn, p.doc_type, doc.issue_date.year()).await?;
+    // An imported document keeps its own number and never moves the counter.
+    let (number, seq) = match (&doc.number, doc.imported) {
+        (Some(n), true) => (n.clone(), None),
+        (None, true) => return Err(AppError::field("number", "required")),
+        (_, false) => {
+            let (n, seq) =
+                number_series::allocate_number(txn, p.doc_type, doc.issue_date.year()).await?;
+            (n, Some(seq))
+        }
+    };
     let mut row: document::ActiveModel = doc.clone().into();
     row.status = Set(Status::Issued.as_str().into());
     row.variable_symbol = Set(Some(
@@ -279,7 +293,7 @@ async fn issue_in(
     ));
     row.number = Set(Some(number));
     row.number_year = Set(Some(doc.issue_date.year()));
-    row.number_seq = Set(Some(seq));
+    row.number_seq = Set(seq);
     row.exchange_rate = Set(p.rate.rate);
     row.exchange_rate_date = Set(p.rate.date);
     row.exchange_rate_source = Set(p.rate.source.map(str::to_string));
@@ -298,11 +312,17 @@ async fn issue_in(
         .transpose()?);
     write::apply_totals(&mut row, &totals);
     row.updated_at = Set(chrono::Utc::now().into());
-    row.update(txn).await?;
+    row.update(txn)
+        .await
+        .map_err(|e| number_violation(e, || AppError::NumberTaken))?;
     if !advance::referenced_ids(&p.lines).is_empty() {
         lines::replace(txn, id, &p.lines).await?;
     }
     lines::replace_recap(txn, id, &totals).await?;
+    // Imported documents never get our rendered PDF.
+    if doc.imported {
+        return Ok(None);
+    }
     // The render runs while the document row (and counter) stay locked, up to
     // the 60 s mdcast timeout: accepted for a single-user app, because it is
     // what makes "mdcast down → nothing issued, no number used" atomic.

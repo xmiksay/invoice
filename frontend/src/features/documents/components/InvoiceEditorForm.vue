@@ -7,19 +7,29 @@ import { useErrorText } from "@/composables/useAction";
 import { useFormSubmit } from "@/composables/useFormSubmit";
 import { reasonKey } from "@/lib/formErrors";
 import type { Contact } from "@/features/contacts/types";
+import MetadataFields from "@/features/metadata/components/MetadataFields.vue";
+import type { Category } from "@/features/settings/types";
 import { applyContact, defaultVatRate, toComputeRequest, toInput, validateDocument, type DocumentDraft, type DraftContext } from "../form";
 import { formatMoney } from "../format";
 import { enforceVatMode, splitLineErrors } from "../lines";
 import { useDocumentStore } from "../store";
-import type { Document } from "../types";
+import type { Document, RelatedDocument } from "../types";
 import { useCompute } from "../useCompute";
 import { useIndicativeRate } from "../useIndicativeRate";
 import ContactPicker from "./ContactPicker.vue";
 import DocumentHeaderFields from "./DocumentHeaderFields.vue";
 import LineEditor from "./LineEditor.vue";
+import RelatedDocumentPicker from "./RelatedDocumentPicker.vue";
 import TotalsPanel from "./TotalsPanel.vue";
 
-const props = defineProps<{ initial: DocumentDraft; ctx: DraftContext; docId?: string }>();
+const props = defineProps<{
+  initial: DocumentDraft;
+  ctx: DraftContext;
+  categories: Category[];
+  docId?: string;
+  /** The linked document of an edited draft (label for the import's picker). */
+  parent?: RelatedDocument | null;
+}>();
 const emit = defineEmits<{ saved: [doc: Document] }>();
 
 const { t, locale } = useI18n();
@@ -28,9 +38,11 @@ const store = useDocumentStore();
 const draft = ref<DocumentDraft>(props.initial);
 const { fieldErrors, error, submitting, submit } = useFormSubmit();
 const isCreditNote = computed(() => draft.value.docType === "credit_note");
+/** A native credit note keeps its invoice's customer, currency and rate. */
+const lockedCreditNote = computed(() => isCreditNote.value && !draft.value.imported);
 const indicative = useIndicativeRate(() => ({
-  // A credit note keeps its invoice's rate, so there is nothing to look up.
-  currency: isCreditNote.value ? "" : draft.value.currency,
+  // A native credit note keeps its invoice's rate, so there is nothing to look up.
+  currency: lockedCreditNote.value ? "" : draft.value.currency,
   date: draft.value.taxPointDate || draft.value.issueDate,
 }));
 const compute = useCompute(() => toComputeRequest(draft.value, indicative.rate.value?.rate ?? null, props.docId));
@@ -86,9 +98,9 @@ function onPick(contact: Contact) {
 
 async function onSubmit() {
   await submit(
-    () => validateDocument(draft.value),
+    () => validateDocument(draft.value, props.ctx.fieldDefs),
     async () => {
-      emit("saved", await store.save(toInput(draft.value), props.docId));
+      emit("saved", await store.save(toInput(draft.value, props.ctx.fieldDefs), props.docId));
     },
   );
 }
@@ -96,8 +108,26 @@ async function onSubmit() {
 
 <template>
   <form class="space-y-6" novalidate @submit.prevent="onSubmit">
+    <section v-if="draft.imported" class="card space-y-3" data-test="import-section">
+      <p class="text-sm text-gray-600 dark:text-gray-400">{{ t("documents.import.hint") }}</p>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <FormField :label="t('documents.import.number')" for="doc-number" :error="headerErrors.number">
+          <input id="doc-number" v-model="draft.number" maxlength="40" class="input font-mono" :class="{ 'input-error': headerErrors.number }" autocomplete="off" />
+        </FormField>
+        <RelatedDocumentPicker
+          v-model="draft.relatedDocumentId"
+          direction="issued"
+          :doc-type="draft.docType"
+          :contact-id="draft.contactId"
+          :current="parent"
+          :exclude-id="docId"
+          :error="headerErrors.relatedDocumentId"
+        />
+      </div>
+    </section>
+
     <section class="card">
-      <ContactPicker :contact-id="draft.contactId" :error="headerErrors.contactId" :locked="isCreditNote" @pick="onPick" @clear="draft.contactId = null" />
+      <ContactPicker :contact-id="draft.contactId" :error="headerErrors.contactId" :locked="lockedCreditNote" @pick="onPick" @clear="draft.contactId = null" />
     </section>
 
     <section v-if="isCreditNote" class="card">
@@ -151,9 +181,10 @@ async function onSubmit() {
       <FormField :label="t('documents.fields.footerNote')" for="doc-footerNote" :error="headerErrors.footerNote">
         <textarea id="doc-footerNote" v-model="draft.footerNote" rows="3" maxlength="2000" class="input" />
       </FormField>
-      <FormField class="sm:col-span-2" :label="t('documents.fields.internalNote')" for="doc-internalNote" :error="headerErrors.internalNote" :hint="t('documents.editor.internalNoteHint')">
-        <textarea id="doc-internalNote" v-model="draft.internalNote" rows="2" maxlength="2000" class="input" />
-      </FormField>
+    </section>
+
+    <section class="card">
+      <MetadataFields v-model="draft.meta" direction="issued" :categories="categories" :field-defs="ctx.fieldDefs" :errors="headerErrors" id-prefix="doc" />
     </section>
 
     <p v-if="error" role="alert" class="alert-error" data-test="form-error">{{ error }}</p>

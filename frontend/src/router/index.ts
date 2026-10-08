@@ -42,6 +42,26 @@ const routes = [
     component: () => import("@/features/documents/views/InvoiceEditView.vue"),
   },
   {
+    path: "/received",
+    name: "received",
+    component: () => import("@/features/received/views/ReceivedListView.vue"),
+  },
+  {
+    path: "/received/new",
+    name: "received-new",
+    component: () => import("@/features/received/views/ReceivedEditView.vue"),
+  },
+  {
+    path: "/received/:id",
+    name: "received-detail",
+    component: () => import("@/features/received/views/ReceivedDetailView.vue"),
+  },
+  {
+    path: "/received/:id/edit",
+    name: "received-edit",
+    component: () => import("@/features/received/views/ReceivedEditView.vue"),
+  },
+  {
     path: "/contacts",
     name: "contacts",
     component: () => import("@/features/contacts/views/ContactsListView.vue"),
@@ -97,6 +117,16 @@ const routes = [
         path: "number-series",
         name: "settings-number-series",
         component: () => import("@/features/settings/views/NumberSeriesTab.vue"),
+      },
+      {
+        path: "categories",
+        name: "settings-categories",
+        component: () => import("@/features/settings/views/CategoriesTab.vue"),
+      },
+      {
+        path: "custom-fields",
+        name: "settings-custom-fields",
+        component: () => import("@/features/settings/views/CustomFieldsTab.vue"),
       },
       {
         path: "design",

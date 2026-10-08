@@ -20,7 +20,7 @@ function mountForm(transform: (d: DocumentDraft) => DocumentDraft = (d) => d) {
       { ...newItemLine("21"), description: "B" },
     ],
   };
-  return mount(InvoiceEditorForm, { props: { initial: transform(initial), ctx: ctx(), docId: "d1" }, global: { plugins: [pinia, i18n, router] } });
+  return mount(InvoiceEditorForm, { props: { initial: transform(initial), ctx: ctx(), categories: [], docId: "d1" }, global: { plugins: [pinia, i18n, router] } });
 }
 
 describe("InvoiceEditorForm", () => {
