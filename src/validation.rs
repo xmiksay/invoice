@@ -359,8 +359,8 @@ mod tests {
     fn dic_format() {
         assert_eq!(opt_dic(Some("cz 12345678")), Ok(Some("CZ12345678".into())));
         assert_eq!(
-            opt_dic(Some("CZ9005315946")),
-            Ok(Some("CZ9005315946".into()))
+            opt_dic(Some("CZ1234567890")),
+            Ok(Some("CZ1234567890".into()))
         );
         assert_eq!(
             opt_dic(Some("NL123456789B01")),

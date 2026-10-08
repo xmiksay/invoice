@@ -17,7 +17,7 @@ All routes under `/api`, Bearer auth (already enforced). JSON camelCase on the w
 Company {
   name: string,            // required, <=200
   ico: string | null,      // 8 digits, checksum validated (mod 11 rule)
-  dic: string | null,      // e.g. "CZ12345678" / "CZ9005315946", <=14
+  dic: string | null,      // e.g. "CZ12345678" / "CZ1234567890", <=14
   vatPayer: boolean,
   street: string, city: string, zip: string,   // may be "" until filled
   country: string,         // ISO-3166 alpha-2, default "CZ"
