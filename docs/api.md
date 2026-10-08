@@ -125,3 +125,123 @@ ARES
 - Street: `nazevUlice` + `cisloDomovni`[`/cisloOrientacni` + `cisloOrientacniPismeno`]; without a street name the number is
   prefixed with `nazevCastiObce`, else `nazevObce`; with no structured address at all, `textovaAdresa`. `psc` as a number is
   zero-padded to 5 digits; `country` is always `"CZ"`.
+
+---
+
+# Phase 1b — documents core
+
+Only `direction = "issued"` and `docType = "invoice"` are creatable in 1b. The schema already carries
+`direction` and all doc types (proforma / advance_tax_doc / credit_note arrive in 1c, received in 1e);
+creating any other combination → 422 `{"fields":{"docType":"invalid"}}`.
+
+## Status model
+- `status`: `draft` | `issued` | `cancelled` (stored).
+- `paymentState` (derived, issued only, `null` for drafts/cancelled): `unpaid` | `partial` | `paid` | `overpaid` —
+  compares the sum of payments with `totals.payable`.
+- `overdue` (derived): `status = issued` and `paymentState ∈ {unpaid, partial}` and `dueDate < today`.
+- `sentAt` (stored, nullable): set by mark-sent.
+
+## Wire types
+```
+DocumentLine =
+  | { kind: "item", description: string /* required <=500 */, quantity: string /* decimal, 4 dp, != 0 */,
+      unit: string|null /* <=20 */, unitPrice: string /* excl. VAT, 4 dp, may be negative */,
+      discountPct: string /* "0".."100", 2 dp, default "0" */, vatRate: string /* percent, e.g. "21" */ }
+  | { kind: "text", description: string /* required <=500 */ }
+  | { kind: "subtotal", description: string, refs: number[] /* 1-based positions of other lines */, collapse: boolean }
+  // Responses add: position (1-based), and for item/subtotal: base (computed, 2 dp; subtotal = sum of referenced bases;
+  // subtotal vatRate = the shared rate of its members).
+
+DocumentInput {
+  docType: "invoice", direction: "issued",
+  contactId: uuid|null,                 // required at issue
+  issueDate, taxPointDate: date|null, dueDate: date,
+  currency: string,                     // ISO 4217
+  exchangeRate: string|null,            // CZK per 1 unit; manual override (null = fetch from ČNB at issue)
+  locale: "cs"|"en",
+  vatMode: "standard" | "reverse_charge" | "exempt" | "non_payer",
+  bankAccountId: uuid|null,             // must match currency; required at issue for paymentMethod bank_transfer
+  paymentMethod: "bank_transfer" | "cash" | "card" | "other",
+  variableSymbol: string|null /* digits <=10; null → derived from number at issue */,
+  constantSymbol: string|null /* digits <=4 */,
+  orderRef: string|null /* <=100 */, headerNote: string|null, footerNote: string|null /* <=2000, printed */,
+  internalNote: string|null /* <=2000, never printed */,
+  roundTotal: boolean,                  // round payable to whole units; only allowed for CZK
+  lines: DocumentLine[]                 // order = position
+}
+
+Totals {
+  recap: [{ vatRate: string, base: string, vat: string, baseCzk: string|null, vatCzk: string|null }],  // sorted rate desc
+  base: string, vat: string, total: string, rounding: string, payable: string,
+  totalCzk: string|null      // null for CZK documents or when no rate is known yet
+}
+
+Document = DocumentInput + {
+  id, number: string|null, status, paymentState, overdue, sentAt: datetime|null, cancelledAt: datetime|null,
+  cancelReason: string|null, exchangeRateDate: date|null, exchangeRateSource: "cnb"|"manual"|null,
+  supplier: PartySnapshot|null, customer: PartySnapshot|null,  // filled at issue; drafts show null
+  bankSnapshot: { accountNumber, iban, bic }|null,             // filled at issue
+  lines: DocumentLine[] (with position/base), totals: Totals, paid: string /* sum of payments */,
+  createdAt, updatedAt
+}
+PartySnapshot { name, ico, dic, street, city, zip, country, registration|null, vatPayer: boolean|null }
+
+DocumentSummary { id, docType, direction, number, status, paymentState, overdue, contactId, customerName /* snapshot or
+  live contact name for drafts */, issueDate, dueDate, currency, payable, paid, sentAt }
+
+Payment { id, date, amount: string /* >0, doc currency */, note: string|null, createdAt }
+```
+
+## Computation (authoritative on the server; pure module, unit-tested)
+- item `base = round2(quantity × unitPrice × (1 − discountPct/100))`, half away from zero.
+- `text` lines carry no amounts. `subtotal` lines are display-only: never counted in totals.
+- Recap: group item bases by `vatRate`; `vat = round2(Σbase × rate/100)` per rate (§37 ZDPH — per rate, not per line).
+  For `reverse_charge`, `exempt`, `non_payer`: `vat = 0` in every recap row (rates kept for display).
+  `non_payer` requires every item `vatRate = "0"` (else 422 `lines.N.vatRate: invalid`).
+- `total = Σbase + Σvat`; `roundTotal` (CZK only, else 422 `roundTotal: invalid`): `payable = round0(total)`,
+  `rounding = payable − total`; otherwise `payable = total`, `rounding = 0`.
+- Foreign currency with a known rate: `baseCzk = round2(base × rate)`, `vatCzk = round2(vat × rate)` per recap row,
+  `totalCzk = round2(payable × rate)`.
+- Subtotal validation (port of infra `repo/subtotals.rs`): refs must point to existing other positions, no cycles, all
+  (transitively) referenced item lines share one `vatRate` → else 422 `lines.N.refs: invalid`.
+- `POST /api/documents/compute` body `{ lines, vatMode, currency, exchangeRate, roundTotal }` → `{ lines (with base),
+  totals }` — no DB writes; the editor uses it for live totals (debounced). Same 422s as save.
+
+## Defaults on create (fields omitted or null in the POST body)
+`issueDate` = today; `taxPointDate` = issueDate; `dueDate` = issueDate + (contact.defaultDueDays ?? company.defaultDueDays);
+`locale` = contact.defaultLocale ?? company.defaultLocale; `currency` = contact.defaultCurrency ?? "CZK";
+`bankAccountId` = default account for the currency; `vatMode` = company.vatPayer ? "standard" : "non_payer";
+`paymentMethod` = "bank_transfer"; `roundTotal` = false; new item lines default `vatRate` = default VAT rate (non_payer: "0").
+(The POST body may therefore omit those fields; PUT replaces all fields.)
+
+## Routes
+- `GET /api/documents?direction=issued&docType=&status=&paymentState=&overdue=true&contactId=&q=&from=&to=&limit=50&offset=0`
+  → `{ items: DocumentSummary[], total }`. `q` matches number / customer name / variable symbol; `from`/`to` filter
+  `issueDate` (inclusive). Ordered `issueDate desc, number desc nulls first, createdAt desc`.
+- `POST /api/documents` → 201 Document (draft). `GET /api/documents/{id}`. `PUT /api/documents/{id}` (draft only).
+  `DELETE /api/documents/{id}` → 204 (draft only).
+- Changing a non-draft → 409 `{"code":"document_locked"}`.
+- `POST /api/documents/{id}/issue` → Document. Validations (422 with fields): contactId required; at least one item line;
+  `dueDate >= issueDate`; `taxPointDate` required for invoice; bank account required for bank_transfer and must match
+  currency; foreign currency → rate = manual `exchangeRate` or ČNB for `taxPointDate` (ČNB failure with no manual rate →
+  422 `{"fields":{"exchangeRate":"required"}}`). In one transaction: allocate number from the doc type's series for the
+  **issueDate year**, store `number`, `numberYear`, `numberSeq`; snapshot supplier (company), customer (contact), bank;
+  `variableSymbol` = digits of number (last 10) if null; recompute + store totals; status `issued`.
+- `POST /api/documents/{id}/cancel` body `{ reason?: string }` → issued only (else 409 `invalid_state`); payments stay.
+- `POST /api/documents/{id}/mark-sent` body `{ sentAt?: datetime }` → issued only; idempotent (overwrites).
+- `PUT /api/documents/{id}/internal-note` body `{ internalNote }` → allowed in every status.
+- `GET /api/documents/{id}/payments` → Payment[] (date asc). `POST /api/documents/{id}/payments` → 201 (issued only, else
+  409 `invalid_state`). `DELETE /api/documents/{id}/payments/{paymentId}` → 204 (issued only).
+- `GET /api/exchange-rates/{currency}?date=YYYY-MM-DD` → `{ currency, date /* the ČNB publication date used */, rate }`;
+  CZK → rate "1"; unknown currency → 404 `not_found`; ČNB unreachable → 502 `{"code":"cnb_unavailable"}`.
+
+## ČNB
+`GET {INVOICE__CNB_URL}?date=DD.MM.YYYY` (default `https://www.cnb.cz/cs/financni-trhy/devizovy-trh/kurzy-devizoveho-trhu/kurzy-devizoveho-trhu/denni_kurz.txt`),
+10 s timeout. Text format: line 1 `08.10.2026 #196` (publication date), line 2 header, then
+`země|měna|množství|kód|kurz` with comma decimals; `rate = kurz / množství`. ČNB returns the latest list published on or
+before the requested date. Cache: table `exchange_rates (currency, requested_date) → (published_date, rate)`; a cached row is
+reused without calling ČNB. Tests use a local mock server with fixture text — never the real ČNB.
+
+## Number-series counter guard (finishes the 1a review item)
+`PUT /api/settings/number-series/{docType}/counters/{year}` with `lastNumber` lower than the highest `numberSeq` of a
+non-imported document of that docType and `numberYear` → 422 `{"fields":{"lastNumber":"below_issued"}}`.

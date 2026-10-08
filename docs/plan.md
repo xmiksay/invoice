@@ -31,9 +31,12 @@ no OAuth, no stock/task/cost-center links). Module layout follows the infra
 
 ## Phases
 
-Each phase is its own branch + PR into `master`. Phase 1 is split into four PRs:
-1a settings + contacts + ARES, 1b documents + VAT + numbering + payments + ČNB,
-1c PDF via mdcast + design dir + QR + archive, 1d received invoices + imports (PDF, ISDOC).
+Each phase is its own branch + PR into `master`. Phase 1 is split into five PRs:
+- 1a settings + contacts + ARES (done)
+- 1b document core: `documents` table, invoice lines (item / text / subtotal with collapse, % discount), VAT recap + rounding, ČNB rates, issue (numbering, snapshots), cancel, payments, counter guard
+- 1c proforma → DDPP (auto on payment) → final invoice settlement, credit notes, catalog (items + groups)
+- 1d PDF via mdcast + design dir + QR + archive on issue
+- 1e received invoices + imports (PDF + metadata, ISDOC)
 
 ### Phase 1 — core
 Settings, contacts + ARES, all document types incl. DDPP and proforma settlement,
@@ -47,8 +50,14 @@ ISDOC import notes (FakturaOnline export, ISDOC 6.0.2):
 - `PaymentMeans/Payment/PaidAmount` equals the total even for unpaid invoices — do not treat it as a payment.
 - Test fixtures must be anonymized (no real IČO/DIČ/IBAN/names).
 
-Phase 1b note:
-- Setting a number-series counter below the highest already-issued number for that doc type/year must be rejected (needs the documents table).
+Document decisions (1b/1c):
+- One `documents` table with `direction` (`issued` / `received`); received documents carry only a VAT recap, issued ones have lines and a stored recap computed from them.
+- Lines: `item` (description, quantity, unit, unit price excl. VAT, % discount, VAT rate), `text` (no amounts), `subtotal` (ported from infra: references other lines by position, nested allowed, no cycles, all members share one VAT rate; `collapse` shows only the subtotal on the PDF). Catalog groups (1c) insert their members + a collapsed subtotal.
+- Credit notes are entered with **positive** amounts; the sign comes from the document type (reports/exports negate).
+- Issued documents are locked: only payments, mark-sent, cancel, credit note and the internal note change afterwards. Drafts can be deleted.
+- ČNB rate is fixed at issue for the tax point date (latest published on or before it) unless entered manually; cached in `exchange_rates`; ČNB down + no manual rate → issue fails with 422.
+- Proforma payments by a VAT payer automatically issue a DDPP (tax point = payment date, VAT from above, split proportionally by the proforma's rates); the final invoice deducts DDPPs per rate (non-payer: deducts the paid amount).
+- Setting a number-series counter below the highest number already issued from that series/year is rejected.
 
 ### Phase 2 — interchange
 ISDOC export, CSV/XLSX bulk import (fixed documented template, sample downloadable
