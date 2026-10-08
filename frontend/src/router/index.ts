@@ -21,6 +21,48 @@ const routes = [
     meta: { public: true },
   },
   { path: "/", name: "home", component: () => import("@/views/HomeView.vue") },
+  {
+    path: "/contacts",
+    name: "contacts",
+    component: () => import("@/features/contacts/views/ContactsListView.vue"),
+  },
+  {
+    path: "/contacts/new",
+    name: "contact-new",
+    component: () => import("@/features/contacts/views/ContactEditView.vue"),
+  },
+  {
+    path: "/contacts/:id",
+    name: "contact-edit",
+    component: () => import("@/features/contacts/views/ContactEditView.vue"),
+  },
+  {
+    path: "/settings",
+    component: () => import("@/features/settings/views/SettingsView.vue"),
+    children: [
+      { path: "", redirect: { name: "settings-company" } },
+      {
+        path: "company",
+        name: "settings-company",
+        component: () => import("@/features/settings/views/CompanyTab.vue"),
+      },
+      {
+        path: "bank-accounts",
+        name: "settings-bank-accounts",
+        component: () => import("@/features/settings/views/BankAccountsTab.vue"),
+      },
+      {
+        path: "vat-rates",
+        name: "settings-vat-rates",
+        component: () => import("@/features/settings/views/VatRatesTab.vue"),
+      },
+      {
+        path: "number-series",
+        name: "settings-number-series",
+        component: () => import("@/features/settings/views/NumberSeriesTab.vue"),
+      },
+    ],
+  },
   { path: "/:pathMatch(.*)*", redirect: "/" },
 ];
 

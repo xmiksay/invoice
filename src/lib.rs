@@ -1,9 +1,14 @@
 pub mod app;
+pub mod ares;
 pub mod auth;
 pub mod config;
+pub mod contact;
 pub mod error;
+pub mod extract;
 pub mod health;
 pub mod migration;
 pub mod openapi;
 pub mod secret;
+pub mod settings;
 pub mod spa;
+pub mod validation;

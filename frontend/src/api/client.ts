@@ -1,11 +1,15 @@
 import { useAuthStore } from "@/stores/auth";
-import type { ApiErrorBody } from "./types";
+import type { ApiErrorBody, FieldErrors } from "./types";
 
-/** `status` 0 means the request never got a response (network down, CORS, abort). */
+/**
+ * `status` 0 means the request never got a response (network down, CORS, abort).
+ * `fields` maps camelCase wire field names to reason codes (422 `validation`).
+ */
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
     public readonly code: string,
+    public readonly fields: FieldErrors = {},
   ) {
     super(`API error ${status}: ${code}`);
     this.name = "ApiError";
@@ -30,14 +34,17 @@ export function setUnauthorizedHandler(handler: () => void): void {
   onUnauthorized = handler;
 }
 
-async function errorCode(res: Response): Promise<string> {
+async function errorBody(res: Response): Promise<ApiErrorBody> {
   try {
     const body = (await res.json()) as Partial<ApiErrorBody>;
-    if (typeof body.code === "string") return body.code;
+    if (typeof body.code === "string") {
+      const fields = body.fields && typeof body.fields === "object" ? body.fields : undefined;
+      return { code: body.code, fields };
+    }
   } catch {
     // Non-JSON error (e.g. proxy HTML page) — fall through to a generic code.
   }
-  return `http_${res.status}`;
+  return { code: `http_${res.status}` };
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -62,12 +69,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   if (!res.ok) {
-    const code = await errorCode(res);
+    const { code, fields } = await errorBody(res);
     if (res.status === 401 && explicitToken === undefined) {
       auth.logout();
       onUnauthorized();
     }
-    throw new ApiError(res.status, code);
+    throw new ApiError(res.status, code, fields);
   }
 
   if (res.status === 204) return undefined as T;

@@ -25,11 +25,15 @@ no OAuth, no stock/task/cost-center links). Module layout follows the infra
 | PDF | mdcast `/v1/render/template` (typst + JSON data). Default design embedded in the binary; `INVOICE__DESIGN_DIR` (sub-directory on the PVC) overrides it file by file (`brand.toml`, `invoice.typ`, fonts, logo). Preview endpoint renders a sample invoice. Invoice language cs/en per document. SPAYD QR payment code. |
 | Received invoices | Metadata entered manually + original PDF upload. |
 | File storage | Filesystem, `INVOICE__STORAGE_DIR` (PVC); DB keeps path + sha256. |
-| Contacts | Address book with ARES lookup by IČO. |
+| Contacts | One address book for customers and suppliers, ARES lookup by IČO. Invoices store a snapshot, so editing/deleting a contact never changes an invoice. ISDOC import matches contacts by IČO or creates one. |
+| Received invoices numbering | Internal evidence number from its own series (e.g. `P{YYYY}{NNNN}`) assigned on save, plus the supplier's original number and VS. |
+| Payments | Multiple (partial) payments per document (date, amount, note). Status becomes `paid` automatically when payments cover the payable amount. A DDPP is issued per received advance payment. |
 
 ## Phases
 
-Each phase is its own branch + PR into `master`.
+Each phase is its own branch + PR into `master`. Phase 1 is split into four PRs:
+1a settings + contacts + ARES, 1b documents + VAT + numbering + payments + ČNB,
+1c PDF via mdcast + design dir + QR + archive, 1d received invoices + imports (PDF, ISDOC).
 
 ### Phase 1 — core
 Settings, contacts + ARES, all document types incl. DDPP and proforma settlement,
@@ -42,6 +46,9 @@ ISDOC import notes (FakturaOnline export, ISDOC 6.0.2):
 - `TaxPointDate` may be missing (non-VAT payer) — fall back to `IssueDate`.
 - `PaymentMeans/Payment/PaidAmount` equals the total even for unpaid invoices — do not treat it as a payment.
 - Test fixtures must be anonymized (no real IČO/DIČ/IBAN/names).
+
+Phase 1b note:
+- Setting a number-series counter below the highest already-issued number for that doc type/year must be rejected (needs the documents table).
 
 ### Phase 2 — interchange
 ISDOC export, CSV/XLSX bulk import (fixed documented template, sample downloadable

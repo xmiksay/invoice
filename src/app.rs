@@ -6,14 +6,16 @@ use axum::routing::get;
 use sea_orm::DatabaseConnection;
 use tower_http::trace::TraceLayer;
 
+use crate::ares::AresClient;
 use crate::error::AppError;
 use crate::secret::Secret;
-use crate::{auth, health, openapi, spa};
+use crate::{ares, auth, contact, health, openapi, settings, spa};
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: DatabaseConnection,
     pub api_token: Secret<String>,
+    pub ares: AresClient,
 }
 
 /// `/api/health` and `/api/openapi.json` are public; every other `/api/*`
@@ -22,6 +24,9 @@ pub struct AppState {
 pub fn router(state: AppState) -> Router {
     let protected = Router::new()
         .route("/auth/check", get(auth::check))
+        .nest("/settings", settings::router())
+        .nest("/contacts", contact::router())
+        .route("/ares/{ico}", get(ares::handlers::lookup))
         .fallback(api_not_found)
         .layer(middleware::from_fn_with_state(
             state.clone(),

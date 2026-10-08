@@ -6,6 +6,7 @@ use anyhow::{Context, Result, bail};
 use config::{Config as RawConfig, Environment};
 use serde::Deserialize;
 
+use crate::ares::DEFAULT_ARES_URL;
 use crate::secret::Secret;
 
 pub const DEFAULT_BIND: &str = "0.0.0.0:3000";
@@ -16,6 +17,8 @@ pub struct Config {
     pub database_url: Secret<String>,
     pub api_token: Secret<String>,
     pub bind: String,
+    /// ARES REST root (`INVOICE__ARES_URL`).
+    pub ares_url: String,
 }
 
 /// The subset `invoice migrate` needs — migrations must not require the API token.
@@ -70,6 +73,7 @@ fn validate_database_url(url: &Secret<String>) -> Result<()> {
 fn build(env: Option<HashMap<String, String>>) -> Result<RawConfig> {
     RawConfig::builder()
         .set_default("bind", DEFAULT_BIND)
+        .and_then(|b| b.set_default("ares_url", DEFAULT_ARES_URL))
         .context("set config defaults")?
         .add_source(
             Environment::with_prefix("INVOICE")
@@ -102,6 +106,7 @@ mod tests {
         ]))
         .expect("valid config");
         assert_eq!(cfg.bind, DEFAULT_BIND);
+        assert_eq!(cfg.ares_url, DEFAULT_ARES_URL);
         assert_eq!(cfg.api_token.expose(), "tok");
         assert_eq!(cfg.database_url.expose(), "postgres://x");
     }
@@ -112,9 +117,11 @@ mod tests {
             ("INVOICE__DATABASE_URL", "postgres://x"),
             ("INVOICE__API_TOKEN", "tok"),
             ("INVOICE__BIND", "127.0.0.1:9000"),
+            ("INVOICE__ARES_URL", "http://127.0.0.1:9001/rest"),
         ]))
         .expect("valid config");
         assert_eq!(cfg.bind, "127.0.0.1:9000");
+        assert_eq!(cfg.ares_url, "http://127.0.0.1:9001/rest");
     }
 
     #[test]
