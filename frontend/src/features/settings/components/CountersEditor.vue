@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useAction } from "@/composables/useAction";
+import { useErrorText } from "@/composables/useAction";
+import { fieldErrorsOf, reasonKey } from "@/lib/formErrors";
 import { useNumberSeriesStore } from "../stores";
 import type { NumberSeries } from "../types";
 
@@ -9,7 +10,8 @@ const props = defineProps<{ series: NumberSeries; currentYear: number }>();
 
 const { t } = useI18n();
 const store = useNumberSeriesStore();
-const { error, run } = useAction();
+const errorText = useErrorText();
+const error = ref<string | null>(null);
 
 const sorted = computed(() => [...props.series.counters].sort((a, b) => b.year - a.year));
 /** Edited lastNumber per year, as typed. */
@@ -44,13 +46,20 @@ async function save(yearText: string, value: string, isNewRow = false) {
   }
   const year = Number(yearText);
   const lastNumber = Number(value.trim());
-  if (await run(() => store.setCounter(props.series.docType, year, lastNumber))) {
-    // Reset just the saved row; other rows keep whatever is being typed.
-    drafts.value[year] = String(lastNumber);
-    if (isNewRow) {
-      newYear.value = String(year + 1);
-      newLast.value = "0";
-    }
+  error.value = null;
+  try {
+    await store.setCounter(props.series.docType, year, lastNumber);
+  } catch (err) {
+    // e.g. `lastNumber: below_issued` — the reason is the useful part, not "form has errors".
+    const fields = fieldErrorsOf(err);
+    error.value = fields ? Object.values(fields).map((r) => t(reasonKey(r))).join(" ") : errorText(err);
+    return;
+  }
+  // Reset just the saved row; other rows keep whatever is being typed.
+  drafts.value[year] = String(lastNumber);
+  if (isNewRow) {
+    newYear.value = String(year + 1);
+    newLast.value = "0";
   }
 }
 </script>
@@ -101,6 +110,6 @@ async function save(yearText: string, value: string, isNewRow = false) {
         </tr>
       </tbody>
     </table>
-    <p v-if="error" role="alert" class="alert-error">{{ error }}</p>
+    <p v-if="error" role="alert" class="alert-error" data-test="counter-error">{{ error }}</p>
   </div>
 </template>

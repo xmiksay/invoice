@@ -1,0 +1,112 @@
+use axum::Json;
+use axum::body::Bytes;
+use axum::extract::State;
+use uuid::Uuid;
+
+use super::dto::{CancelInput, Document, InternalNoteInput, MarkSentInput};
+use super::fetch;
+use crate::app::AppState;
+use crate::document::repo::{issue as issue_repo, lifecycle};
+use crate::error::{AppError, ErrorBody, FieldErrors};
+use crate::extract::{ApiJson, ApiPath, optional_json};
+use crate::time::today;
+use crate::validation as v;
+
+#[utoipa::path(
+    post,
+    path = "/api/documents/{id}/issue",
+    tag = "documents",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path)),
+    responses(
+        (status = 200, body = Document),
+        (status = 404, body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not a draft)", body = ErrorBody),
+        (status = 422, description = "Not issuable (contactId, lines, dueDate, taxPointDate, bankAccountId, exchangeRate)", body = ErrorBody),
+    )
+)]
+pub async fn issue(
+    State(state): State<AppState>,
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<Json<Document>, AppError> {
+    issue_repo::issue(&state.db, &state.cnb, id, today()).await?;
+    Ok(Json(fetch(&state, id).await?))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/documents/{id}/cancel",
+    tag = "documents",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path)),
+    request_body = CancelInput,
+    responses(
+        (status = 200, body = Document),
+        (status = 404, body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not issued)", body = ErrorBody),
+    )
+)]
+pub async fn cancel(
+    State(state): State<AppState>,
+    ApiPath(id): ApiPath<Uuid>,
+    body: Bytes,
+) -> Result<Json<Document>, AppError> {
+    let input: CancelInput = optional_json(&body)?;
+    let mut e = FieldErrors::new();
+    let reason = e
+        .check("reason", v::opt_text(input.reason.as_deref(), 2000))
+        .flatten();
+    e.into_result()?;
+    lifecycle::cancel(&state.db, id, reason).await?;
+    Ok(Json(fetch(&state, id).await?))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/documents/{id}/mark-sent",
+    tag = "documents",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path)),
+    request_body = MarkSentInput,
+    responses(
+        (status = 200, body = Document),
+        (status = 404, body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not issued)", body = ErrorBody),
+    )
+)]
+pub async fn mark_sent(
+    State(state): State<AppState>,
+    ApiPath(id): ApiPath<Uuid>,
+    body: Bytes,
+) -> Result<Json<Document>, AppError> {
+    let input: MarkSentInput = optional_json(&body)?;
+    let sent_at = input
+        .sent_at
+        .unwrap_or_else(|| chrono::Utc::now().fixed_offset());
+    lifecycle::mark_sent(&state.db, id, sent_at).await?;
+    Ok(Json(fetch(&state, id).await?))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/documents/{id}/internal-note",
+    tag = "documents",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path)),
+    request_body = InternalNoteInput,
+    responses(
+        (status = 200, body = Document),
+        (status = 404, body = ErrorBody),
+        (status = 422, description = "`internalNote`: `too_long`", body = ErrorBody),
+    )
+)]
+pub async fn internal_note(
+    State(state): State<AppState>,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<InternalNoteInput>,
+) -> Result<Json<Document>, AppError> {
+    let note = v::opt_text(input.internal_note.as_deref(), 2000)
+        .map_err(|r| AppError::field("internalNote", r))?;
+    lifecycle::set_internal_note(&state.db, id, note).await?;
+    Ok(Json(fetch(&state, id).await?))
+}

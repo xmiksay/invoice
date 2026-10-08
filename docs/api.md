@@ -245,3 +245,80 @@ reused without calling ČNB. Tests use a local mock server with fixture text —
 ## Number-series counter guard (finishes the 1a review item)
 `PUT /api/settings/number-series/{docType}/counters/{year}` with `lastNumber` lower than the highest `numberSeq` of a
 non-imported document of that docType and `numberYear` → 422 `{"fields":{"lastNumber":"below_issued"}}`.
+
+## Clarifications 1b (as implemented)
+Additive details settled during the Phase 1b backend; nothing above changed.
+
+Field errors
+- Line errors are keyed `lines.N.<camelCaseField>` where **N is the 0-based array index** of the line in the request (not
+  its 1-based `position`); `refs` values themselves stay 1-based positions. A bad subtotal is reported as `lines.N.refs`
+  on the subtotal line that holds the bad refs (for a cycle: on one subtotal of the cycle). An unknown `kind` →
+  `lines.N.kind: invalid`; more than 1000 lines → `lines: too_long`; a line base or total that would not fit
+  `numeric(18,2)` (≥ 10^16) → `lines: invalid`; amounts that fit but whose CZK conversion does not →
+  `exchangeRate: invalid`. All arithmetic is checked (never a 500).
+- Subtotal refs are invalid when empty, out of range, self-referencing, duplicated, pointing at a `text` line, cyclic,
+  or mixing VAT rates, or when nested subtotals sum beyond the representable range.
+- Line rules (non-payer rates, subtotal refs, `roundTotal`) run only after all field-level checks pass.
+- New reason code `below_issued` (counter guard).
+
+Documents
+- `docType` / `direction` may be omitted (→ `invoice` / `issued`); anything else → `docType: invalid`.
+- `contactId` naming a missing contact → `contactId: invalid`. `bankAccountId` naming a missing account, or one whose
+  currency differs from the document's → `bankAccountId: invalid` (on save too, not only at issue).
+- `PUT` applies **no** defaults: `issueDate`, `dueDate`, `currency`, `locale`, `vatMode`, `paymentMethod` missing →
+  `required`; `taxPointDate`/`bankAccountId` stay `null` when omitted. Item `vatRate` defaults on both POST and PUT
+  (and compute); with no default VAT rate configured a missing item `vatRate` is `required`.
+- Number limits: `quantity` / `unitPrice` at most 4 dp and `|x| < 10^12`; `exchangeRate` > 0, at most 6 dp;
+  `discountPct` 0..100, 2 dp. `unit` ≤ 20, line `description` ≤ 500 (subtotal description may be empty),
+  `cancel.reason` ≤ 2000, payment `note` ≤ 500.
+- For CZK documents `exchangeRate` is ignored (stored `null`). A non-null `exchangeRate` on save sets
+  `exchangeRateSource: "manual"`; drafts with a manual rate already show the CZK recap/`totalCzk`.
+- Money in responses always has 2 dp (`"0.00"`); rates and quantities are normalized (`"21"`, `"0.15512"`).
+- Response lines: `item` `{kind, position, description, quantity, unit, unitPrice, discountPct, vatRate, base}`,
+  `text` `{kind, position, description}`, `subtotal` `{kind, position, description, refs, collapse, base, vatRate}`.
+- `GET /api/documents/{id}` returns stored totals; line `base`s are recomputed from the stored lines.
+- `DELETE` / `PUT` of a non-draft → 409 `document_locked`; `issue` of a non-draft → 409 `invalid_state`.
+- `POST /api/documents/compute`: body fields default to `vatMode` = company default, `currency` = `CZK`,
+  `roundTotal` = false. It does **not** validate line text (`description`, `unit`) — only what affects amounts
+  (`quantity`, `unitPrice`, `discountPct`, `vatRate`, `refs`, `kind`, `vatMode`, `currency`, `exchangeRate`, `roundTotal`).
+  Save and issue keep the full validation.
+
+Issue
+- Validations run before the ČNB call; all failing fields are reported together: `contactId: required` (also when the
+  contact was deleted), `lines: required` (no item line), `dueDate: invalid`, `taxPointDate: required`,
+  `bankAccountId: required` (bank transfer without an existing account) / `invalid` (currency mismatch, any method).
+- ČNB unreachable **or** not listing the currency, with no manual rate → `exchangeRate: required`. A manual rate gives
+  `exchangeRateSource: "manual"`, `exchangeRateDate: null`; a ČNB rate gives `"cnb"` and the ČNB publication date.
+- If the draft is edited between the issue checks and the locked write → 409 `conflict` (retry).
+- Supplier snapshot: company fields + `registration` + `vatPayer`; customer snapshot: contact fields with
+  `registration: null`, `vatPayer: null`. `bankSnapshot` is set whenever the document has a bank account.
+
+Lifecycle and payments
+- `cancel` / `mark-sent` bodies are optional (empty body allowed); a malformed body → 400. `mark-sent` without `sentAt`
+  uses now.
+- `paymentState`: `paid` when the payment sum equals `payable` (or nothing is paid on a non-positive payable),
+  `unpaid` when nothing is paid, `partial` below, `overpaid` above. Payment `amount` > 0, at most 2 dp, `date` required.
+  Payments of a cancelled document are listed but can be neither added nor deleted (409 `invalid_state`).
+  A payment that would push the payment sum to 10^16 or beyond (`numeric(18,2)`) → `amount: invalid`.
+- A payment id that does not belong to the document → 404.
+
+List
+- `status` / `paymentState` / `overdue` / dates / `contactId` that do not parse → 400 `bad_request`; unknown `direction` or
+  `docType` values simply match nothing. `overdue=false` returns everything that is not overdue. `limit`/`offset` as for
+  contacts. `paymentState` filters imply `status = issued`.
+- "Today" (`overdue`, the default `issueDate`, the ČNB cache decision, `nextNumberPreview`) is the date in
+  Europe/Prague, independent of the server's time zone.
+
+ČNB / exchange rates
+- `GET /api/exchange-rates/{currency}`: `date` defaults to today; a malformed currency → 404; a malformed `date` → 400.
+- Rates are stored as `numeric(18,6)` (`kurz / množství` rounded half away from zero to 6 dp).
+- A fetched list is cached for every currency it contains, keyed by the requested date, but only once it is final:
+  published for exactly the requested date, or the requested date is already past. A request for today (or later)
+  answered with an older list (before ČNB publishes ~14:30) is not cached. A currency missing from a final list is
+  cached as absent (`rate` NULL), so repeated lookups stay 404 / `exchangeRate: required` without calling ČNB.
+
+Number series
+- `allocate_number(&txn, DocType, year) -> Result<(String, i32), AppError>` (number and sequence).
+- The counter guard counts every non-imported document of that docType and `numberYear` with a number (cancelled
+  included — their numbers stay used). The counter `PUT` locks the counter row (creating it if missing) before
+  checking, so it waits for an issue in flight and sees its number.

@@ -3,7 +3,6 @@
 mod common;
 
 use axum::http::{Method, StatusCode};
-use chrono::Datelike;
 use common::{TestDb, call, router};
 use invoice::settings::doc_type::DocType;
 use invoice::settings::repo::number_series::allocate_number;
@@ -20,7 +19,7 @@ fn find<'a>(list: &'a Value, doc_type: &str) -> &'a Value {
 async fn series_are_seeded_with_preview() {
     let db = TestDb::new().await;
     let app = router(db.conn.clone());
-    let year = chrono::Local::now().year();
+    let year = invoice::time::current_year();
 
     let (status, list) = call(&app, Method::GET, "/api/settings/number-series", None).await;
     assert_eq!(status, StatusCode::OK);
@@ -56,7 +55,7 @@ async fn series_are_seeded_with_preview() {
 async fn pattern_update_and_validation() {
     let db = TestDb::new().await;
     let app = router(db.conn.clone());
-    let yy = chrono::Local::now().year() % 100;
+    let yy = invoice::time::current_year() % 100;
 
     let (status, s) = call(
         &app,
@@ -123,7 +122,7 @@ async fn pattern_update_and_validation() {
 async fn counter_upsert() {
     let db = TestDb::new().await;
     let app = router(db.conn.clone());
-    let year = chrono::Local::now().year();
+    let year = invoice::time::current_year();
 
     let uri = format!("/api/settings/number-series/invoice/counters/{year}");
     let (status, s) = call(&app, Method::PUT, &uri, Some(json!({ "lastNumber": 41 }))).await;
@@ -179,14 +178,15 @@ async fn allocate_continues_from_counter_and_rolls_back() {
     let n = allocate_number(&txn, DocType::CreditNote, 2025)
         .await
         .expect("allocate");
-    assert_eq!(n, "D20250010");
+    assert_eq!(n, ("D20250010".to_string(), 10));
     txn.rollback().await.expect("rollback");
 
     let txn = db.conn.begin().await.expect("begin");
     assert_eq!(
         allocate_number(&txn, DocType::CreditNote, 2025)
             .await
-            .expect("allocate"),
+            .expect("allocate")
+            .0,
         "D20250010",
         "a rolled-back allocation returns its number"
     );
@@ -194,7 +194,7 @@ async fn allocate_continues_from_counter_and_rolls_back() {
         allocate_number(&txn, DocType::CreditNote, 2026)
             .await
             .expect("allocate"),
-        "D20260001",
+        ("D20260001".to_string(), 1),
         "a new year starts at 1"
     );
     txn.commit().await.expect("commit");
@@ -212,7 +212,8 @@ async fn concurrent_allocations_are_distinct_and_consecutive() {
                 let txn = conn.begin().await.expect("begin");
                 let n = allocate_number(&txn, DocType::Invoice, 2026)
                     .await
-                    .expect("allocate");
+                    .expect("allocate")
+                    .0;
                 // Hold the row lock briefly so allocations really contend.
                 tokio::time::sleep(std::time::Duration::from_millis(5)).await;
                 txn.commit().await.expect("commit");
@@ -239,4 +240,48 @@ async fn concurrent_allocations_are_distinct_and_consecutive() {
         find(&list, "invoice")["counters"],
         json!([{ "year": 2026, "lastNumber": N }])
     );
+}
+
+#[tokio::test]
+async fn counter_guard_waits_for_an_issue_in_flight() {
+    use sea_orm::ConnectionTrait;
+    let db = TestDb::new().await;
+    let app = router(db.conn.clone());
+
+    // An issue in flight: number allocated and document written, not committed.
+    let txn = db.conn.begin().await.expect("begin");
+    let (number, seq) = allocate_number(&txn, DocType::Invoice, 2026)
+        .await
+        .expect("allocate");
+    txn.execute_unprepared(&format!(
+        "INSERT INTO documents (id, direction, doc_type, status, number, number_year, number_seq, \
+         issue_date, due_date, currency, locale, vat_mode, payment_method) VALUES \
+         (gen_random_uuid(), 'issued', 'invoice', 'issued', '{number}', 2026, {seq}, \
+         '2026-10-01', '2026-10-15', 'CZK', 'cs', 'standard', 'bank_transfer')"
+    ))
+    .await
+    .expect("insert document");
+
+    let put = tokio::spawn({
+        let app = app.clone();
+        async move {
+            call(
+                &app,
+                Method::PUT,
+                "/api/settings/number-series/invoice/counters/2026",
+                Some(json!({ "lastNumber": 0 })),
+            )
+            .await
+        }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert!(
+        !put.is_finished(),
+        "the guard must wait for the counter row lock"
+    );
+    txn.commit().await.expect("commit");
+
+    let (status, body) = put.await.expect("join");
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["fields"], json!({ "lastNumber": "below_issued" }));
 }

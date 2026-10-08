@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use invoice::app::{self, AppState};
 use invoice::ares::AresClient;
+use invoice::cnb::CnbClient;
 use invoice::config::{Config, DbConfig};
 use invoice::migration::{Migrator, MigratorTrait};
 use sea_orm::{Database, DatabaseConnection};
@@ -69,6 +70,7 @@ async fn serve() -> Result<()> {
         db,
         api_token: cfg.api_token,
         ares: AresClient::new(&cfg.ares_url)?,
+        cnb: CnbClient::new(&cfg.cnb_url)?,
     };
     let listener = tokio::net::TcpListener::bind(&cfg.bind)
         .await

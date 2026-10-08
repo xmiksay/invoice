@@ -1,0 +1,83 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { flushPromises, mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
+import { createMemoryHistory, createRouter } from "vue-router";
+import { i18n } from "@/i18n";
+import { mockFetchRoutes } from "@/test-utils";
+import type { DocumentSummary } from "../types";
+import InvoicesListView from "./InvoicesListView.vue";
+
+const summary = (overrides: Partial<DocumentSummary>): DocumentSummary => ({
+  id: "d1",
+  docType: "invoice",
+  direction: "issued",
+  number: "20260001",
+  status: "issued",
+  paymentState: "unpaid",
+  overdue: true,
+  contactId: "c1",
+  customerName: "Acme",
+  issueDate: "2026-09-01",
+  dueDate: "2026-09-15",
+  currency: "EUR",
+  payable: "100.5",
+  paid: "0",
+  sentAt: null,
+  ...overrides,
+});
+
+async function mountList() {
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const stub = { template: "<div />" };
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: "/invoices", name: "invoices", component: InvoicesListView },
+      { path: "/invoices/new", name: "invoice-new", component: stub },
+      { path: "/invoices/:id", name: "invoice-detail", component: stub },
+    ],
+  });
+  await router.push("/invoices");
+  const w = mount({ template: "<RouterView />" }, { global: { plugins: [pinia, i18n, router] } });
+  await flushPromises();
+  return w;
+}
+
+describe("InvoicesListView", () => {
+  beforeEach(() => {
+    i18n.global.locale.value = "en";
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("renders rows with badges and formatted amounts", async () => {
+    mockFetchRoutes({ "GET /api/documents": { items: [summary({}), summary({ id: "d2", number: null, status: "draft", paymentState: null, overdue: false, currency: "CZK" })], total: 2 } });
+    const w = await mountList();
+    const rows = w.findAll('[data-test="invoice-row"]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.text()).toContain("€100.50");
+    expect(rows[0]!.find('[data-test="overdue-badge"]').exists()).toBe(true);
+    expect(rows[1]!.text()).toContain("Draft");
+  });
+
+  it("sends filters; search is debounced and resets paging", async () => {
+    const fetch = mockFetchRoutes({ "GET /api/documents": { items: [], total: 0 } });
+    const w = await mountList();
+    expect(String(fetch.mock.calls[0]?.[0])).toBe("/api/documents?direction=issued&docType=invoice&limit=50&offset=0");
+
+    await w.find("#filter-status").setValue("issued");
+    await w.find("#filter-overdue").setValue(true);
+    await flushPromises();
+    expect(String(fetch.mock.calls.at(-1)?.[0])).toBe("/api/documents?direction=issued&docType=invoice&status=issued&overdue=true&limit=50&offset=0");
+
+    vi.useFakeTimers();
+    const before = fetch.mock.calls.length;
+    await w.find("#invoice-search").setValue("acme");
+    expect(fetch.mock.calls.length).toBe(before);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(String(fetch.mock.calls.at(-1)?.[0])).toContain("q=acme");
+  });
+});

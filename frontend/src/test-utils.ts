@@ -38,3 +38,41 @@ export function mockFetchSequence(...bodies: unknown[]) {
   vi.stubGlobal("fetch", fn);
   return fn;
 }
+
+type RouteReply = unknown | ((body: unknown) => unknown);
+
+/**
+ * Stubs fetch by `"METHOD /path"` (query string ignored). A reply is a JSON body
+ * (200), `{ status, body }` via `reply()`, or a function of the parsed request body.
+ * Unknown routes answer 404 so a missing stub fails loudly.
+ */
+export function mockFetchRoutes(routes: Record<string, RouteReply>) {
+  const fn = vi.fn<typeof fetch>(async (input, init) => {
+    const path = String(input).split("?")[0];
+    const key = `${init?.method ?? "GET"} ${path}`;
+    if (!(key in routes)) return new Response(JSON.stringify({ code: "not_found" }), { status: 404 });
+    const route = routes[key];
+    const body = typeof init?.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+    const value = typeof route === "function" ? (route as (b: unknown) => unknown)(body) : route;
+    const { status, body: payload } = value instanceof Reply ? value : { status: 200, body: value };
+    return status === 204
+      ? new Response(null, { status })
+      : new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
+  });
+  vi.stubGlobal("fetch", fn);
+  return fn;
+}
+
+class Reply {
+  constructor(
+    public readonly status: number,
+    public readonly body?: unknown,
+  ) {}
+}
+
+/** A non-200 reply for `mockFetchRoutes`. */
+export const reply = (status: number, body?: unknown) => new Reply(status, body);
+
+/** `"METHOD url"` of every fetch call, in order. */
+export const calls = (fn: ReturnType<typeof vi.fn<typeof fetch>>) =>
+  fn.mock.calls.map(([url, init]) => `${init?.method ?? "GET"} ${String(url)}`);

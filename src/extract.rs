@@ -19,3 +19,39 @@ pub struct ApiQuery<T>(pub T);
 #[derive(FromRequestParts)]
 #[from_request(via(axum::extract::Path), rejection(AppError))]
 pub struct ApiPath<T>(pub T);
+
+/// An optional JSON body: empty (or whitespace) → `T::default()`, malformed →
+/// 400 `bad_request`. For action routes whose body is all-optional.
+pub fn optional_json<T: serde::de::DeserializeOwned + Default>(body: &[u8]) -> Result<T, AppError> {
+    if body.iter().all(u8::is_ascii_whitespace) {
+        return Ok(T::default());
+    }
+    serde_json::from_slice(body).map_err(|e| AppError::BadRequest(e.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, Default, PartialEq, serde::Deserialize)]
+    struct Body {
+        a: Option<i32>,
+    }
+
+    #[test]
+    fn optional_json_accepts_empty_and_rejects_garbage() {
+        assert_eq!(optional_json::<Body>(b"").expect("empty"), Body::default());
+        assert_eq!(
+            optional_json::<Body>(b" \n").expect("blank"),
+            Body::default()
+        );
+        assert_eq!(
+            optional_json::<Body>(b"{\"a\":1}").expect("json"),
+            Body { a: Some(1) }
+        );
+        assert!(matches!(
+            optional_json::<Body>(b"{"),
+            Err(AppError::BadRequest(_))
+        ));
+    }
+}

@@ -20,7 +20,27 @@ const routes = [
     component: () => import("@/views/LoginView.vue"),
     meta: { public: true },
   },
-  { path: "/", name: "home", component: () => import("@/views/HomeView.vue") },
+  { path: "/", name: "home", redirect: { name: "invoices" } },
+  {
+    path: "/invoices",
+    name: "invoices",
+    component: () => import("@/features/documents/views/InvoicesListView.vue"),
+  },
+  {
+    path: "/invoices/new",
+    name: "invoice-new",
+    component: () => import("@/features/documents/views/InvoiceEditView.vue"),
+  },
+  {
+    path: "/invoices/:id",
+    name: "invoice-detail",
+    component: () => import("@/features/documents/views/InvoiceDetailView.vue"),
+  },
+  {
+    path: "/invoices/:id/edit",
+    name: "invoice-edit",
+    component: () => import("@/features/documents/views/InvoiceEditView.vue"),
+  },
   {
     path: "/contacts",
     name: "contacts",

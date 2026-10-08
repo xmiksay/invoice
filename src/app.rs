@@ -7,15 +7,17 @@ use sea_orm::DatabaseConnection;
 use tower_http::trace::TraceLayer;
 
 use crate::ares::AresClient;
+use crate::cnb::CnbClient;
 use crate::error::AppError;
 use crate::secret::Secret;
-use crate::{ares, auth, contact, health, openapi, settings, spa};
+use crate::{ares, auth, cnb, contact, document, health, openapi, settings, spa};
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: DatabaseConnection,
     pub api_token: Secret<String>,
     pub ares: AresClient,
+    pub cnb: CnbClient,
 }
 
 /// `/api/health` and `/api/openapi.json` are public; every other `/api/*`
@@ -27,6 +29,8 @@ pub fn router(state: AppState) -> Router {
         .nest("/settings", settings::router())
         .nest("/contacts", contact::router())
         .route("/ares/{ico}", get(ares::handlers::lookup))
+        .nest("/documents", document::router())
+        .route("/exchange-rates/{currency}", get(cnb::handlers::get_rate))
         .fallback(api_not_found)
         .layer(middleware::from_fn_with_state(
             state.clone(),

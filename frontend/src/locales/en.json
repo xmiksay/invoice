@@ -1,6 +1,8 @@
 {
   "app": {
-    "name": "Invoices"
+    "name": "Invoices",
+    "backendVersion": "Server version: {version}",
+    "backendUnavailable": "Could not load the server version."
   },
   "nav": {
     "invoices": "Invoices",
@@ -33,13 +35,10 @@
     "conflict": "The record conflicts with an existing one.",
     "validation": "The form contains errors.",
     "aresNotFound": "Subject not found in ARES.",
-    "aresUnavailable": "ARES is unavailable. Try again later."
-  },
-  "home": {
-    "title": "Dashboard",
-    "comingSoon": "Invoices coming soon.",
-    "backendVersion": "Server version: {version}",
-    "backendUnavailable": "Could not load the server version."
+    "aresUnavailable": "ARES is unavailable. Try again later.",
+    "documentLocked": "An issued document can no longer be changed.",
+    "invalidState": "This action is not possible in the document's current state.",
+    "cnbUnavailable": "The ČNB exchange rate service is unavailable. Enter the rate manually."
   },
   "common": {
     "save": "Save",
@@ -63,7 +62,8 @@
     "too_long": "The value is too long.",
     "duplicate": "This value already exists.",
     "invalid_ico": "Invalid company ID (IČO).",
-    "invalid_pattern": "Invalid number pattern."
+    "invalid_pattern": "Invalid number pattern.",
+    "below_issued": "Cannot be lower than the highest number already issued."
   },
   "party": {
     "name": "Name",
@@ -162,6 +162,170 @@
         "yy": "two-digit year (26)",
         "n": "sequence number padded with zeros (0001)"
       }
+    }
+  },
+  "documents": {
+    "draftNumber": "Draft",
+    "overdue": "Overdue",
+    "sent": "Sent",
+    "status": {
+      "draft": "Draft",
+      "issued": "Issued",
+      "cancelled": "Cancelled"
+    },
+    "paymentState": {
+      "unpaid": "Unpaid",
+      "partial": "Partially paid",
+      "paid": "Paid",
+      "overpaid": "Overpaid"
+    },
+    "vatMode": {
+      "standard": "Standard VAT",
+      "reverse_charge": "Reverse charge",
+      "exempt": "VAT exempt",
+      "non_payer": "Not a VAT payer"
+    },
+    "paymentMethod": {
+      "bank_transfer": "Bank transfer",
+      "cash": "Cash",
+      "card": "Card",
+      "other": "Other"
+    },
+    "rateSource": {
+      "cnb": "ČNB",
+      "manual": "manual"
+    },
+    "fields": {
+      "docType": "Document type",
+      "number": "Number",
+      "customer": "Customer",
+      "supplier": "Supplier",
+      "contactId": "Customer",
+      "issueDate": "Issue date",
+      "taxPointDate": "Tax point date",
+      "dueDate": "Due date",
+      "currency": "Currency",
+      "exchangeRate": "Exchange rate (CZK per unit)",
+      "locale": "Document language",
+      "vatMode": "VAT mode",
+      "bankAccountId": "Bank account",
+      "paymentMethod": "Payment method",
+      "variableSymbol": "Variable symbol",
+      "constantSymbol": "Constant symbol",
+      "orderRef": "Order reference",
+      "headerNote": "Text above lines",
+      "footerNote": "Text below lines",
+      "internalNote": "Internal note",
+      "roundTotal": "Round to whole crowns",
+      "lines": "Lines",
+      "date": "Date",
+      "amount": "Amount",
+      "note": "Note",
+      "reason": "Reason",
+      "sentAt": "Sent",
+      "cancelledAt": "Cancelled",
+      "cancelReason": "Cancellation reason"
+    },
+    "list": {
+      "title": "Invoices",
+      "new": "New invoice",
+      "searchPlaceholder": "Search by number, customer or variable symbol",
+      "status": "Status",
+      "anyStatus": "Any status",
+      "paymentState": "Payment",
+      "anyPaymentState": "Any payment state",
+      "from": "Issued from",
+      "to": "Issued to",
+      "overdueOnly": "Overdue only",
+      "empty": "No invoices yet.",
+      "noResults": "No invoices match the filter."
+    },
+    "editor": {
+      "newTitle": "New invoice",
+      "editTitle": "Edit invoice draft",
+      "saveDraft": "Save draft",
+      "newContact": "New contact",
+      "changeContact": "Change",
+      "removeContact": "Remove",
+      "noAccountForCurrency": "No account in {currency}",
+      "roundTotalCzkOnly": "CZK documents only.",
+      "variableSymbolHint": "Empty = derived from the invoice number.",
+      "internalNoteHint": "Never printed on the document.",
+      "manualRate": "Manual rate — overrides ČNB",
+      "manualRateHint": "CZK per unit. Empty = the ČNB rate for the tax point date is fixed at issue.",
+      "indicativeRate": "Indicative ČNB rate for {date}: {rate} (fixed at issue)",
+      "indicativeRateLoading": "Loading the indicative ČNB rate…",
+      "indicativeRateUnknown": "ČNB does not publish a rate for {currency} — enter a manual rate.",
+      "indicativeRateUnavailable": "The ČNB rate cannot be loaded right now; it is fixed at issue, or enter a manual rate."
+    },
+    "line": {
+      "title": "Lines",
+      "empty": "No lines yet.",
+      "addItem": "Item",
+      "addText": "Text",
+      "addSubtotal": "Subtotal",
+      "kinds": {
+        "item": "Item",
+        "text": "Text",
+        "subtotal": "Subtotal"
+      },
+      "description": "Description",
+      "quantity": "Quantity",
+      "unit": "Unit",
+      "unitPrice": "Unit price excl. VAT",
+      "discountPct": "Discount %",
+      "vatRate": "VAT %",
+      "refs": "Lines summed",
+      "kind": "Line type",
+      "collapse": "Show only the subtotal on the document",
+      "collapsed": "collapsed",
+      "noRefOptions": "Add some items first.",
+      "refsInvalid": "Select at least one line (item or subtotal); lines must not form a cycle and must share one VAT rate.",
+      "moveUp": "Move line {n} up",
+      "moveDown": "Move line {n} down",
+      "remove": "Remove line {n}",
+      "rowLabel": "Line {n}",
+      "memberOf": "Part of the subtotal on line {positions}",
+      "atLeastOneItem": "The document needs at least one item."
+    },
+    "totals": {
+      "title": "Summary",
+      "computing": "Recalculating…",
+      "rate": "Rate",
+      "base": "Base",
+      "vat": "VAT",
+      "baseCzk": "Base in CZK",
+      "vatCzk": "VAT in CZK",
+      "total": "Total",
+      "rounding": "Rounding",
+      "payable": "Amount due",
+      "totalCzk": "Amount due in CZK",
+      "atRate": "rate {rate}",
+      "none": "Add some lines.",
+      "fixErrors": "Fix the highlighted fields to recalculate the totals."
+    },
+    "detail": {
+      "title": "Invoice",
+      "backToList": "Back to invoices",
+      "backToDetail": "Back to invoice",
+      "issue": "Issue",
+      "markSent": "Mark as sent",
+      "markSentAgain": "Mark as sent again",
+      "cancel": "Cancel invoice",
+      "confirmIssue": "Issue this invoice? It can no longer be edited afterwards.",
+      "confirmDelete": "Really delete this draft?",
+      "cancelPrompt": "Reason for cancelling invoice {number} (optional):",
+      "cannotProceed": "The action could not be completed:"
+    },
+    "payments": {
+      "title": "Payments",
+      "paid": "Paid",
+      "remaining": "Remaining",
+      "add": "Add payment",
+      "delete": "Delete payment",
+      "empty": "No payments yet.",
+      "confirmDelete": "Really delete this payment?",
+      "addAnother": "Add another payment"
     }
   }
 }

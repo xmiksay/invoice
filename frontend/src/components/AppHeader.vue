@@ -9,14 +9,14 @@ const router = useRouter();
 const route = useRoute();
 
 const links = [
-  { to: "/", label: "nav.invoices" },
+  { to: "/invoices", label: "nav.invoices" },
   { to: "/contacts", label: "nav.contacts" },
   { to: "/settings", label: "nav.settings" },
 ] as const;
 
 // Path prefix match: "/contacts/123" keeps "Contacts" highlighted.
 function isActive(to: string): boolean {
-  return to === "/" ? route.path === "/" : route.path === to || route.path.startsWith(`${to}/`);
+  return route.path === to || route.path.startsWith(`${to}/`);
 }
 const auth = useAuthStore();
 

@@ -1,0 +1,120 @@
+import type { Contact } from "@/features/contacts/types";
+import type { BankAccount, Company, VatRate } from "@/features/settings/types";
+import type { DraftContext } from "./form";
+import type { Document } from "./types";
+
+/** Shared fixtures for the documents feature tests. */
+export const company: Company = {
+  name: "Me s.r.o.",
+  ico: null,
+  dic: null,
+  vatPayer: true,
+  street: "",
+  city: "",
+  zip: "",
+  country: "CZ",
+  email: null,
+  phone: null,
+  web: null,
+  registration: null,
+  defaultDueDays: 14,
+  defaultLocale: "cs",
+};
+
+export const vatRates: VatRate[] = [
+  { id: "v21", rate: "21", label: "Základní", isDefault: true, active: true, position: 1 },
+  { id: "v12", rate: "12", label: "Snížená", isDefault: false, active: true, position: 2 },
+  { id: "v0", rate: "0", label: "Nulová", isDefault: false, active: false, position: 3 },
+];
+
+const account = (id: string, currency: string, isDefault: boolean): BankAccount => ({
+  id,
+  label: id,
+  currency,
+  accountNumber: "1234/0100",
+  iban: null,
+  bic: null,
+  isDefault,
+});
+export const bankAccounts: BankAccount[] = [account("czk-a", "CZK", false), account("czk-b", "CZK", true), account("eur", "EUR", true)];
+
+export const ctx = (overrides: Partial<DraftContext> = {}): DraftContext => ({
+  company,
+  vatRates,
+  bankAccounts,
+  today: "2026-10-08",
+  ...overrides,
+});
+
+export const contact = (overrides: Partial<Contact> = {}): Contact => ({
+  id: "c1",
+  name: "Acme",
+  ico: null,
+  dic: null,
+  street: "",
+  city: "",
+  zip: "",
+  country: "CZ",
+  email: null,
+  phone: null,
+  note: null,
+  defaultDueDays: null,
+  defaultLocale: null,
+  defaultCurrency: null,
+  createdAt: "",
+  updatedAt: "",
+  ...overrides,
+});
+
+export const totals = (payable = "1210.00") => ({
+  recap: [{ vatRate: "21", base: "1000.00", vat: "210.00", baseCzk: null, vatCzk: null }],
+  base: "1000.00",
+  vat: "210.00",
+  total: payable,
+  rounding: "0",
+  payable,
+  totalCzk: null,
+});
+
+export const document = (overrides: Partial<Document> = {}): Document => ({
+  id: "d1",
+  docType: "invoice",
+  direction: "issued",
+  contactId: "c1",
+  issueDate: "2026-10-01",
+  taxPointDate: "2026-10-01",
+  dueDate: "2026-10-15",
+  currency: "CZK",
+  exchangeRate: null,
+  locale: "cs",
+  vatMode: "standard",
+  bankAccountId: "czk-b",
+  paymentMethod: "bank_transfer",
+  variableSymbol: null,
+  constantSymbol: null,
+  orderRef: null,
+  headerNote: null,
+  footerNote: null,
+  internalNote: null,
+  roundTotal: false,
+  number: null,
+  status: "draft",
+  paymentState: null,
+  overdue: false,
+  sentAt: null,
+  cancelledAt: null,
+  cancelReason: null,
+  exchangeRateDate: null,
+  exchangeRateSource: null,
+  supplier: null,
+  customer: null,
+  bankSnapshot: null,
+  lines: [
+    { kind: "item", description: "Work", quantity: "1", unit: null, unitPrice: "1000", discountPct: "0", vatRate: "21", position: 1, base: "1000.00" },
+  ],
+  totals: totals(),
+  paid: "0.00",
+  createdAt: "",
+  updatedAt: "",
+  ...overrides,
+});

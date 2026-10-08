@@ -1,0 +1,183 @@
+//! Read paths: one document with its lines and recap, and the filtered list.
+
+use chrono::NaiveDate;
+use sea_orm::sea_query::extension::postgres::PgExpr;
+use sea_orm::sea_query::{Condition, Expr, NullOrdering, Order, SimpleExpr};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
+    QueryOrder, QuerySelect, Select,
+};
+use uuid::Uuid;
+
+use super::lines;
+use crate::contact::handlers::dto::like_pattern;
+use crate::document::entity::document::{self, Column, Entity};
+use crate::document::entity::{document_line, vat_recap};
+use crate::document::handlers::dto::ListQuery;
+use crate::document::line::{LineData, PaymentState};
+use crate::error::AppError;
+
+/// A document with its lines (by position) and stored recap rows.
+pub struct Full {
+    pub doc: document::Model,
+    pub lines: Vec<LineData>,
+    pub recap: Vec<vat_recap::Model>,
+}
+
+pub async fn find<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<document::Model, AppError> {
+    Entity::find_by_id(id)
+        .one(db)
+        .await?
+        .ok_or(AppError::NotFound)
+}
+
+/// The document row, locked until the transaction ends.
+pub async fn lock<C: ConnectionTrait>(txn: &C, id: Uuid) -> Result<document::Model, AppError> {
+    Entity::find_by_id(id)
+        .lock_exclusive()
+        .one(txn)
+        .await?
+        .ok_or(AppError::NotFound)
+}
+
+pub async fn load_lines<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<Vec<LineData>, AppError> {
+    document_line::Entity::find()
+        .filter(document_line::Column::DocumentId.eq(id))
+        .order_by_asc(document_line::Column::Position)
+        .all(db)
+        .await?
+        .into_iter()
+        .map(lines::to_data)
+        .collect()
+}
+
+pub async fn load<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<Full, AppError> {
+    let doc = find(db, id).await?;
+    let lines = load_lines(db, id).await?;
+    let recap = vat_recap::Entity::find()
+        .filter(vat_recap::Column::DocumentId.eq(id))
+        .order_by_desc(vat_recap::Column::VatRate)
+        .all(db)
+        .await?;
+    Ok(Full { doc, lines, recap })
+}
+
+fn issued() -> SimpleExpr {
+    Column::Status.eq("issued")
+}
+
+/// SQL mirror of [`crate::document::state::payment_state`] (`paid >= 0`).
+fn payment_state_cond(state: PaymentState) -> Condition {
+    let paid = || Expr::col(Column::Paid);
+    let payable = || Expr::col(Column::Payable);
+    let cond = match state {
+        PaymentState::Unpaid => Condition::all().add(paid().eq(0)).add(payable().gt(0)),
+        PaymentState::Partial => Condition::all().add(paid().gt(0)).add(paid().lt(payable())),
+        PaymentState::Paid => Condition::any()
+            .add(paid().eq(payable()))
+            .add(Condition::all().add(paid().eq(0)).add(payable().lt(0))),
+        PaymentState::Overpaid => Condition::all().add(paid().gt(payable())).add(paid().gt(0)),
+    };
+    Condition::all().add(issued()).add(cond)
+}
+
+/// SQL mirror of [`crate::document::state::is_overdue`].
+fn overdue_cond(today: NaiveDate) -> Condition {
+    Condition::all()
+        .add(issued())
+        .add(Expr::col(Column::Paid).lt(Expr::col(Column::Payable)))
+        .add(Column::DueDate.lt(today))
+}
+
+fn search(term: &str) -> Condition {
+    let pattern = like_pattern(term);
+    let live_name = Expr::cust_with_values(
+        "customer_snapshot IS NULL AND EXISTS (SELECT 1 FROM contacts c \
+         WHERE c.id = documents.contact_id AND c.name ILIKE $1)",
+        [pattern.clone()],
+    );
+    Condition::any()
+        .add(Expr::col(Column::Number).ilike(pattern.clone()))
+        .add(Expr::col(Column::VariableSymbol).ilike(pattern.clone()))
+        .add(Expr::cust_with_values(
+            "customer_snapshot->>'name' ILIKE $1",
+            [pattern],
+        ))
+        .add(live_name)
+}
+
+fn filtered(q: &ListQuery, term: Option<&str>, today: NaiveDate) -> Select<Entity> {
+    let mut cond = Condition::all();
+    if let Some(d) = &q.direction {
+        cond = cond.add(Column::Direction.eq(d.as_str()));
+    }
+    if let Some(t) = &q.doc_type {
+        cond = cond.add(Column::DocType.eq(t.as_str()));
+    }
+    if let Some(s) = q.status {
+        cond = cond.add(Column::Status.eq(s.as_str()));
+    }
+    if let Some(p) = q.payment_state {
+        cond = cond.add(payment_state_cond(p));
+    }
+    match q.overdue {
+        Some(true) => cond = cond.add(overdue_cond(today)),
+        Some(false) => cond = cond.add(overdue_cond(today).not()),
+        None => {}
+    }
+    if let Some(c) = q.contact_id {
+        cond = cond.add(Column::ContactId.eq(c));
+    }
+    if let Some(t) = term {
+        cond = cond.add(search(t));
+    }
+    if let Some(from) = q.from {
+        cond = cond.add(Column::IssueDate.gte(from));
+    }
+    if let Some(to) = q.to {
+        cond = cond.add(Column::IssueDate.lte(to));
+    }
+    Entity::find().filter(cond)
+}
+
+/// One page of matching documents and the total match count, ordered
+/// `issueDate desc, number desc nulls first, createdAt desc`.
+pub async fn list(
+    db: &DatabaseConnection,
+    q: &ListQuery,
+    term: Option<&str>,
+    limit: u64,
+    offset: u64,
+    today: NaiveDate,
+) -> Result<(Vec<document::Model>, u64), AppError> {
+    let total = filtered(q, term, today).count(db).await?;
+    let items = filtered(q, term, today)
+        .order_by_desc(Column::IssueDate)
+        .order_by_with_nulls(Column::Number, Order::Desc, NullOrdering::First)
+        .order_by_desc(Column::CreatedAt)
+        .order_by_desc(Column::Id)
+        .limit(limit)
+        .offset(offset)
+        .all(db)
+        .await?;
+    Ok((items, total))
+}
+
+/// Highest `number_seq` issued from `doc_type`'s series in `year`
+/// (imported documents keep their own numbers and are ignored).
+pub async fn highest_issued_seq<C: ConnectionTrait>(
+    db: &C,
+    doc_type: crate::settings::doc_type::DocType,
+    year: i32,
+) -> Result<Option<i32>, AppError> {
+    let max: Option<Option<i32>> = Entity::find()
+        .select_only()
+        .column_as(Column::NumberSeq.max(), "max")
+        .filter(Column::DocType.eq(doc_type.as_str()))
+        .filter(Column::NumberYear.eq(year))
+        .filter(Column::Imported.eq(false))
+        .into_tuple()
+        .one(db)
+        .await?;
+    Ok(max.flatten())
+}
