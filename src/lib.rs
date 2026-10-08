@@ -11,6 +11,7 @@ pub mod extract;
 pub mod health;
 pub mod migration;
 pub mod openapi;
+pub mod pdf;
 pub mod secret;
 pub mod settings;
 pub mod spa;

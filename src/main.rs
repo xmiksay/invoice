@@ -5,6 +5,7 @@ use invoice::ares::AresClient;
 use invoice::cnb::CnbClient;
 use invoice::config::{Config, DbConfig};
 use invoice::migration::{Migrator, MigratorTrait};
+use invoice::pdf::PdfService;
 use sea_orm::{Database, DatabaseConnection};
 use tracing_subscriber::EnvFilter;
 
@@ -71,6 +72,12 @@ async fn serve() -> Result<()> {
         api_token: cfg.api_token,
         ares: AresClient::new(&cfg.ares_url)?,
         cnb: CnbClient::new(&cfg.cnb_url)?,
+        pdf: PdfService::new(
+            &cfg.mdcast_url,
+            cfg.mdcast_token.as_ref().map(|t| t.expose().as_str()),
+            cfg.design_dir.clone(),
+            cfg.storage_dir.clone(),
+        )?,
     };
     let listener = tokio::net::TcpListener::bind(&cfg.bind)
         .await

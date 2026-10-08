@@ -121,6 +121,7 @@ export const document = (overrides: Partial<Document> = {}): Document => ({
   relatedDocuments: [],
   settled: null,
   sign: 1,
+  pdf: null,
   createdAt: "",
   updatedAt: "",
   ...overrides,

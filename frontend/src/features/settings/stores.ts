@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, type Ref } from "vue";
-import { bankAccountsApi, companyApi, numberSeriesApi, vatRatesApi, type CrudApi } from "./api";
-import type { BankAccount, BankAccountInput, Company, DocType, NumberSeries, VatRate, VatRateInput } from "./types";
+import { bankAccountsApi, companyApi, numberSeriesApi, pdfApi, vatRatesApi, type CrudApi } from "./api";
+import type { BankAccount, BankAccountInput, Company, DesignInfo, DocType, NumberSeries, VatRate, VatRateInput } from "./types";
 
 export const useCompanyStore = defineStore("settings/company", () => {
   const company = ref<Company | null>(null);
@@ -75,4 +75,15 @@ export const useNumberSeriesStore = defineStore("settings/numberSeries", () => {
   }
 
   return { series, load, savePattern, setCounter };
+});
+
+/** Read-only: the design dir is re-read by the server on every render, so this reloads on each visit. */
+export const useDesignStore = defineStore("settings/design", () => {
+  const design = ref<DesignInfo | null>(null);
+
+  async function load(): Promise<void> {
+    design.value = await pdfApi.design();
+  }
+
+  return { design, load };
 });

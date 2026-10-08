@@ -51,6 +51,8 @@ describe("router auth guard", () => {
     expect(router.currentRoute.value.name).toBe("settings-company");
     await router.push("/settings/number-series");
     expect(router.currentRoute.value.name).toBe("settings-number-series");
+    await router.push("/settings/design");
+    expect(router.currentRoute.value.name).toBe("settings-design");
     await router.push("/contacts/new");
     expect(router.currentRoute.value.name).toBe("contact-new");
     await router.push("/contacts/abc");

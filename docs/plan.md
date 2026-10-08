@@ -22,7 +22,7 @@ no OAuth, no stock/task/cost-center links). Module layout follows the infra
 | Exchange rate | ČNB daily rate at the tax point date (received invoices: date of receipt), stored on the invoice, manually overridable; if ČNB is unreachable the user must enter it. |
 | Numbering | Configurable pattern per document type, e.g. `{YYYY}{NNNN}`, yearly reset, number assigned at issue (drafts have none). Counter is manually settable in Settings. Imported invoices keep their own number and do **not** move the counter. |
 | Lifecycle | `draft → issued → sent → paid`, `cancelled`. On issue the invoice is locked, supplier/customer snapshots are stored and the PDF is rendered and archived; issuing fails if mdcast is down. "Overdue" is derived, never stored. Payments: date + amount. |
-| PDF | mdcast `/v1/render/template` (typst + JSON data). Default design embedded in the binary; `INVOICE__DESIGN_DIR` (sub-directory on the PVC) overrides it file by file (`brand.toml`, `invoice.typ`, fonts, logo). Preview endpoint renders a sample invoice. Invoice language cs/en per document. SPAYD QR payment code. |
+| PDF | mdcast `/v1/render/template` (typst + JSON data). Default design (minimalist, Inter) embedded in the binary; `INVOICE__DESIGN_DIR` (sub-directory on the PVC) overrides it file by file (`invoice.typ`, fonts, logo, signature). Preview of a sample invoice in Settings → Design. Invoice language cs/en per document. SPAYD QR payment code. Details: [api/pdf.md](api/pdf.md). |
 | Received invoices | Metadata entered manually + original PDF upload. |
 | File storage | Filesystem, `INVOICE__STORAGE_DIR` (PVC); DB keeps path + sha256. |
 | Contacts | One address book for customers and suppliers, ARES lookup by IČO. Invoices store a snapshot, so editing/deleting a contact never changes an invoice. ISDOC import matches contacts by IČO or creates one. |
@@ -62,6 +62,13 @@ Document decisions (1b/1c):
 - Credit notes: only for an issued (not cancelled) invoice, correction reason required, tax point = correction date, exchange rate copied from the original invoice, and all non-cancelled credit notes together may not exceed the original's base per VAT rate.
 - Catalog items carry name, unit, price, currency and VAT rate; inserting into a document in another currency leaves the price empty (no conversion). Catalog groups = name + member items with quantities; inserting adds the members plus a collapsed subtotal.
 - Setting a number-series counter below the highest number already issued from that series/year is rejected.
+
+PDF decisions (1d):
+- Drafts can be downloaded as a live render with a "NÁVRH / DRAFT" watermark (no QR, never stored).
+- The PDF archived at issue is immutable — never re-rendered (not after cancel, not after a design change).
+- Issuing fails (nothing changes) when mdcast is unavailable; an auto-issued DDPP does not block the payment — its PDF is rendered right after the payment, or on first download.
+- SPAYD QR only on invoices and proformas paid by bank transfer with an IBAN and a positive payable amount (any currency).
+- `INVOICE__MDCAST_URL` defaults to `https://mdcast.nexial.cz`.
 
 ### Phase 2 — interchange
 ISDOC export, CSV/XLSX bulk import (fixed documented template, sample downloadable

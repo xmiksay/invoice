@@ -16,11 +16,13 @@ use invoice::app::{self, AppState};
 use invoice::ares::{AresClient, DEFAULT_ARES_URL};
 use invoice::cnb::{CnbClient, DEFAULT_CNB_URL};
 use invoice::migration::{Migrator, MigratorTrait};
+use invoice::pdf::PdfService;
 use invoice::secret::Secret;
 use sea_orm::{ConnectOptions, ConnectionTrait, Database, DatabaseConnection};
 use tower::ServiceExt;
 
 pub mod documents;
+pub mod mdcast;
 
 pub const TEST_TOKEN: &str = "test-token-0123456789";
 
@@ -126,13 +128,45 @@ pub fn router_with_cnb(db: DatabaseConnection, cnb_url: &str) -> Router {
     router_with(db, DEFAULT_ARES_URL, cnb_url)
 }
 
+/// Every router renders PDFs against its own mock mdcast (never the real
+/// service) into a storage dir shared by the test binary — archive paths
+/// contain the document id, so tests cannot collide.
 pub fn router_with(db: DatabaseConnection, ares_url: &str, cnb_url: &str) -> Router {
-    app::router(AppState {
+    let (mdcast_url, _) = mdcast::spawn();
+    app::router(state(
+        db,
+        ares_url,
+        cnb_url,
+        pdf_service(&mdcast_url, None, &shared_storage()),
+    ))
+}
+
+pub fn shared_storage() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("storage")
+}
+
+pub fn pdf_service(
+    mdcast_url: &str,
+    design_dir: Option<&std::path::Path>,
+    storage: &std::path::Path,
+) -> PdfService {
+    PdfService::new(
+        mdcast_url,
+        None,
+        design_dir.map(std::path::Path::to_path_buf),
+        storage.to_path_buf(),
+    )
+    .expect("build PDF service")
+}
+
+pub fn state(db: DatabaseConnection, ares_url: &str, cnb_url: &str, pdf: PdfService) -> AppState {
+    AppState {
         db,
         api_token: Secret::new(TEST_TOKEN.to_string()),
         ares: AresClient::new(ares_url).expect("build ARES client"),
         cnb: CnbClient::new(cnb_url).expect("build ČNB client"),
-    })
+        pdf,
+    }
 }
 
 pub async fn send(app: Router, req: Request<Body>) -> Response<Body> {

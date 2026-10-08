@@ -155,8 +155,15 @@ export interface Document extends Omit<DocumentInput, "lines"> {
   settled: boolean | null;
   /** -1 for credit notes: amounts are stored positive, shown negated. */
   sign: Sign;
+  /** The archived PDF (written at issue; a DDPP's possibly on first download). Drafts: null. */
+  pdf: PdfArchive | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PdfArchive {
+  sha256: string;
+  renderedAt: string;
 }
 
 export type Sign = 1 | -1;

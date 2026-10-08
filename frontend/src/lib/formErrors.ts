@@ -43,6 +43,8 @@ const KNOWN_CODES: Record<string, string> = {
   advance_settled: "errors.advanceSettled",
   advance_in_use: "errors.advanceInUse",
   catalog_item_in_use: "errors.catalogItemInUse",
+  pdf_unavailable: "errors.pdfUnavailable",
+  pdf_render_failed: "errors.pdfRenderFailed",
 };
 
 /** i18n key + params for a non-field error message. */
@@ -54,6 +56,11 @@ export function errorMessageKey(err: unknown): { key: string; params?: Record<st
     return { key: "errors.unexpected", params: { code: err.code } };
   }
   return { key: "errors.unexpected", params: { code: "unknown" } };
+}
+
+/** Diagnostic text the server attached to the error (502 `pdf_render_failed`), else null. */
+export function errorDetailOf(err: unknown): string | null {
+  return err instanceof ApiError ? err.detail : null;
 }
 
 /** Builds field errors from simple predicate checks: `{ field: reason | null }`. */

@@ -12,5 +12,6 @@
   "notSet": "Nenastaveno",
   "range": "{from}–{to} z {total}",
   "prev": "Předchozí",
-  "next": "Další"
+  "next": "Další",
+  "details": "Podrobnosti"
 }

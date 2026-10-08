@@ -43,7 +43,8 @@ type RouteReply = unknown | ((body: unknown) => unknown);
 
 /**
  * Stubs fetch by `"METHOD /path"` (query string ignored). A reply is a JSON body
- * (200), `{ status, body }` via `reply()`, or a function of the parsed request body.
+ * (200), `{ status, body }` via `reply()`, a ready `Response` (binary, e.g. `pdfReply()`),
+ * or a function of the parsed request body.
  * Unknown routes answer 404 so a missing stub fails loudly.
  */
 export function mockFetchRoutes(routes: Record<string, RouteReply>) {
@@ -54,6 +55,7 @@ export function mockFetchRoutes(routes: Record<string, RouteReply>) {
     const route = routes[key];
     const body = typeof init?.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
     const value = typeof route === "function" ? (route as (b: unknown) => unknown)(body) : route;
+    if (value instanceof Response) return value;
     const { status, body: payload } = value instanceof Reply ? value : { status: 200, body: value };
     return status === 204
       ? new Response(null, { status })
@@ -76,3 +78,13 @@ export const reply = (status: number, body?: unknown) => new Reply(status, body)
 /** `"METHOD url"` of every fetch call, in order. */
 export const calls = (fn: ReturnType<typeof vi.fn<typeof fetch>>) =>
   fn.mock.calls.map(([url, init]) => `${init?.method ?? "GET"} ${String(url)}`);
+
+/** A `200 application/pdf` response; pass a filename to send `Content-Disposition`. */
+export const pdfReply = (filename?: string, disposition = "inline") =>
+  new Response("%PDF-1.7", {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      ...(filename ? { "Content-Disposition": `${disposition}; filename="${filename}"` } : {}),
+    },
+  });

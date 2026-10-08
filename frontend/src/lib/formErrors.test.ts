@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/api/client";
 import {
   collectErrors,
+  errorDetailOf,
   errorMessageKey,
   fieldErrorsOf,
   nullIfEmpty,
@@ -68,5 +69,18 @@ describe("helpers", () => {
   it("nullIfEmpty trims and nulls blanks", () => {
     expect(nullIfEmpty("  ")).toBeNull();
     expect(nullIfEmpty(" x ")).toBe("x");
+  });
+});
+
+describe("pdf errors", () => {
+  it("maps the PDF codes before the generic unreachable statuses", () => {
+    expect(errorMessageKey(new ApiError(503, "pdf_unavailable")).key).toBe("errors.pdfUnavailable");
+    expect(errorMessageKey(new ApiError(502, "pdf_render_failed", {}, "typst")).key).toBe("errors.pdfRenderFailed");
+  });
+
+  it("errorDetailOf returns the server detail only", () => {
+    expect(errorDetailOf(new ApiError(502, "pdf_render_failed", {}, "line 3: unknown"))).toBe("line 3: unknown");
+    expect(errorDetailOf(new ApiError(503, "pdf_unavailable"))).toBeNull();
+    expect(errorDetailOf(new Error("boom"))).toBeNull();
   });
 });

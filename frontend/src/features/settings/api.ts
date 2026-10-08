@@ -1,8 +1,10 @@
-import { request } from "@/api/client";
+import { request, requestBlob } from "@/api/client";
+import type { DocLocale } from "@/api/types";
 import type {
   BankAccount,
   BankAccountInput,
   Company,
+  DesignInfo,
   DocType,
   NumberSeries,
   VatRate,
@@ -46,4 +48,10 @@ export const numberSeriesApi = {
       method: "PUT",
       body: { lastNumber },
     }),
+};
+
+export const pdfApi = {
+  design: () => request<DesignInfo>("/api/pdf/design"),
+  /** Sample invoice rendered with the current design; never stored. */
+  preview: (locale: DocLocale) => requestBlob(`/api/pdf/preview?${new URLSearchParams({ locale }).toString()}`),
 };

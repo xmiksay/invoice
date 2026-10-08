@@ -1,0 +1,27 @@
+{
+  "open": "PDF",
+  "preview": "Náhled PDF",
+  "download": "Stáhnout PDF",
+  "loading": "Připravuji PDF…",
+  "draftHint": "Koncept: PDF je jen náhled s vodoznakem „NÁVRH“, neukládá se.",
+  "archivedAt": "PDF archivováno {date}",
+  "issueUnavailable": "Služba pro PDF je nedostupná – doklad nebyl vystaven.",
+  "issueRenderFailed": "Vykreslení PDF selhalo – doklad nebyl vystaven.",
+  "design": {
+    "dir": "Adresář designu",
+    "builtIn": "vestavěný design",
+    "help": "Výchozí design je součástí aplikace. Soubory v adresáři INVOICE__DESIGN_DIR jej přepisují soubor po souboru (stejná relativní cesta vyhrává): šablona invoice.typ, písma ve fonts/, logo logo.svg nebo logo.png, razítko či podpis signature.png. Změny se projeví při dalším vykreslení bez restartu; už archivovaná PDF zůstávají beze změny.",
+    "files": "Použité soubory",
+    "path": "Cesta",
+    "source": "Původ",
+    "size": "Velikost",
+    "sources": {
+      "custom": "vlastní",
+      "default": "výchozí"
+    },
+    "empty": "Žádné soubory.",
+    "previewCs": "Náhled CZ",
+    "previewEn": "Náhled EN",
+    "previewHint": "Ukázková faktura s údaji vaší firmy, nic se neukládá."
+  }
+}

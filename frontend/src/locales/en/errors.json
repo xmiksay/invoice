@@ -12,5 +12,7 @@
   "cnbUnavailable": "The ČNB exchange rate service is unavailable. Enter the rate manually.",
   "advanceSettled": "The payment cannot be deleted: its tax document is already deducted by an issued final invoice.",
   "advanceInUse": "The payment cannot be deleted: its advance is deducted by a draft final invoice. Remove the advance line from that draft first.",
-  "catalogItemInUse": "The item cannot be deleted: it is the only item of a group. Edit or delete the group first."
+  "catalogItemInUse": "The item cannot be deleted: it is the only item of a group. Edit or delete the group first.",
+  "pdfUnavailable": "The PDF service is unavailable. Try again later.",
+  "pdfRenderFailed": "Rendering the PDF failed. Check the design template."
 }

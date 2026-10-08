@@ -8,6 +8,7 @@ const tabs = [
   { name: "settings-bank-accounts", label: "settings.tabs.bankAccounts" },
   { name: "settings-vat-rates", label: "settings.tabs.vatRates" },
   { name: "settings-number-series", label: "settings.tabs.numberSeries" },
+  { name: "settings-design", label: "settings.tabs.design" },
 ] as const;
 </script>
 

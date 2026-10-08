@@ -12,6 +12,7 @@ use crate::document::line::MAX_AMOUNT;
 use crate::document::repo::payments::{self as repo, NewPayment, WithAdvance};
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::{ApiJson, ApiPath};
+use crate::pdf::archive;
 use crate::time::today;
 use crate::validation as v;
 
@@ -94,6 +95,9 @@ pub async fn create(
     ApiJson(input): ApiJson<PaymentInput>,
 ) -> Result<(StatusCode, Json<Payment>), AppError> {
     let row = repo::create(&state.db, &state.cnb, id, input.validate()?, today()).await?;
+    if let Some(ddpp) = row.1 {
+        archive::spawn_archive_ddpp(state.db.clone(), state.pdf.clone(), ddpp);
+    }
     Ok((StatusCode::CREATED, Json(row.into())))
 }
 

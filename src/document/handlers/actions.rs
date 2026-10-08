@@ -26,13 +26,15 @@ use crate::validation as v;
         (status = 404, body = ErrorBody),
         (status = 409, description = "`invalid_state` (not a draft)", body = ErrorBody),
         (status = 422, description = "Not issuable (contactId, lines, dueDate, taxPointDate, bankAccountId, exchangeRate, correctionReason, lines.N.advanceDocumentId, lines: exceeds_original)", body = ErrorBody),
+        (status = 502, description = "`pdf_render_failed` (+ `detail`); nothing issued", body = ErrorBody),
+        (status = 503, description = "`pdf_unavailable`; nothing issued", body = ErrorBody),
     )
 )]
 pub async fn issue(
     State(state): State<AppState>,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<Document>, AppError> {
-    issue_repo::issue(&state.db, &state.cnb, id, today()).await?;
+    issue_repo::issue(&state.db, &state.cnb, &state.pdf, id, today()).await?;
     Ok(Json(fetch(&state, id).await?))
 }
 

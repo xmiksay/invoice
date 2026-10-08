@@ -31,6 +31,7 @@ pub fn router() -> Router<AppState> {
                 .delete(documents::delete),
         )
         .route("/{id}/issue", post(actions::issue))
+        .route("/{id}/pdf", get(crate::pdf::handlers::document_pdf))
         .route("/{id}/cancel", post(actions::cancel))
         .route("/{id}/mark-sent", post(actions::mark_sent))
         .route("/{id}/internal-note", put(actions::internal_note))

@@ -101,6 +101,13 @@ pub fn document(full: Full, today: NaiveDate) -> Result<Document, AppError> {
     Ok(Document {
         payment_state: state::document_payment_state(&d.doc_type, status, d.paid, d.payable),
         sign: dto::sign(&d.doc_type),
+        pdf: match (d.pdf_sha256.clone(), d.pdf_rendered_at) {
+            (Some(sha256), Some(rendered_at)) => Some(dto::PdfArchive {
+                sha256,
+                rendered_at,
+            }),
+            _ => None,
+        },
         settled,
         related_documents,
         parent,
