@@ -57,6 +57,10 @@ Document decisions (1b/1c):
 - Issued documents are locked: only payments, mark-sent, cancel, credit note and the internal note change afterwards. Drafts can be deleted.
 - ČNB rate is fixed at issue for the tax point date (latest published on or before it) unless entered manually; cached in `exchange_rates`; ČNB down + no manual rate → issue fails with 422.
 - Proforma payments by a VAT payer automatically issue a DDPP (tax point = payment date, VAT from above, split proportionally by the proforma's rates); the final invoice deducts DDPPs per rate (non-payer: deducts the paid amount).
+- Deleting a proforma payment cancels its DDPP (reason recorded); refused once that DDPP is deducted by an issued final invoice.
+- Foreign-currency proforma payments take an optional manual rate; without it the ČNB rate for the payment date is used, and if ČNB is down the payment is rejected (422) so no DDPP is half-created.
+- Credit notes: only for an issued (not cancelled) invoice, correction reason required, tax point = correction date, exchange rate copied from the original invoice, and all non-cancelled credit notes together may not exceed the original's base per VAT rate.
+- Catalog items carry name, unit, price, currency and VAT rate; inserting into a document in another currency leaves the price empty (no conversion). Catalog groups = name + member items with quantities; inserting adds the members plus a collapsed subtotal.
 - Setting a number-series counter below the highest number already issued from that series/year is rejected.
 
 ### Phase 2 — interchange

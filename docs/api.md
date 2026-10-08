@@ -322,3 +322,103 @@ Number series
 - The counter guard counts every non-imported document of that docType and `numberYear` with a number (cancelled
   included — their numbers stay used). The counter `PUT` locks the counter row (creating it if missing) before
   checking, so it waits for an issue in flight and sees its number.
+
+---
+
+# Phase 1c — advances, DDPP, credit notes, catalog
+
+Creatable doc types grow to `invoice` and `proforma` (POST). `advance_tax_doc` (DDPP) is only ever created by the
+server; `credit_note` only via the credit-note endpoint. Everything below extends the 1b contract.
+
+## Document additions
+```
+DocumentInput += {
+  docType: "invoice" | "proforma" | "credit_note",   // credit_note only valid on PUT of a credit-note draft
+  correctionReason: string|null                       // credit_note only; required at issue; <=500
+}
+DocumentLine += | { kind: "advance", advanceDocumentId: uuid }
+  // response adds: description (server-generated, e.g. "Odpočet zálohy DP20260003" / en), base: string (negative),
+  // recap: [{ vatRate, base, vat }] (negative values, the deducted amounts per rate)
+Document += {
+  relatedDocumentId: uuid|null,            // credit_note → invoice, invoice → proforma it settles, DDPP → proforma
+  paymentId: uuid|null,                    // DDPP only: the proforma payment it documents
+  relatedDocuments: [{ id, docType, number, status, payable }],  // documents whose relatedDocumentId = this id
+  settled: boolean|null,                   // proforma only: a non-cancelled invoice settles it
+  sign: 1 | -1                             // -1 for credit_note (amounts are stored positive)
+}
+DocumentSummary += { sign, relatedDocumentId }
+Payment += { exchangeRate: string|null /* request-only, proforma in foreign currency */, advanceDocumentId: uuid|null /* response: the DDPP it created */ }
+```
+
+## Proforma
+- Not a tax document: `taxPointDate` must be null (422 `invalid` otherwise); numbered from the `proforma` series at issue.
+  Other rules as an invoice (lines, vatMode, bank account, lock after issue, cancel).
+- Cancel is refused (409 `invalid_state`) while it has payments.
+
+## DDPP (automatic)
+When a payment is added to an issued proforma **and** the proforma's supplier snapshot has `vatPayer = true` **and**
+`vatMode = "standard"`, the same transaction issues an `advance_tax_doc`:
+- number from the `advance_tax_doc` series (year of the payment date); `issueDate = taxPointDate = dueDate = payment.date`;
+  contact, customer/supplier/bank snapshots, currency, locale, vatMode copied from the proforma; `relatedDocumentId` =
+  proforma, `paymentId` = payment.
+- Exchange rate (foreign currency): `payment.exchangeRate` if given (source `manual`), else ČNB for the payment date
+  (fetched **before** the transaction); none available → 422 `{"fields":{"exchangeRate":"required"}}` and the payment
+  is not stored.
+- Amounts — VAT from above, split by the proforma's recap: gross per rate `G_r = base_r + vat_r`, `T = Σ G_r`.
+  Share `P_r = round2(P × G_r / T)` for every rate except the highest-gross one, which gets `P − Σ others` (so the
+  shares sum to P exactly). `vat_r = round2(P_r × rate / (100 + rate))`, `base_r = P_r − vat_r`.
+  Stored as one item line per rate: description "Přijatá záloha k zálohové faktuře {number}" (en: "Advance payment
+  received for proforma {number}"), quantity 1, unitPrice = `base_r`, vatRate = rate; its stored recap is exactly
+  (`base_r`, `vat_r`) — the server must not recompute VAT for a DDPP from base × rate.
+- A DDPP has no payments of its own (`paymentState` null), cannot be edited, and cannot be cancelled directly (409
+  `invalid_state`).
+- `DELETE /api/documents/{proformaId}/payments/{paymentId}` cancels the linked DDPP (`cancelReason` "Platba smazána" /
+  stored as given, `cancelledAt` now) in the same transaction; if that DDPP is deducted by an issued, non-cancelled
+  invoice → 409 `{"code":"advance_settled"}` and nothing changes.
+
+## Settlement (final invoice)
+`POST /api/documents/{proformaId}/settle` → 201 Document: a draft `invoice` with header + lines copied from the
+proforma (taxPointDate = today), `relatedDocumentId` = proforma, plus:
+- payer case: one `advance` line per issued (non-cancelled) DDPP of the proforma;
+- non-payer / non-standard vatMode: one `advance` line with `advanceDocumentId` = the proforma itself, deducting
+  `proforma.paid` with zero VAT (recap row at rate "0").
+Only for an issued proforma that is not yet `settled` (else 409 `invalid_state`).
+
+Advance line rules (save, compute, issue): the referenced document must be an issued DDPP of the same contact and
+currency (or, for the non-payer form, the related proforma itself); a DDPP may be referenced by at most one
+non-cancelled invoice (422 `lines.N.advanceDocumentId: invalid` / `duplicate`). Only `invoice` documents may hold
+advance lines.
+
+Totals with advances (extends 1b computation): per rate `base_r = Σ item base − Σ advance base`,
+`vat_r = round2(Σ item base × rate/100) − Σ advance vat` (standard mode; other modes vat 0);
+`total = Σ base_r + Σ vat_r`; rounding/payable as in 1b; `payable` may be 0 or negative (overpaid advance).
+CZK (foreign currency): item part at the invoice rate, advance part at each DDPP's own CZK amounts:
+`baseCzk_r = round2(Σ item base_r × rate) − Σ advance baseCzk_r` (same for vat).
+
+## Credit notes
+`POST /api/documents/{invoiceId}/credit-note` body `{ correctionReason?: string }` → 201 draft `credit_note`:
+copies contact, currency, locale, vatMode, bank, paymentMethod and all lines (advance lines dropped) from the invoice;
+`issueDate = taxPointDate = today`, `dueDate` = today + company due days; `relatedDocumentId` = invoice;
+`exchangeRate` = the invoice's rate (stored, source `"original"`, not editable — PUT ignores a different value).
+Only for an issued, non-cancelled invoice (else 409 `invalid_state`).
+- Amounts are entered and stored **positive**; `sign = -1`. Numbered from the `credit_note` series.
+- Issue additionally requires `correctionReason` and checks the cap: for every VAT rate, Σ base of all
+  non-cancelled credit notes of the invoice (including this one) ≤ the invoice's base for that rate, and no rate absent
+  from the invoice → 422 `{"fields":{"lines":"exceeds_original"}}`.
+- Payments on a credit note are refunds (same endpoints, same paymentState semantics).
+
+## Catalog — `/api/catalog`
+```
+CatalogItem { id, name /* required <=200 */, unit: string|null, unitPrice: string /* 4 dp */, currency /* ISO */,
+  vatRate: string, active: boolean, note: string|null, createdAt, updatedAt }
+CatalogGroup { id, name /* <=200, becomes the subtotal description */, collapse: boolean /* default true */,
+  members: [{ itemId, quantity: string, position, item: CatalogItem }], createdAt, updatedAt }
+```
+- `GET /api/catalog/items?q=&active=true` → CatalogItem[] (by name); `POST`, `GET/PUT/DELETE /api/catalog/items/{id}`.
+  Deleting an item removes it from groups (cascade).
+- `GET /api/catalog/groups?q=` → CatalogGroup[]; `POST`, `GET/PUT/DELETE /api/catalog/groups/{id}`; body members
+  `[{ itemId, quantity }]` (order = position, ≥1 member, unique itemId).
+- Insertion into a document is done by the client: an item becomes an `item` line (price left empty when the
+  catalog currency differs from the document currency); a group becomes its member lines followed by a `subtotal`
+  over them with the group's `collapse` (members must share one VAT rate — enforced on group save:
+  `{"fields":{"members":"mixed_vat"}}`).
