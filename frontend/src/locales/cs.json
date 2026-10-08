@@ -1,6 +1,8 @@
 {
   "app": {
-    "name": "Faktury"
+    "name": "Faktury",
+    "backendVersion": "Verze serveru: {version}",
+    "backendUnavailable": "Verzi serveru se nepodařilo načíst."
   },
   "nav": {
     "invoices": "Faktury",
@@ -33,13 +35,10 @@
     "conflict": "Záznam koliduje s existujícím.",
     "validation": "Formulář obsahuje chyby.",
     "aresNotFound": "Subjekt v ARES nenalezen.",
-    "aresUnavailable": "ARES je nedostupný. Zkuste to později."
-  },
-  "home": {
-    "title": "Přehled",
-    "comingSoon": "Faktury již brzy.",
-    "backendVersion": "Verze serveru: {version}",
-    "backendUnavailable": "Verzi serveru se nepodařilo načíst."
+    "aresUnavailable": "ARES je nedostupný. Zkuste to později.",
+    "documentLocked": "Vystavený doklad už nelze měnit.",
+    "invalidState": "Tuto akci nelze v aktuálním stavu dokladu provést.",
+    "cnbUnavailable": "Kurzovní lístek ČNB je nedostupný. Zadejte kurz ručně."
   },
   "common": {
     "save": "Uložit",
@@ -63,7 +62,8 @@
     "too_long": "Hodnota je příliš dlouhá.",
     "duplicate": "Tato hodnota už existuje.",
     "invalid_ico": "Neplatné IČO.",
-    "invalid_pattern": "Neplatný vzor čísla."
+    "invalid_pattern": "Neplatný vzor čísla.",
+    "below_issued": "Nelze nastavit pod nejvyšší již vystavené číslo."
   },
   "party": {
     "name": "Název",
@@ -162,6 +162,170 @@
         "yy": "rok dvoumístně (26)",
         "n": "pořadové číslo doplněné nulami (0001)"
       }
+    }
+  },
+  "documents": {
+    "draftNumber": "Koncept",
+    "overdue": "Po splatnosti",
+    "sent": "Odesláno",
+    "status": {
+      "draft": "Koncept",
+      "issued": "Vystaveno",
+      "cancelled": "Stornováno"
+    },
+    "paymentState": {
+      "unpaid": "Neuhrazeno",
+      "partial": "Částečně uhrazeno",
+      "paid": "Uhrazeno",
+      "overpaid": "Přeplaceno"
+    },
+    "vatMode": {
+      "standard": "Běžné DPH",
+      "reverse_charge": "Přenesená daňová povinnost",
+      "exempt": "Osvobozeno od DPH",
+      "non_payer": "Neplátce DPH"
+    },
+    "paymentMethod": {
+      "bank_transfer": "Převodem",
+      "cash": "Hotově",
+      "card": "Kartou",
+      "other": "Jinak"
+    },
+    "rateSource": {
+      "cnb": "ČNB",
+      "manual": "ručně"
+    },
+    "fields": {
+      "docType": "Typ dokladu",
+      "number": "Číslo",
+      "customer": "Odběratel",
+      "supplier": "Dodavatel",
+      "contactId": "Odběratel",
+      "issueDate": "Datum vystavení",
+      "taxPointDate": "DUZP",
+      "dueDate": "Datum splatnosti",
+      "currency": "Měna",
+      "exchangeRate": "Kurz (CZK za 1 jednotku)",
+      "locale": "Jazyk dokladu",
+      "vatMode": "Režim DPH",
+      "bankAccountId": "Bankovní účet",
+      "paymentMethod": "Způsob úhrady",
+      "variableSymbol": "Variabilní symbol",
+      "constantSymbol": "Konstantní symbol",
+      "orderRef": "Číslo objednávky",
+      "headerNote": "Text nad položkami",
+      "footerNote": "Text pod položkami",
+      "internalNote": "Interní poznámka",
+      "roundTotal": "Zaokrouhlit na celé koruny",
+      "lines": "Položky",
+      "date": "Datum",
+      "amount": "Částka",
+      "note": "Poznámka",
+      "reason": "Důvod",
+      "sentAt": "Odesláno",
+      "cancelledAt": "Stornováno",
+      "cancelReason": "Důvod storna"
+    },
+    "list": {
+      "title": "Faktury",
+      "new": "Nová faktura",
+      "searchPlaceholder": "Hledat podle čísla, odběratele nebo VS",
+      "status": "Stav",
+      "anyStatus": "Všechny stavy",
+      "paymentState": "Úhrada",
+      "anyPaymentState": "Jakákoli úhrada",
+      "from": "Vystaveno od",
+      "to": "Vystaveno do",
+      "overdueOnly": "Jen po splatnosti",
+      "empty": "Zatím žádné faktury.",
+      "noResults": "Žádné faktury neodpovídají filtru."
+    },
+    "editor": {
+      "newTitle": "Nová faktura",
+      "editTitle": "Upravit koncept faktury",
+      "saveDraft": "Uložit koncept",
+      "newContact": "Nový kontakt",
+      "changeContact": "Změnit",
+      "removeContact": "Odebrat",
+      "noAccountForCurrency": "Žádný účet v měně {currency}",
+      "roundTotalCzkOnly": "Jen pro doklady v CZK.",
+      "variableSymbolHint": "Prázdné = odvodí se z čísla faktury.",
+      "internalNoteHint": "Netiskne se na doklad.",
+      "manualRate": "Ruční kurz — přepíše ČNB",
+      "manualRateHint": "CZK za 1 jednotku. Prázdné = kurz ČNB k DUZP se zafixuje při vystavení.",
+      "indicativeRate": "Orientační kurz ČNB k {date}: {rate} (zafixuje se při vystavení)",
+      "indicativeRateLoading": "Načítám orientační kurz ČNB…",
+      "indicativeRateUnknown": "ČNB kurz pro {currency} nevyhlašuje — zadejte ruční kurz.",
+      "indicativeRateUnavailable": "Kurz ČNB teď nelze načíst; zafixuje se při vystavení, nebo zadejte ruční kurz."
+    },
+    "line": {
+      "title": "Položky",
+      "empty": "Zatím žádné položky.",
+      "addItem": "Položka",
+      "addText": "Text",
+      "addSubtotal": "Mezisoučet",
+      "kinds": {
+        "item": "Položka",
+        "text": "Text",
+        "subtotal": "Mezisoučet"
+      },
+      "description": "Popis",
+      "quantity": "Množství",
+      "unit": "Jednotka",
+      "unitPrice": "Cena bez DPH",
+      "discountPct": "Sleva %",
+      "vatRate": "DPH %",
+      "refs": "Sčítané řádky",
+      "kind": "Typ řádku",
+      "collapse": "Na dokladu zobrazit jen mezisoučet",
+      "collapsed": "sbaleno",
+      "noRefOptions": "Nejprve přidejte položky.",
+      "refsInvalid": "Vyberte alespoň jeden řádek (položku nebo mezisoučet); řádky se nesmí zacyklit a musí mít stejnou sazbu DPH.",
+      "moveUp": "Posunout řádek {n} nahoru",
+      "moveDown": "Posunout řádek {n} dolů",
+      "remove": "Odebrat řádek {n}",
+      "rowLabel": "Řádek {n}",
+      "memberOf": "Součást mezisoučtu na řádku {positions}",
+      "atLeastOneItem": "Doklad musí mít alespoň jednu položku."
+    },
+    "totals": {
+      "title": "Rekapitulace",
+      "computing": "Přepočítávám…",
+      "rate": "Sazba",
+      "base": "Základ",
+      "vat": "DPH",
+      "baseCzk": "Základ v CZK",
+      "vatCzk": "DPH v CZK",
+      "total": "Celkem",
+      "rounding": "Zaokrouhlení",
+      "payable": "K úhradě",
+      "totalCzk": "K úhradě v CZK",
+      "atRate": "kurz {rate}",
+      "none": "Přidejte položky.",
+      "fixErrors": "Opravte zvýrazněná pole, aby se součty přepočítaly."
+    },
+    "detail": {
+      "title": "Faktura",
+      "backToList": "Zpět na faktury",
+      "backToDetail": "Zpět na fakturu",
+      "issue": "Vystavit",
+      "markSent": "Označit jako odeslanou",
+      "markSentAgain": "Znovu označit jako odeslanou",
+      "cancel": "Stornovat",
+      "confirmIssue": "Vystavit fakturu? Poté už nepůjde upravit.",
+      "confirmDelete": "Opravdu smazat tento koncept?",
+      "cancelPrompt": "Důvod storna faktury {number} (nepovinné):",
+      "cannotProceed": "Akci nelze dokončit:"
+    },
+    "payments": {
+      "title": "Platby",
+      "paid": "Uhrazeno",
+      "remaining": "Zbývá",
+      "add": "Přidat platbu",
+      "delete": "Smazat platbu",
+      "empty": "Zatím žádné platby.",
+      "confirmDelete": "Opravdu smazat tuto platbu?",
+      "addAnother": "Přidat další platbu"
     }
   }
 }

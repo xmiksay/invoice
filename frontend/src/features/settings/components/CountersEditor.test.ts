@@ -62,6 +62,23 @@ describe("CountersEditor", () => {
   });
 });
 
+describe("CountersEditor errors", () => {
+  beforeEach(() => {
+    i18n.global.locale.value = "en";
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("shows the below_issued reason when lowering a counter under issued numbers", async () => {
+    const w = mountEditor(series([{ year: 2026, lastNumber: 41 }]));
+    await input(w, "Last number for 2026").setValue("10");
+    mockFetch(422, { code: "validation", fields: { lastNumber: "below_issued" } });
+    await w.findAll("tbody tr")[0]!.find("button").trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="counter-error"]').text()).toBe("Cannot be lower than the highest number already issued.");
+    expect((input(w, "Last number for 2026").element as HTMLInputElement).value).toBe("10");
+  });
+});
+
 describe("NumberSeriesCard", () => {
   beforeEach(() => {
     i18n.global.locale.value = "en";

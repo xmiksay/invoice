@@ -14,10 +14,13 @@ use axum::body::Body;
 use axum::http::{Method, Request, Response, StatusCode};
 use invoice::app::{self, AppState};
 use invoice::ares::{AresClient, DEFAULT_ARES_URL};
+use invoice::cnb::{CnbClient, DEFAULT_CNB_URL};
 use invoice::migration::{Migrator, MigratorTrait};
 use invoice::secret::Secret;
 use sea_orm::{ConnectOptions, ConnectionTrait, Database, DatabaseConnection};
 use tower::ServiceExt;
+
+pub mod documents;
 
 pub const TEST_TOKEN: &str = "test-token-0123456789";
 
@@ -108,17 +111,27 @@ impl Drop for TestDb {
     }
 }
 
-/// App router; ARES points at the real default URL, which tests never call.
+/// App router; ARES and ČNB point at the real default URLs, which tests never call.
 pub fn router(db: DatabaseConnection) -> Router {
     router_with_ares(db, DEFAULT_ARES_URL)
 }
 
 /// App router with ARES at `ares_url` (a local mock server in tests).
 pub fn router_with_ares(db: DatabaseConnection, ares_url: &str) -> Router {
+    router_with(db, ares_url, DEFAULT_CNB_URL)
+}
+
+/// App router with ČNB at `cnb_url` (a local mock server in tests).
+pub fn router_with_cnb(db: DatabaseConnection, cnb_url: &str) -> Router {
+    router_with(db, DEFAULT_ARES_URL, cnb_url)
+}
+
+pub fn router_with(db: DatabaseConnection, ares_url: &str, cnb_url: &str) -> Router {
     app::router(AppState {
         db,
         api_token: Secret::new(TEST_TOKEN.to_string()),
         ares: AresClient::new(ares_url).expect("build ARES client"),
+        cnb: CnbClient::new(cnb_url).expect("build ČNB client"),
     })
 }
 

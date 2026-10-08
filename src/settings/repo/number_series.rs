@@ -1,8 +1,8 @@
 use anyhow::Context;
-use sea_orm::sea_query::OnConflict;
+use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,
-    EntityTrait, QueryFilter, QueryOrder, Set, Statement,
+    EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set, Statement, TransactionTrait,
 };
 
 use crate::error::AppError;
@@ -83,29 +83,62 @@ pub async fn set_pattern(
     get(db, doc_type).await
 }
 
-/// Manually set the last allocated number of a year (upsert).
+/// Manually set the last allocated number of a year (upsert). Going below
+/// the highest sequence already issued (imported documents excluded) would
+/// make the series hand out a duplicate number → `lastNumber: below_issued`.
 pub async fn set_counter(
     db: &DatabaseConnection,
     doc_type: DocType,
     year: i32,
     last_number: i32,
 ) -> Result<Series, AppError> {
-    counter::Entity::insert(counter::ActiveModel {
-        doc_type: Set(doc_type.as_str().to_string()),
-        year: Set(year),
-        last_number: Set(last_number),
-    })
-    .on_conflict(
-        OnConflict::columns([counter::Column::DocType, counter::Column::Year])
-            .update_column(counter::Column::LastNumber)
-            .to_owned(),
-    )
-    .exec(db)
-    .await?;
+    db.transaction(|txn| Box::pin(set_counter_in(txn, doc_type, year, last_number)))
+        .await?;
     get(db, doc_type).await
 }
 
-/// Allocate the next number of `doc_type` in `year` and render it.
+async fn set_counter_in(
+    txn: &DatabaseTransaction,
+    doc_type: DocType,
+    year: i32,
+    last_number: i32,
+) -> Result<(), AppError> {
+    // Lock the counter row before reading the issued numbers: an issue in
+    // flight holds this row (via `allocate_number`'s upsert) until it commits,
+    // so the guard waits for it and then sees its number — no stale check.
+    counter::Entity::insert(counter::ActiveModel {
+        doc_type: Set(doc_type.as_str().to_string()),
+        year: Set(year),
+        last_number: Set(0),
+    })
+    .on_conflict(
+        OnConflict::columns([counter::Column::DocType, counter::Column::Year])
+            .do_nothing()
+            .to_owned(),
+    )
+    .do_nothing()
+    .exec(txn)
+    .await?;
+    counter::Entity::find_by_id((doc_type.as_str().to_string(), year))
+        .lock_exclusive()
+        .one(txn)
+        .await?
+        .context("counter row missing right after its upsert")?;
+    let highest = crate::document::repo::query::highest_issued_seq(txn, doc_type, year).await?;
+    if highest.is_some_and(|h| last_number < h) {
+        return Err(AppError::field("lastNumber", "below_issued"));
+    }
+    counter::Entity::update_many()
+        .col_expr(counter::Column::LastNumber, Expr::value(last_number))
+        .filter(counter::Column::DocType.eq(doc_type.as_str()))
+        .filter(counter::Column::Year.eq(year))
+        .exec(txn)
+        .await?;
+    Ok(())
+}
+
+/// Allocate the next number of `doc_type` in `year`; returns the rendered
+/// number and its sequence.
 ///
 /// Must run inside the transaction that persists the numbered document, so a
 /// rollback also returns the number. The atomic `INSERT … ON CONFLICT DO
@@ -115,7 +148,7 @@ pub async fn allocate_number(
     txn: &DatabaseTransaction,
     doc_type: DocType,
     year: i32,
-) -> Result<String, AppError> {
+) -> Result<(String, i32), AppError> {
     let pattern = load_pattern(txn, doc_type).await?;
     let pattern = Pattern::parse(&pattern)
         .with_context(|| format!("stored pattern of {} is invalid", doc_type.as_str()))?;
@@ -131,7 +164,7 @@ pub async fn allocate_number(
         .await?
         .context("counter upsert returned no row")?;
     let n: i32 = row.try_get("", "last_number")?;
-    Ok(pattern.format(year, i64::from(n)))
+    Ok((pattern.format(year, i64::from(n)), n))
 }
 
 async fn load_pattern<C: ConnectionTrait>(db: &C, doc_type: DocType) -> Result<String, AppError> {

@@ -33,6 +33,7 @@ describe("reasonKey", () => {
   it("maps known reason codes and falls back to invalid", () => {
     expect(reasonKey("invalid_ico")).toBe("validation.invalid_ico");
     expect(reasonKey("too_long")).toBe("validation.too_long");
+    expect(reasonKey("below_issued")).toBe("validation.below_issued");
     expect(reasonKey("something_new")).toBe("validation.invalid");
   });
 });
@@ -42,6 +43,10 @@ describe("errorMessageKey", () => {
     expect(errorMessageKey(new ApiError(409, "conflict")).key).toBe("errors.conflict");
     expect(errorMessageKey(new ApiError(502, "ares_unavailable")).key).toBe("errors.aresUnavailable");
     expect(errorMessageKey(new ApiError(0, "network")).key).toBe("errors.unreachable");
+    expect(errorMessageKey(new ApiError(409, "document_locked")).key).toBe("errors.documentLocked");
+    expect(errorMessageKey(new ApiError(409, "invalid_state")).key).toBe("errors.invalidState");
+    // 502 with a known code is that code, not the generic "unreachable".
+    expect(errorMessageKey(new ApiError(502, "cnb_unavailable")).key).toBe("errors.cnbUnavailable");
     expect(errorMessageKey(new ApiError(500, "internal"))).toEqual({
       key: "errors.unexpected",
       params: { code: "internal" },

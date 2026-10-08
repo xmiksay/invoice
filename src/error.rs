@@ -14,7 +14,8 @@ use serde::Serialize;
 use utoipa::ToSchema;
 
 /// Per-field validation failures: camelCase wire field name → reason code
-/// (`required`, `invalid`, `too_long`, `duplicate`, `invalid_ico`, `invalid_pattern`).
+/// (`required`, `invalid`, `too_long`, `duplicate`, `invalid_ico`, `invalid_pattern`,
+/// `below_issued`).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct FieldErrors(BTreeMap<String, &'static str>);
 
@@ -76,6 +77,15 @@ pub enum AppError {
     #[error("ARES unavailable: {0:#}")]
     AresUnavailable(anyhow::Error),
 
+    #[error("document is locked (not a draft)")]
+    DocumentLocked,
+
+    #[error("action not allowed in the current document state")]
+    InvalidState,
+
+    #[error("ČNB unavailable: {0:#}")]
+    CnbUnavailable(anyhow::Error),
+
     #[error("internal error: {0:#}")]
     Internal(#[from] anyhow::Error),
 
@@ -100,6 +110,9 @@ impl AppError {
             Self::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             Self::AresNotFound => (StatusCode::NOT_FOUND, "ares_not_found"),
             Self::AresUnavailable(_) => (StatusCode::BAD_GATEWAY, "ares_unavailable"),
+            Self::DocumentLocked => (StatusCode::CONFLICT, "document_locked"),
+            Self::InvalidState => (StatusCode::CONFLICT, "invalid_state"),
+            Self::CnbUnavailable(_) => (StatusCode::BAD_GATEWAY, "cnb_unavailable"),
             Self::Internal(_) | Self::Database(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")
             }
@@ -178,6 +191,7 @@ impl IntoResponse for AppError {
                 tracing::error!(error = %self, "request failed")
             }
             Self::AresUnavailable(_) => tracing::warn!(error = %self, "ARES lookup failed"),
+            Self::CnbUnavailable(_) => tracing::warn!(error = %self, "ČNB lookup failed"),
             Self::BadRequest(_) | Self::Conflict(_) => tracing::debug!(error = %self, "rejected"),
             _ => {}
         }
@@ -245,6 +259,21 @@ mod tests {
                 AppError::AresUnavailable(anyhow::anyhow!("timeout")),
                 StatusCode::BAD_GATEWAY,
                 "ares_unavailable",
+            ),
+            (
+                AppError::DocumentLocked,
+                StatusCode::CONFLICT,
+                "document_locked",
+            ),
+            (
+                AppError::InvalidState,
+                StatusCode::CONFLICT,
+                "invalid_state",
+            ),
+            (
+                AppError::CnbUnavailable(anyhow::anyhow!("timeout")),
+                StatusCode::BAD_GATEWAY,
+                "cnb_unavailable",
             ),
             (
                 AppError::from(anyhow::anyhow!("boom")),

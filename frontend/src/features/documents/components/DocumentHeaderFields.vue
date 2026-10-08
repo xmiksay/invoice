@@ -1,0 +1,113 @@
+<script setup lang="ts">
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+import type { FieldErrors } from "@/api/types";
+import FormField from "@/components/form/FormField.vue";
+import { ApiError } from "@/api/client";
+import { reasonKey } from "@/lib/formErrors";
+import { LOCALES } from "@/i18n";
+import type { BankAccount } from "@/features/settings/types";
+import { changeCurrency, type DocumentDraft } from "../form";
+import { formatDate, formatNumber } from "../format";
+import { PAYMENT_METHODS, VAT_MODES, type ExchangeRate } from "../types";
+
+const model = defineModel<DocumentDraft>({ required: true });
+const props = defineProps<{
+  errors: FieldErrors;
+  bankAccounts: BankAccount[];
+  /** Indicative ČNB rate for the tax point date (preview only, never saved). */
+  indicativeRate: ExchangeRate | null;
+  indicativeError: unknown;
+  indicativeLoading: boolean;
+}>();
+
+const { t, locale } = useI18n();
+
+const isCzk = computed(() => model.value.currency === "CZK");
+const accounts = computed(() => props.bankAccounts.filter((a) => a.currency === model.value.currency));
+const accountLabel = (a: BankAccount) => [a.label, a.accountNumber ?? a.iban].filter(Boolean).join(" — ");
+
+function onCurrency(event: Event) {
+  model.value = changeCurrency(model.value, (event.target as HTMLInputElement).value, props.bankAccounts);
+}
+
+/** ČNB not reachable or not listing the currency: a note only, the manual rate or issue covers it. */
+const indicativeNote = computed(() => {
+  if (props.indicativeLoading) return t("documents.editor.indicativeRateLoading");
+  const r = props.indicativeRate;
+  if (r) {
+    return t("documents.editor.indicativeRate", { date: formatDate(r.date, locale.value), rate: formatNumber(r.rate, locale.value, 6) });
+  }
+  if (props.indicativeError instanceof ApiError && props.indicativeError.status === 404) {
+    return t("documents.editor.indicativeRateUnknown", { currency: model.value.currency });
+  }
+  return props.indicativeError ? t("documents.editor.indicativeRateUnavailable") : null;
+});
+
+const cls = (field: string) => ({ "input-error": props.errors[field] });
+</script>
+
+<template>
+  <div class="grid gap-4 sm:grid-cols-3">
+    <FormField :label="t('documents.fields.issueDate')" for="doc-issueDate" :error="errors.issueDate">
+      <input id="doc-issueDate" v-model="model.issueDate" type="date" class="input" :class="cls('issueDate')" />
+    </FormField>
+    <FormField :label="t('documents.fields.taxPointDate')" for="doc-taxPointDate" :error="errors.taxPointDate">
+      <input id="doc-taxPointDate" v-model="model.taxPointDate" type="date" class="input" :class="cls('taxPointDate')" />
+    </FormField>
+    <FormField :label="t('documents.fields.dueDate')" for="doc-dueDate" :error="errors.dueDate">
+      <input id="doc-dueDate" v-model="model.dueDate" type="date" class="input" :class="cls('dueDate')" />
+    </FormField>
+
+    <FormField :label="t('documents.fields.currency')" for="doc-currency" :error="errors.currency">
+      <input id="doc-currency" :value="model.currency" maxlength="3" class="input uppercase" :class="cls('currency')" autocomplete="off" @change="onCurrency" />
+    </FormField>
+    <div v-if="!isCzk" class="space-y-1 sm:col-span-2">
+      <FormField :label="t('documents.editor.manualRate')" for="doc-exchangeRate" :error="errors.exchangeRate" :hint="t('documents.editor.manualRateHint')">
+        <input id="doc-exchangeRate" v-model="model.exchangeRate" inputmode="decimal" class="input" :class="cls('exchangeRate')" autocomplete="off" />
+      </FormField>
+      <p v-if="indicativeNote" class="text-xs text-gray-600 dark:text-gray-400" data-test="indicative-rate">{{ indicativeNote }}</p>
+    </div>
+    <div class="flex flex-col justify-end pb-2" :class="{ 'sm:col-span-2': isCzk, 'sm:col-span-3': !isCzk }">
+      <label class="flex items-center gap-2 text-sm" :class="{ 'opacity-60': !isCzk }">
+        <input id="doc-roundTotal" v-model="model.roundTotal" type="checkbox" class="size-4" :disabled="!isCzk" />
+        {{ t("documents.fields.roundTotal") }}
+      </label>
+      <p v-if="errors.roundTotal" class="text-xs text-red-600 dark:text-red-400">{{ t(reasonKey(errors.roundTotal)) }}</p>
+      <p v-else-if="!isCzk" class="text-xs text-gray-500 dark:text-gray-400">{{ t("documents.editor.roundTotalCzkOnly") }}</p>
+    </div>
+
+    <FormField :label="t('documents.fields.vatMode')" for="doc-vatMode" :error="errors.vatMode">
+      <select id="doc-vatMode" v-model="model.vatMode" class="input">
+        <option v-for="m in VAT_MODES" :key="m" :value="m">{{ t(`documents.vatMode.${m}`) }}</option>
+      </select>
+    </FormField>
+    <FormField :label="t('documents.fields.locale')" for="doc-locale" :error="errors.locale">
+      <select id="doc-locale" v-model="model.locale" class="input">
+        <option v-for="code in LOCALES" :key="code" :value="code">{{ t(`locale.names.${code}`) }}</option>
+      </select>
+    </FormField>
+    <FormField :label="t('documents.fields.paymentMethod')" for="doc-paymentMethod" :error="errors.paymentMethod">
+      <select id="doc-paymentMethod" v-model="model.paymentMethod" class="input">
+        <option v-for="m in PAYMENT_METHODS" :key="m" :value="m">{{ t(`documents.paymentMethod.${m}`) }}</option>
+      </select>
+    </FormField>
+
+    <FormField class="sm:col-span-3" :label="t('documents.fields.bankAccountId')" for="doc-bankAccountId" :error="errors.bankAccountId">
+      <select id="doc-bankAccountId" v-model="model.bankAccountId" class="input" :class="cls('bankAccountId')">
+        <option value="">{{ accounts.length ? t("common.notSet") : t("documents.editor.noAccountForCurrency", { currency: model.currency }) }}</option>
+        <option v-for="a in accounts" :key="a.id" :value="a.id">{{ accountLabel(a) }}</option>
+      </select>
+    </FormField>
+
+    <FormField :label="t('documents.fields.variableSymbol')" for="doc-variableSymbol" :error="errors.variableSymbol" :hint="t('documents.editor.variableSymbolHint')">
+      <input id="doc-variableSymbol" v-model="model.variableSymbol" inputmode="numeric" maxlength="10" class="input" :class="cls('variableSymbol')" />
+    </FormField>
+    <FormField :label="t('documents.fields.constantSymbol')" for="doc-constantSymbol" :error="errors.constantSymbol">
+      <input id="doc-constantSymbol" v-model="model.constantSymbol" inputmode="numeric" maxlength="4" class="input" :class="cls('constantSymbol')" />
+    </FormField>
+    <FormField :label="t('documents.fields.orderRef')" for="doc-orderRef" :error="errors.orderRef">
+      <input id="doc-orderRef" v-model="model.orderRef" maxlength="100" class="input" :class="cls('orderRef')" />
+    </FormField>
+  </div>
+</template>

@@ -8,6 +8,7 @@ export const REASON_CODES = [
   "duplicate",
   "invalid_ico",
   "invalid_pattern",
+  "below_issued",
 ] as const;
 
 /** Field errors of a 422 `validation` response, or null for any other failure. */
@@ -34,6 +35,9 @@ const KNOWN_CODES: Record<string, string> = {
   validation: "errors.validation",
   ares_not_found: "errors.aresNotFound",
   ares_unavailable: "errors.aresUnavailable",
+  document_locked: "errors.documentLocked",
+  invalid_state: "errors.invalidState",
+  cnb_unavailable: "errors.cnbUnavailable",
 };
 
 /** i18n key + params for a non-field error message. */

@@ -1,0 +1,6 @@
+{DATE} #196
+země|měna|množství|kód|kurz
+Austrálie|dolar|1|AUD|15,234
+EMU|euro|1|EUR|25,125
+Japonsko|jen|100|JPY|15,512
+USA|dolar|1|USD|21,456

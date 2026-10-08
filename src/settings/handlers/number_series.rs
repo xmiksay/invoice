@@ -1,6 +1,5 @@
 use axum::Json;
 use axum::extract::State;
-use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -11,6 +10,7 @@ use crate::settings::doc_type::DocType;
 use crate::settings::pattern::Pattern;
 use crate::settings::repo;
 use crate::settings::repo::number_series::Series;
+use crate::time::current_year;
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -68,10 +68,6 @@ impl NumberSeries {
             next_number_preview,
         }
     }
-}
-
-fn current_year() -> i32 {
-    chrono::Local::now().year()
 }
 
 #[utoipa::path(

@@ -12,9 +12,9 @@ describe("router auth guard", () => {
 
   it("redirects to /login without a token and keeps the target", async () => {
     const router = createAppRouter(createMemoryHistory());
-    await router.push("/?tab=x");
+    await router.push("/contacts?tab=x");
     expect(router.currentRoute.value.name).toBe("login");
-    expect(router.currentRoute.value.query.redirect).toBe("/?tab=x");
+    expect(router.currentRoute.value.query.redirect).toBe("/contacts?tab=x");
   });
 
   it("allows /login without a token", async () => {
@@ -27,21 +27,21 @@ describe("router auth guard", () => {
     useAuthStore().token = "t";
     const router = createAppRouter(createMemoryHistory());
     await router.push("/");
-    expect(router.currentRoute.value.name).toBe("home");
+    expect(router.currentRoute.value.name).toBe("invoices");
   });
 
   it("sends an authenticated user away from /login", async () => {
     useAuthStore().token = "t";
     const router = createAppRouter(createMemoryHistory());
     await router.push("/login");
-    expect(router.currentRoute.value.name).toBe("home");
+    expect(router.currentRoute.value.name).toBe("invoices");
   });
 
-  it("redirects unknown paths to home", async () => {
+  it("redirects unknown paths to the invoice list", async () => {
     useAuthStore().token = "t";
     const router = createAppRouter(createMemoryHistory());
     await router.push("/nope/deep");
-    expect(router.currentRoute.value.name).toBe("home");
+    expect(router.currentRoute.value.name).toBe("invoices");
   });
 
   it("resolves feature routes and redirects /settings to the company tab", async () => {
@@ -56,5 +56,12 @@ describe("router auth guard", () => {
     await router.push("/contacts/abc");
     expect(router.currentRoute.value.name).toBe("contact-edit");
     expect(router.currentRoute.value.params.id).toBe("abc");
+    await router.push("/invoices/new");
+    expect(router.currentRoute.value.name).toBe("invoice-new");
+    await router.push("/invoices/d1");
+    expect(router.currentRoute.value.name).toBe("invoice-detail");
+    await router.push("/invoices/d1/edit");
+    expect(router.currentRoute.value.name).toBe("invoice-edit");
+    expect(router.currentRoute.value.params.id).toBe("d1");
   });
 });
