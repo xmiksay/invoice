@@ -29,7 +29,11 @@ const { t } = useI18n();
 const store = useDocumentStore();
 const draft = ref<ReceivedDraft>(applyDefaults(props.initial));
 const { fieldErrors, error, submitting, submit } = useFormSubmit();
-const indicative = useIndicativeRate(() => ({ currency: draft.value.currency, date: draft.value.receivedDate }));
+// A filled-in manual rate wins: no ČNB lookup (nor its "unavailable" note) while it is set.
+const indicative = useIndicativeRate(() => ({
+  currency: draft.value.exchangeRate.trim() ? "" : draft.value.currency,
+  date: draft.value.receivedDate,
+}));
 
 // receivedDate / payable follow their sources until edited.
 watch(draft, (d) => (draft.value = applyDefaults(d)), { deep: true });

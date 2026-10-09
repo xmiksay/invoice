@@ -1,0 +1,101 @@
+{
+  "import": {
+    "action": "Importovat ISDOC",
+    "title": "Import ISDOC",
+    "back": "Zpět na seznam",
+    "dropHint": "Přetáhněte sem soubory .isdoc, .isdocx nebo .zip (i ZIP v ZIPu), nebo je vyberte.",
+    "pick": "Vybrat soubory",
+    "limits": "Nejvýše 50 MB a 500 dokladů najednou. Vydané i přijaté doklady se rozliší podle IČO vaší firmy.",
+    "files": "Soubory: {names} ({size})",
+    "ignored": "Přeskočeno (nepodporovaný typ souboru): {names}",
+    "reading": "Načítám náhled…",
+    "importing": "Importuji…",
+    "confirm": "Importovat vybrané ({n})",
+    "selected": "Vybráno {n} z {total}"
+  },
+  "upload": {
+    "noFiles": "Žádný z vybraných souborů není .isdoc, .isdocx ani .zip.",
+    "tooLarge": "Soubory jsou dohromady příliš velké (nejvýše 50 MB).",
+    "tooMany": "Příliš mnoho dokladů najednou (nejvýše 500). Rozdělte import na menší části.",
+    "unpackedTooLarge": "Rozbalené archivy jsou příliš velké (nejvýše 200 MB). Rozdělte import na menší části.",
+    "category": "Vybraná kategorie už není aktivní. Vyberte jinou."
+  },
+  "status": {
+    "ok": "V pořádku",
+    "duplicate": "Duplicita",
+    "error": "Chyba"
+  },
+  "direction": {
+    "issued": "Vydaný",
+    "received": "Přijatý"
+  },
+  "contactMatch": {
+    "existing": "Existující kontakt",
+    "new": "Nový kontakt"
+  },
+  "preview": {
+    "selectAll": "Vybrat vše",
+    "select": "Vybrat {key}",
+    "status": "Stav",
+    "document": "Doklad",
+    "counterparty": "Protistrana",
+    "dates": "Data",
+    "total": "Celkem",
+    "ico": "IČO {ico}",
+    "issueDate": "Vystaveno {date}",
+    "taxPointDate": "DUZP {date}",
+    "dueDate": "Splatnost {date}",
+    "empty": "V souborech nebyl nalezen žádný doklad ISDOC."
+  },
+  "entryError": {
+    "invalid_xml": "Soubor není platný doklad ISDOC.",
+    "unsupported_version": "Nepodporovaná verze ISDOC (podporována je 6.x).",
+    "unsupported_type": "Nepodporovaný typ dokladu.",
+    "foreign": "IČO vaší firmy není u dodavatele ani u odběratele.",
+    "ambiguous": "IČO vaší firmy je u dodavatele i u odběratele.",
+    "missing_field": "Chybí povinný údaj (číslo, datum vystavení, měna nebo součty).",
+    "invalid_amount": "Neplatná částka.",
+    "rate_unavailable": "Kurzovní lístek ČNB je nedostupný. Zkuste import později.",
+    "internal": "Neočekávaná chyba serveru.",
+    "invalid_archive": "Archiv ZIP nelze přečíst (poškozený, nebo má víc než 10 000 položek).",
+    "too_deep": "ZIP je vnořený hlouběji než do 3 úrovní.",
+    "duplicate": "Doklad už je v evidenci (vznikl mezitím).",
+    "number_taken": "Číslo z řady přijatých dokladů je už obsazené. Zkontrolujte počítadlo v Nastavení.",
+    "unsupported_currency": "Nepodporovaná místní měna dokladu (očekává se CZK)",
+    "unknown": "Chyba ({code})."
+  },
+  "warning": {
+    "related_not_found": "Původní doklad {number} nebyl nalezen, doklad se nepropojí.",
+    "pdf_skipped": "Přiložené PDF je větší než 20 MB, nenahraje se.",
+    "rate_from_cnb": "ISDOC neobsahuje kurz, použije se kurz ČNB.",
+    "contact_created": "Kontakt se založí z údajů v ISDOC.",
+    "unknown": "Upozornění ({code})."
+  },
+  "options": {
+    "title": "Možnosti importu",
+    "markPaid": "Označit jako uhrazené",
+    "markPaidHint": "Zaeviduje platbu celé částky k datu splatnosti (u dobropisů jako vratku). Daňové doklady k platbě platbu nedostanou.",
+    "category": "Kategorie přijatých dokladů",
+    "noCategory": "Bez kategorie",
+    "receivedHint": "Platí pro všechny vybrané přijaté doklady; datum přijetí bude DUZP. Jednotlivě je lze upravit později."
+  },
+  "result": {
+    "summary": "Importováno {imported} z {total}.",
+    "outcome": "Výsledek",
+    "open": "Otevřít doklad",
+    "notSelected": "Neimportováno (nevybráno, nebo už není v pořádku).",
+    "again": "Importovat další soubory",
+    "status": {
+      "imported": "Importováno",
+      "skipped": "Přeskočeno",
+      "failed": "Selhalo"
+    }
+  },
+  "export": {
+    "document": "Stáhnout ISDOC",
+    "list": "Exportovat ISDOC",
+    "preparing": "Připravuji export…",
+    "tooMany": "Filtru odpovídá víc než 1000 dokladů. Zužte filtr (např. obdobím).",
+    "hint": "Doklady, které nešlo exportovat, jsou vypsány v souboru errors.txt v archivu."
+  }
+}

@@ -3,6 +3,7 @@ import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { useAction } from "@/composables/useAction";
+import IsdocExportButton from "@/features/isdoc/components/IsdocExportButton.vue";
 import { useCategoriesStore } from "@/features/settings/stores";
 import DocTypeTabs from "../components/DocTypeTabs.vue";
 import InvoiceFilters from "../components/InvoiceFilters.vue";
@@ -49,6 +50,8 @@ function open(id: string) {
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h1 class="text-2xl font-semibold">{{ t(`documents.list.title.${docType}`) }}</h1>
       <div class="flex flex-wrap gap-2">
+        <IsdocExportButton :query="store.query" />
+        <RouterLink :to="{ name: 'isdoc-import' }" class="btn" data-test="import-isdoc">{{ t("isdoc.import.action") }}</RouterLink>
         <RouterLink :to="importLink" class="btn" data-test="import-document">{{ t("documents.import.action") }}</RouterLink>
         <RouterLink v-if="newLink" :to="newLink.to" class="btn btn-primary" data-test="new-document">{{ newLink.label }}</RouterLink>
       </div>

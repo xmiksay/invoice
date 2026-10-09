@@ -10,6 +10,7 @@ import DocumentInfoCard from "../components/DocumentInfoCard.vue";
 import DocumentLinesTable from "../components/DocumentLinesTable.vue";
 import DocumentPdf from "../components/DocumentPdf.vue";
 import OriginalPdfPanel from "../components/OriginalPdfPanel.vue";
+import IsdocDownloadButton from "@/features/isdoc/components/IsdocDownloadButton.vue";
 import MetadataCard from "@/features/metadata/components/MetadataCard.vue";
 import PartiesCard from "../components/PartiesCard.vue";
 import PaymentsPanel from "../components/PaymentsPanel.vue";
@@ -85,6 +86,7 @@ const hasPayments = computed(() => !isDraft.value && doc.value?.docType !== "adv
       <SimplifiedLimitNote :doc-type="doc.docType" :currency="doc.currency" :totals="doc.totals" />
 
       <DocumentActions :doc="doc" />
+      <IsdocDownloadButton v-if="!isDraft && doc.number" :id="doc.id" :number="doc.number" />
       <!-- An imported document is never rendered with our design: its PDF is the uploaded original. -->
       <OriginalPdfPanel v-if="doc.imported" :doc="doc" />
       <DocumentPdf v-else :doc="doc" />

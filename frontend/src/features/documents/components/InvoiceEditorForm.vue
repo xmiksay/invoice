@@ -43,8 +43,8 @@ const correction = computed(() => isCorrection(draft.value.docType));
 /** A native correction keeps its original's customer, currency and rate. */
 const lockedCorrection = computed(() => correction.value && !draft.value.imported);
 const indicative = useIndicativeRate(() => ({
-  // A native correction keeps its original's rate, so there is nothing to look up.
-  currency: lockedCorrection.value ? "" : draft.value.currency,
+  // A native correction keeps its original's rate, and a filled-in manual rate wins: nothing to look up.
+  currency: lockedCorrection.value || draft.value.exchangeRate.trim() ? "" : draft.value.currency,
   date: draft.value.taxPointDate || draft.value.issueDate,
 }));
 const compute = useCompute(() => toComputeRequest(draft.value, indicative.rate.value?.rate ?? null, props.docId));

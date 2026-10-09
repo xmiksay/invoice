@@ -16,15 +16,23 @@ import type {
 const BASE = "/api/documents";
 const item = (id: string) => `${BASE}/${encodeURIComponent(id)}`;
 
-function listParams(query: DocumentListQuery): string {
+/** List filters without paging; also the ISDOC bulk export's query. */
+export type DocumentFilterQuery = Omit<DocumentListQuery, "limit" | "offset">;
+
+export function filterParams(query: DocumentFilterQuery): URLSearchParams {
   const params = new URLSearchParams();
-  const { limit, offset, overdue, imported, q, ...rest } = query;
+  const { overdue, imported, q, ...rest } = query;
   for (const [key, value] of Object.entries(rest)) {
     if (value) params.set(key, value);
   }
   if (overdue) params.set("overdue", "true");
   if (imported !== undefined) params.set("imported", String(imported));
   if (q?.trim()) params.set("q", q.trim());
+  return params;
+}
+
+function listParams({ limit, offset, ...filters }: DocumentListQuery): string {
+  const params = filterParams(filters);
   params.set("limit", String(limit));
   params.set("offset", String(offset));
   return params.toString();

@@ -64,5 +64,9 @@
     "noVat": "Outside the standard VAT mode, VAT is always 0.",
     "payableAuto": "Follows the total; overwrite e.g. for a final invoice after advances.",
     "payableManual": "Entered manually. Clear it to follow the total again."
+  },
+  "lines": {
+    "title": "Document lines",
+    "hint": "Taken over from the ISDOC for reference only; the VAT recap is authoritative."
   }
 }

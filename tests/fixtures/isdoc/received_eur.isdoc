@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Invoice version="6.0.2" xmlns="http://isdoc.cz/namespace/2013">
+  <DocumentType>1</DocumentType>
+  <ID>INV-EUR-5</ID>
+  <UUID>9a9b9c9d-0000-4000-8000-000000000005</UUID>
+  <IssueDate>2026-09-01</IssueDate>
+  <TaxPointDate>2026-09-01</TaxPointDate>
+  <VATApplicable>true</VATApplicable>
+  <ElectronicPossibilityAgreementReference/>
+  <Note>Daň odvede zákazník (přenesení daňové povinnosti)</Note>
+  <LocalCurrencyCode>CZK</LocalCurrencyCode>
+  <ForeignCurrencyCode>EUR</ForeignCurrencyCode>
+  <CurrRate>24.335</CurrRate>
+  <RefCurrRate>1</RefCurrRate>
+  <AccountingSupplierParty><Party>
+    <PartyIdentification><ID>87654326</ID></PartyIdentification>
+    <PartyName><Name>Smyšlený Dodavatel a.s.</Name></PartyName>
+    <PostalAddress><StreetName>Vymyšlená 7</StreetName><BuildingNumber/><CityName>Ostrava</CityName><PostalZone>70030</PostalZone><Country><IdentificationCode>CZ</IdentificationCode><Name>Česká republika</Name></Country></PostalAddress>
+  </Party></AccountingSupplierParty>
+  <AccountingCustomerParty><Party>
+    <PartyIdentification><ID>44444443</ID></PartyIdentification>
+    <PartyName><Name>Dodavatel s.r.o.</Name></PartyName>
+    <PostalAddress><StreetName>Hlavní 1</StreetName><BuildingNumber/><CityName>Praha</CityName><PostalZone>11000</PostalZone><Country><IdentificationCode>CZ</IdentificationCode><Name>Česká republika</Name></Country></PostalAddress>
+  </Party></AccountingCustomerParty>
+  <InvoiceLines>
+    <InvoiceLine><ID>1</ID><InvoicedQuantity unitCode="h">10</InvoicedQuantity><LineExtensionAmountCurr>1000.00</LineExtensionAmountCurr><LineExtensionAmount>24335.00</LineExtensionAmount><LineExtensionAmountTaxInclusiveCurr>1000.00</LineExtensionAmountTaxInclusiveCurr><LineExtensionAmountTaxInclusive>24335.00</LineExtensionAmountTaxInclusive><LineExtensionTaxAmount>0</LineExtensionTaxAmount><UnitPrice>2433.50</UnitPrice><UnitPriceTaxInclusive>2433.50</UnitPriceTaxInclusive><ClassifiedTaxCategory><Percent>21</Percent><VATCalculationMethod>0</VATCalculationMethod><VATApplicable>false</VATApplicable></ClassifiedTaxCategory><Item><Description>Vývoj</Description></Item></InvoiceLine>
+  </InvoiceLines>
+  <TaxTotal>
+    <TaxSubTotal><TaxableAmountCurr>1000.00</TaxableAmountCurr><TaxableAmount>24335.00</TaxableAmount><TaxAmountCurr>0</TaxAmountCurr><TaxAmount>0</TaxAmount><TaxInclusiveAmountCurr>1000.00</TaxInclusiveAmountCurr><TaxInclusiveAmount>24335.00</TaxInclusiveAmount><AlreadyClaimedTaxableAmountCurr>0</AlreadyClaimedTaxableAmountCurr><AlreadyClaimedTaxableAmount>0</AlreadyClaimedTaxableAmount><AlreadyClaimedTaxAmountCurr>0</AlreadyClaimedTaxAmountCurr><AlreadyClaimedTaxAmount>0</AlreadyClaimedTaxAmount><AlreadyClaimedTaxInclusiveAmountCurr>0</AlreadyClaimedTaxInclusiveAmountCurr><AlreadyClaimedTaxInclusiveAmount>0</AlreadyClaimedTaxInclusiveAmount><DifferenceTaxableAmountCurr>1000.00</DifferenceTaxableAmountCurr><DifferenceTaxableAmount>24335.00</DifferenceTaxableAmount><DifferenceTaxAmountCurr>0</DifferenceTaxAmountCurr><DifferenceTaxAmount>0</DifferenceTaxAmount><DifferenceTaxInclusiveAmountCurr>1000.00</DifferenceTaxInclusiveAmountCurr><DifferenceTaxInclusiveAmount>24335.00</DifferenceTaxInclusiveAmount><TaxCategory><Percent>21</Percent><VATApplicable>false</VATApplicable></TaxCategory></TaxSubTotal>
+    <TaxAmountCurr>0</TaxAmountCurr><TaxAmount>0</TaxAmount>
+  </TaxTotal>
+  <LegalMonetaryTotal><TaxExclusiveAmount>24335.00</TaxExclusiveAmount><TaxExclusiveAmountCurr>1000.00</TaxExclusiveAmountCurr><TaxInclusiveAmount>24335.00</TaxInclusiveAmount><TaxInclusiveAmountCurr>1000.00</TaxInclusiveAmountCurr><AlreadyClaimedTaxExclusiveAmount>0</AlreadyClaimedTaxExclusiveAmount><AlreadyClaimedTaxExclusiveAmountCurr>0</AlreadyClaimedTaxExclusiveAmountCurr><AlreadyClaimedTaxInclusiveAmount>0</AlreadyClaimedTaxInclusiveAmount><AlreadyClaimedTaxInclusiveAmountCurr>0</AlreadyClaimedTaxInclusiveAmountCurr><DifferenceTaxExclusiveAmount>24335.00</DifferenceTaxExclusiveAmount><DifferenceTaxExclusiveAmountCurr>1000.00</DifferenceTaxExclusiveAmountCurr><DifferenceTaxInclusiveAmount>24335.00</DifferenceTaxInclusiveAmount><DifferenceTaxInclusiveAmountCurr>1000.00</DifferenceTaxInclusiveAmountCurr><PaidDepositsAmount>0</PaidDepositsAmount><PaidDepositsAmountCurr>0</PaidDepositsAmountCurr><PayableAmount>24335.00</PayableAmount><PayableAmountCurr>1000.00</PayableAmountCurr></LegalMonetaryTotal>
+</Invoice>

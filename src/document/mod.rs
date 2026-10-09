@@ -29,6 +29,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(documents::list).post(documents::create))
         .route("/compute", post(documents::compute))
+        .route("/isdoc", get(crate::isdoc::export::bulk))
         .route(
             "/{id}",
             get(documents::get)
@@ -37,6 +38,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/{id}/issue", post(actions::issue))
         .route("/{id}/pdf", get(crate::pdf::handlers::document_pdf))
+        .route("/{id}/isdoc", get(crate::isdoc::export::document_isdoc))
         .route("/{id}/cancel", post(actions::cancel))
         .route("/{id}/mark-sent", post(actions::mark_sent))
         .route("/{id}/internal-note", put(actions::internal_note))

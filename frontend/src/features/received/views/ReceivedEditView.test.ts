@@ -129,11 +129,51 @@ describe("ReceivedEditView", () => {
       rounding: "0.00",
       payable: "112.00",
     });
-    routes({ "GET /api/documents/r1": stored, "GET /api/documents/r1/payments": [], "GET /api/contacts/c1": contact() });
+    const fetch = routes({ "GET /api/documents/r1": stored, "GET /api/documents/r1/payments": [], "GET /api/contacts/c1": contact(), "PUT /api/documents/r1": stored });
     const { w } = await mountAt("/received/r1/edit");
     expect(w.find("h1").text()).toBe("Edit received invoice");
     expect((w.find("#rec-supplierNumber").element as HTMLInputElement).value).toBe("FV-1");
     expect((w.find("#recap-0-rate").element as HTMLInputElement).value).toBe("12");
     expect((w.find("#rec-payable").element as HTMLInputElement).value).toBe("112.00");
+
+    // ISDOC-imported lines are kept by the server: a received PUT never carries them.
+    await w.find('[data-test="received-form"]').trigger("submit");
+    await flushPromises();
+    const put = fetch.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(JSON.parse(String(put?.[1]?.body))).not.toHaveProperty("lines");
+  });
+
+  it("a filled-in manual rate skips the ČNB lookup and its note; clearing it looks the rate up", async () => {
+    const stored = document({
+      id: "r1",
+      direction: "received",
+      status: "issued",
+      number: "P20260001",
+      supplierNumber: "FV-1",
+      currency: "EUR",
+      exchangeRate: "25.1",
+      exchangeRateSource: "manual",
+      receivedDate: "2026-10-01",
+      vatRecap: [{ rate: "21", base: "100.00", vat: "21.00" }],
+    });
+    const fetch = routes({
+      "GET /api/documents/r1": stored,
+      "GET /api/documents/r1/payments": [],
+      "GET /api/contacts/c1": contact(),
+      "GET /api/exchange-rates/EUR": reply(502, { code: "cnb_unavailable" }),
+    });
+    const { w } = await mountAt("/received/r1/edit");
+    await new Promise((r) => setTimeout(r, 350));
+    await flushPromises();
+    const rateCalls = () => fetch.mock.calls.filter(([url]) => String(url).startsWith("/api/exchange-rates"));
+    expect((w.find("#rec-exchangeRate").element as HTMLInputElement).value).toBe("25.1");
+    expect(rateCalls()).toHaveLength(0);
+    expect(w.find('[data-test="indicative-rate"]').exists()).toBe(false);
+
+    await w.find("#rec-exchangeRate").setValue("");
+    await new Promise((r) => setTimeout(r, 350));
+    await flushPromises();
+    expect(rateCalls()).toHaveLength(1);
+    expect(w.find('[data-test="indicative-rate"]').exists()).toBe(true);
   });
 });

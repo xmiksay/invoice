@@ -97,11 +97,11 @@ export interface BlobResponse {
 }
 
 /**
- * Binary download (e.g. a PDF). A plain link cannot carry the Bearer token, so files
+ * Binary download (a PDF, an ISDOC / ZIP). A plain link cannot carry the Bearer token, so files
  * are fetched here and handed to the page as a blob.
  */
 export async function requestBlob(path: string, options: RequestOptions = {}): Promise<BlobResponse> {
-  const res = await send(path, options, "application/pdf, application/octet-stream, application/json");
+  const res = await send(path, options, "application/pdf, application/zip, application/xml, application/octet-stream, application/json");
   return { blob: await res.blob(), filename: filenameFromDisposition(res.headers.get("Content-Disposition")) };
 }
 

@@ -62,6 +62,11 @@ const routes = [
     component: () => import("@/features/received/views/ReceivedEditView.vue"),
   },
   {
+    path: "/import/isdoc",
+    name: "isdoc-import",
+    component: () => import("@/features/isdoc/views/IsdocImportView.vue"),
+  },
+  {
     path: "/contacts",
     name: "contacts",
     component: () => import("@/features/contacts/views/ContactsListView.vue"),

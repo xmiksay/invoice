@@ -9,6 +9,7 @@ pub mod document;
 pub mod error;
 pub mod extract;
 pub mod health;
+pub mod isdoc;
 pub mod migration;
 pub mod openapi;
 pub mod pdf;

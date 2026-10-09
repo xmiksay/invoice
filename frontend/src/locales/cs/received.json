@@ -64,5 +64,9 @@
     "noVat": "Mimo režim Běžné DPH je DPH vždy 0.",
     "payableAuto": "Podle celkové částky; přepište např. u vyúčtování po zálohách.",
     "payableManual": "Zadáno ručně. Smazáním se vrátí celková částka."
+  },
+  "lines": {
+    "title": "Položky dokladu",
+    "hint": "Převzato z ISDOC jen pro informaci; rozhodující je rekapitulace DPH."
   }
 }

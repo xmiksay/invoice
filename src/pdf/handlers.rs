@@ -42,7 +42,7 @@ pub struct DesignListing {
 }
 
 /// Keeps the header value ASCII and free of quotes / path separators.
-fn safe_filename(stem: &str) -> String {
+pub(crate) fn safe_filename(stem: &str) -> String {
     stem.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {

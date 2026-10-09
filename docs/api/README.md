@@ -25,6 +25,7 @@ Later phases add more codes (`document_locked`, `invalid_state`, `cnb_unavailabl
 | [pdf.md](pdf.md) | PDF via mdcast: design files, payload, QR, archive, preview (1d) |
 | [received-import.md](received-import.md) | received documents, original PDF upload, manual import of issued, categories, custom fields (1e) |
 | [doc-types.md](doc-types.md) | debit notes, DDPP corrections, simplified tax documents (1f-a) |
+| [isdoc.md](isdoc.md) | ISDOC bulk import (preview → confirm) and export (1f-b) |
 
 Each part ends with a "Clarifications (as implemented)" section — the authoritative record of behaviour beyond the
 original contract. Keep every file under 400 lines; add a new part rather than growing one past the cap.

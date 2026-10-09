@@ -1,0 +1,101 @@
+{
+  "import": {
+    "action": "Import ISDOC",
+    "title": "ISDOC import",
+    "back": "Back to the list",
+    "dropHint": "Drop .isdoc, .isdocx or .zip files here (a ZIP inside a ZIP works too), or pick them.",
+    "pick": "Choose files",
+    "limits": "At most 50 MB and 500 documents at once. Issued and received documents are told apart by your company's IČO.",
+    "files": "Files: {names} ({size})",
+    "ignored": "Skipped (unsupported file type): {names}",
+    "reading": "Reading the preview…",
+    "importing": "Importing…",
+    "confirm": "Import selected ({n})",
+    "selected": "{n} of {total} selected"
+  },
+  "upload": {
+    "noFiles": "None of the chosen files is an .isdoc, .isdocx or .zip.",
+    "tooLarge": "The files are too large together (50 MB at most).",
+    "tooMany": "Too many documents at once (500 at most). Split the import into smaller parts.",
+    "unpackedTooLarge": "The unpacked archives are too large (200 MB at most). Split the import into smaller parts.",
+    "category": "The chosen category is no longer active. Pick another one."
+  },
+  "status": {
+    "ok": "OK",
+    "duplicate": "Duplicate",
+    "error": "Error"
+  },
+  "direction": {
+    "issued": "Issued",
+    "received": "Received"
+  },
+  "contactMatch": {
+    "existing": "Existing contact",
+    "new": "New contact"
+  },
+  "preview": {
+    "selectAll": "Select all",
+    "select": "Select {key}",
+    "status": "Status",
+    "document": "Document",
+    "counterparty": "Counterparty",
+    "dates": "Dates",
+    "total": "Total",
+    "ico": "IČO {ico}",
+    "issueDate": "Issued {date}",
+    "taxPointDate": "Tax point {date}",
+    "dueDate": "Due {date}",
+    "empty": "No ISDOC document was found in the files."
+  },
+  "entryError": {
+    "invalid_xml": "The file is not a valid ISDOC document.",
+    "unsupported_version": "Unsupported ISDOC version (6.x is supported).",
+    "unsupported_type": "Unsupported document type.",
+    "foreign": "Your company's IČO is neither the supplier's nor the customer's.",
+    "ambiguous": "Your company's IČO is both the supplier's and the customer's.",
+    "missing_field": "A required element is missing (number, issue date, currency or totals).",
+    "invalid_amount": "Invalid amount.",
+    "rate_unavailable": "The ČNB exchange rates are unavailable. Try the import later.",
+    "internal": "Unexpected server error.",
+    "invalid_archive": "The ZIP archive cannot be read (damaged, or more than 10,000 entries).",
+    "too_deep": "The ZIP is nested deeper than 3 levels.",
+    "duplicate": "The document already exists (created meanwhile).",
+    "number_taken": "The number from the received series is already taken. Check the counter in Settings.",
+    "unsupported_currency": "Unsupported local currency (CZK expected)",
+    "unknown": "Error ({code})."
+  },
+  "warning": {
+    "related_not_found": "Original document {number} was not found; it will not be linked.",
+    "pdf_skipped": "The attached PDF is larger than 20 MB and will not be uploaded.",
+    "rate_from_cnb": "The ISDOC carries no rate; the ČNB rate will be used.",
+    "contact_created": "A contact will be created from the ISDOC data.",
+    "unknown": "Warning ({code})."
+  },
+  "options": {
+    "title": "Import options",
+    "markPaid": "Mark as paid",
+    "markPaidHint": "Records a payment of the full amount on the due date (a refund for credit notes). Advance payment tax documents get none.",
+    "category": "Category of received documents",
+    "noCategory": "No category",
+    "receivedHint": "Applies to all selected received documents; the received date is the tax point date. Each can be edited later."
+  },
+  "result": {
+    "summary": "Imported {imported} of {total}.",
+    "outcome": "Outcome",
+    "open": "Open document",
+    "notSelected": "Not imported (not selected, or no longer OK).",
+    "again": "Import more files",
+    "status": {
+      "imported": "Imported",
+      "skipped": "Skipped",
+      "failed": "Failed"
+    }
+  },
+  "export": {
+    "document": "Download ISDOC",
+    "list": "Export ISDOC",
+    "preparing": "Preparing the export…",
+    "tooMany": "More than 1000 documents match the filter. Narrow it down (e.g. by period).",
+    "hint": "Documents that could not be exported are listed in errors.txt inside the archive."
+  }
+}

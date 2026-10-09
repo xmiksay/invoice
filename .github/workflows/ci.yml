@@ -45,6 +45,9 @@ jobs:
       - name: Toolchain pin matches rust-toolchain.toml
         run: grep -q 'channel = "1.97.0"' rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
+      # xmllint validates ISDOC exports against the vendored XSD.
+      - name: Install xmllint
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-utils
       - run: make lint-backend test-backend
 
   frontend:

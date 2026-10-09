@@ -62,6 +62,34 @@ pub fn totals(
     })
 }
 
+/// The stored amounts of a received document (recap by rate, highest first).
+pub struct Stored<'a> {
+    pub recap: &'a [RecapRow],
+    pub rounding: Decimal,
+    pub payable: Decimal,
+    pub total_czk: Option<Decimal>,
+    pub rate: Option<Decimal>,
+}
+
+/// A save that changes none of the entered amounts nor the rate keeps the
+/// stored CZK amounts. They equal `round2(x × rate)` for a document entered
+/// by hand, but an ISDOC import stores the supplier's own CZK amounts, which
+/// a no-op save must not move by a rounding difference.
+pub fn keep_stored_czk(t: &mut Totals, rate: Option<Decimal>, s: Stored) {
+    let same_rows = t.recap.len() == s.recap.len()
+        && t.recap.iter().zip(s.recap).all(|(a, b)| {
+            a.vat_rate.normalize() == b.vat_rate.normalize() && a.base == b.base && a.vat == b.vat
+        });
+    if !(same_rows && t.rounding == s.rounding && t.payable == s.payable && rate == s.rate) {
+        return;
+    }
+    for (a, b) in t.recap.iter_mut().zip(s.recap) {
+        a.base_czk = b.base_czk;
+        a.vat_czk = b.vat_czk;
+    }
+    t.total_czk = s.total_czk;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,6 +137,45 @@ mod tests {
         assert_eq!(t.recap[0].base_czk, Some(d("2433.50")));
         assert_eq!(t.recap[0].vat_czk, Some(d("511.04")));
         assert_eq!(t.total_czk, Some(d("2944.54")));
+    }
+
+    #[test]
+    fn unchanged_amounts_keep_the_stored_czk() {
+        let fresh = || {
+            totals(
+                &[row("21", "100", "21")],
+                d("0"),
+                d("121"),
+                Some(d("24.335")),
+            )
+            .expect("totals")
+        };
+        let mut stored = fresh().recap;
+        stored[0].base_czk = Some(d("2433.51"));
+        let s = |rate: &str| Stored {
+            recap: &stored,
+            rounding: d("0.00"),
+            payable: d("121.00"),
+            total_czk: Some(d("2944.55")),
+            rate: Some(d(rate)),
+        };
+        let mut t = fresh();
+        keep_stored_czk(&mut t, Some(d("24.335")), s("24.335"));
+        assert_eq!(t.total_czk, Some(d("2944.55")));
+        assert_eq!(t.recap[0].base_czk, Some(d("2433.51")));
+        // Another rate, payable or recap: recomputed.
+        let mut t = fresh();
+        keep_stored_czk(&mut t, Some(d("24.335")), s("25"));
+        assert_eq!(t.total_czk, Some(d("2944.54")));
+        let mut t = totals(
+            &[row("21", "100", "21")],
+            d("0"),
+            d("120"),
+            Some(d("24.335")),
+        )
+        .expect("t");
+        keep_stored_czk(&mut t, Some(d("24.335")), s("24.335"));
+        assert_eq!(t.total_czk, Some(d("2920.20")));
     }
 
     #[test]
