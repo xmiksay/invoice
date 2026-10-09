@@ -2,7 +2,8 @@
 
 All routes under `/api`, Bearer auth (already enforced). JSON camelCase on the wire
 (`#[serde(rename_all = "camelCase")]`). Money/rates are decimals serialized as STRINGS
-(e.g. `"21"`, `"12.5"`) to avoid float loss. IDs are UUID strings. Dates `YYYY-MM-DD`.
+(e.g. `"21"`, `"12.5"`) to avoid float loss. Decimal *inputs* of document lines, `exchangeRate`, compute and payments also accept a JSON
+number (taken by its shortest text, then validated like the string) — see `src/num_text.rs`. IDs are UUID strings. Dates `YYYY-MM-DD`.
 
 ## Errors
 - 404 `{"code":"not_found"}`

@@ -56,7 +56,7 @@ impl From<contact::Model> for Contact {
 }
 
 /// Create/update body (PUT replaces every field).
-#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Default, Deserialize, ToSchema, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ContactInput {
     pub name: String,

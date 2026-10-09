@@ -154,13 +154,19 @@ pub fn spawn_archive_ddpp(db: DatabaseConnection, pdf: PdfService, id: Uuid) {
 /// document serves its uploaded original (none → `pdf_missing`), never a
 /// render; a draft is rendered live and never stored; an issued or cancelled
 /// document serves its archive (stored ones streamed).
+/// Received and imported documents are never rendered: their PDF is the
+/// uploaded original, if any.
+pub fn serves_original(direction: &str, imported: bool) -> bool {
+    direction == RECEIVED || imported
+}
+
 pub async fn document_pdf(
     db: &DatabaseConnection,
     pdf: &PdfService,
     id: Uuid,
 ) -> Result<(document::Model, PdfBody), AppError> {
     let row = query::find(db, id).await?;
-    if row.direction == RECEIVED || row.imported {
+    if serves_original(&row.direction, row.imported) {
         let rel = row.original_path.as_deref().ok_or(AppError::PdfMissing)?;
         let body = PdfBody::Stored(pdf.storage().get_stream(rel).await?);
         return Ok((row, body));

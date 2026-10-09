@@ -301,9 +301,10 @@ pub struct ErrorBody {
     pub detail: Option<String>,
 }
 
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        match &self {
+impl AppError {
+    /// Log the cause server-side (internal / upstream detail never reaches the client).
+    pub fn log(&self) {
+        match self {
             Self::Internal(_) | Self::Database(_) => {
                 tracing::error!(error = %self, "request failed")
             }
@@ -317,8 +318,12 @@ impl IntoResponse for AppError {
             Self::BadRequest(_) | Self::Conflict(_) => tracing::debug!(error = %self, "rejected"),
             _ => {}
         }
-        let (status, code) = self.status_and_code();
-        let fields = match &self {
+    }
+
+    /// The client-facing error body (REST response, MCP tool error).
+    pub fn body(&self) -> ErrorBody {
+        let (_, code) = self.status_and_code();
+        let fields = match self {
             Self::Validation(f) | Self::ValidationDetail(f, _) => Some(
                 f.0.iter()
                     .map(|(k, v)| (k.clone(), (*v).to_string()))
@@ -330,22 +335,26 @@ impl IntoResponse for AppError {
             )])),
             _ => None,
         };
-        let detail = match &self {
+        let detail = match self {
             Self::PdfRenderFailed(d) | Self::SmtpFailed(d) | Self::ValidationDetail(_, d) => {
                 Some(d.clone())
             }
             Self::TemplateInvalid { detail, .. } => Some(detail.clone()),
             _ => None,
         };
-        let mut resp = (
-            status,
-            Json(ErrorBody {
-                code,
-                fields,
-                detail,
-            }),
-        )
-            .into_response();
+        ErrorBody {
+            code,
+            fields,
+            detail,
+        }
+    }
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        self.log();
+        let (status, _) = self.status_and_code();
+        let mut resp = (status, Json(self.body())).into_response();
         if matches!(self, Self::Unauthorized) {
             resp.headers_mut()
                 .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));

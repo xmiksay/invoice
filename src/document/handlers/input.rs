@@ -29,7 +29,7 @@ use crate::validation::{self as v, Check};
 
 /// Create (`POST`, omitted fields get defaults) and update (`PUT`, replaces
 /// every field) body.
-#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Default, Deserialize, ToSchema, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DocumentInput {
     /// `invoice` | `proforma` | `simplified` on create (default `invoice`;
@@ -44,6 +44,8 @@ pub struct DocumentInput {
     pub due_date: Option<NaiveDate>,
     pub currency: Option<String>,
     /// CZK per 1 unit; manual override (null = ČNB at issue).
+    #[serde(deserialize_with = "crate::num_text::opt_decimal")]
+    #[schemars(with = "Option<crate::num_text::DecimalText>")]
     pub exchange_rate: Option<String>,
     pub locale: Option<String>,
     /// `standard` | `reverse_charge` | `exempt` | `non_payer`.
