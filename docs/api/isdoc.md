@@ -86,7 +86,7 @@ PreviewEntry {
 - `pdf_skipped`
 - `rate_from_cnb`: a foreign currency with no usable rate in the ISDOC.
 - `contact_created`
-- `paid_ignored`: `PaidAmount` is present; it is never used.
+- ~~`paid_ignored`~~: dropped (see Clarifications); `PaidAmount` is still never used.
 
 ### Direction
 - Our company's IČO equals the supplier's IČO → `issued`.
@@ -223,3 +223,126 @@ PreviewEntry {
   - Confirm, then a result table with links to the imported documents.
 - **Detail:** a "Stáhnout ISDOC" button on issued non-draft documents.
 - **Lists:** "Exportovat ISDOC" on the issued list exports the current filter as one ZIP.
+
+## Clarifications 1f-b (as implemented)
+Additive details and spec research settled during the Phase 1f-b backend.
+
+ISDOC 6.0.2 spec findings
+- **Signs (types 2 and 6):** the spec (appendix A.6, binding since 5.2.1) says a credit note is *always* written with
+  positive amounts; its type says that they subtract. Export therefore writes credit notes and DDPP corrections
+  positive, as stored. On import, a type 2 / 6 document whose `TaxInclusiveAmount` is negative is negated **as a
+  whole** (recap, totals, rounding, line prices), so mixed-sign lines keep their relation; a positive one is taken
+  as is.
+- **`.isdocx` manifest:** the manifest schema (`isdoc-manifest-6.0.2.xsd`) holds exactly one `maindocument
+  filename="…"` — it cannot name the PDF. The PDF is named inside the ISDOC by
+  `SupplementsList/Supplement[@preview="true"]` (`Filename`, `DigestMethod`
+  `http://www.w3.org/2001/04/xmlenc#sha256`, base64 `DigestValue`). Export writes both; import picks the PDF the
+  `preview` supplement names, else the only PDF of the archive — chosen from the entry names, so only that one PDF
+  is decompressed and counted toward the unpacked limit. Without a manifest the root-level `.isdoc` is the
+  main document (spec 3.3.1 backward compatibility), else the first `.isdoc` anywhere.
+- **Deposits:** an `advance` line deducting a DDPP becomes one `TaxedDeposits/TaxedDeposit` per rate (DDPP number,
+  its VS, amounts, rate) and the DDPP amounts are `AlreadyClaimed…` in `TaxSubTotal`; the non-payer form (deducting a
+  proforma) becomes one `NonTaxedDeposits/NonTaxedDeposit` and `PaidDepositsAmount`. `TaxableAmount` = the stored
+  (net) recap + deducted, `Difference…` = what this document taxes (A.6: `DifferenceTaxInclusiveAmount +
+  PayableRoundingAmount − PaidDepositsAmount = PayableAmount`).
+- **`PaymentMeansCode`:** `bank_transfer` 42, `cash` 10, `card` 48, `other` 97 (the schema enum: 10, 20, 31, 42, 48,
+  49, 50, 97). Import: 42 / 10 / 48 as listed, anything else (and no `PaymentMeans`) → `other`.
+- **Local currency elements:** `UnitPrice`, `LineExtensionAmountBeforeDiscount`, deposits and every plain amount are
+  in the local currency (CZK); a foreign-currency document carries the `…Curr` twins.
+- **Schema validity:** `tests/fixtures/isdoc/schema/` vendors `isdoc-invoice-6.0.2.xsd` and
+  `isdoc-manifest-6.0.2.xsd` (the copyright notice permits copying with the notice kept). Integration tests run
+  `xmllint --schema` on real exports (CZK, EUR, credit note, plain `.isdoc`) and on the manifest, so `xmllint`
+  (`libxml2-utils`) is needed for `make test-integration` (CI installs it).
+
+Import
+- **Recap and totals** come from the `Difference…` elements (`DifferenceTaxableAmount` / `DifferenceTaxAmount`,
+  `DifferenceTaxExclusiveAmount` / `DifferenceTaxInclusiveAmount`) instead of the gross `TaxableAmount`: they are
+  equal without taxed deposits, and with them the difference is what the document taxes, which matches our stored
+  net recap (round trip). Preview `total` stays `TaxInclusiveAmount`. `totalCzk` = plain `PayableAmount`.
+- **Non-taxed deposits:** `PaidDepositsAmount` (VAT-free, e.g. a paid proforma without a DDPP) is subtracted from the
+  0 % recap row (added with a negative base when missing — as a non-payer's `advance` line deducts a proforma) and
+  from the base and total, so `payable = total + rounding` holds and import(export(doc)) reproduces our stored
+  recap, total and payable.
+- **CZK amounts after a save:** a received `PUT` that changes neither the recap rows (rate, base, VAT), the rounding,
+  the payable nor the exchange rate keeps the stored CZK amounts (recap `baseCzk` / `vatCzk`, `totalCzk`), so an
+  imported document keeps the supplier's CZK amounts through a no-op save. Any change recomputes them as for every
+  received document (`round2(x × rate)`, `totalCzk` from the payable). A manually entered document already stores
+  exactly those values, so for it nothing changes.
+- **`paid_ignored` is not emitted:** every producer (we included) writes `PaidAmount`, so the warning was noise. The
+  amount stays ignored; export keeps writing `PaidAmount` = payable (the amount to pay).
+- **Local currency:** a `LocalCurrencyCode` other than CZK → entry error `unsupported_currency` (the plain amounts
+  would not be CZK).
+- **VAT mode** (first match): a `LocalReverseChargeFlag`, `VATApplicable` false at a non-zero rate, or a note with
+  "přenesen" → `reverse_charge`; every row 0 % with `VATApplicable` false → `non_payer` (issued) / `exempt`
+  (received); `VATApplicable` true and zero VAT on every row while some row's `round2(base × rate / 100)` is not
+  zero → `exempt` (how our own export writes `exempt`); else `standard` (VAT rounding to 0, zero-value documents). Export writes `VATApplicable` true for standard / exempt, false + `LocalReverseChargeFlag` for reverse
+  charge, false for non-payer.
+- **Lines:** a line with no quantity (or 0) and zero `LineExtensionAmount` and `UnitPrice` is `text`. CZK: unit price
+  = `UnitPrice`; a `LineExtensionAmountBeforeDiscount` above the base gives the discount % (2 dp). Foreign currency:
+  unit price = `LineExtensionAmountCurr` ÷ quantity (4 dp), no discount. ISDOC 6.0.2 has no document-currency unit
+  price or before-discount amount (`UnitPrice` and `LineExtensionAmountBeforeDiscount` have no `…Curr` twin), so a
+  discounted foreign-currency line round-trips at its net unit price with 0 % (299.99 at 15 % → 254.99 at 0 %): the
+  line base, recap and totals are unchanged. Export writes no before-discount amount for such a line. Quantity / price 4 dp, unit = `unitCode`
+  (≤ 20 chars). Lines are stored in **both directions** and are display-only: the recap and totals still come
+  from the ISDOC and are never recomputed. `Document.lines` of a received document imported from ISDOC returns
+  them (every other received document keeps `lines: []`); a received `PUT` carries no lines and leaves them
+  untouched. A line whose base `quantity × unitPrice` would not fit a money column → `invalid_amount`; a
+  `non_payer` document stores its item lines at rate 0.
+- **Parties:** IČO = `PartyIdentification/ID` without whitespace; DIČ = the first non-empty
+  `PartyTaxScheme/CompanyID`; street = `StreetName` + `BuildingNumber`; country = `IdentificationCode` (else `CZ`);
+  registration = `RegisterIdentification/Preformatted` (else `RegisterKeptAt RegisterFileRef`); phone / e-mail from
+  `Contact`. A party without an IČO matches (and the duplicate rule compares) a contact with no IČO and exactly the
+  same name; otherwise a new contact is created. Supplier snapshot `vatPayer` = header `VATApplicable`.
+- **Received fields:** `note` is the document's `internalNote` (received documents have no header note);
+  `receivedDate` = tax point (issue date for a proforma); `supplierAccount` = IBAN else `account/bankCode`
+  (≤ 60); locale `cs`; `bankAccountId` none. Issued: `bankSnapshot` = the ISDOC payment details,
+  `roundTotal` = rounding ≠ 0. VS / KS kept only when they are digits (≤ 10 / ≤ 4).
+- **Rates:** `CurrRate / RefCurrRate` with a positive `RefCurrRate` (default 1), 6 dp, when a `ForeignCurrencyCode`
+  differs from CZK.
+- **More entry error codes:** `unsupported_currency` (see above), `invalid_archive` (an unreadable `.zip`), `too_deep` (a zip nested deeper than 3
+  levels, the top-level upload being level 1; an `.isdocx` is not a level). `missing_field` also covers an `ID`
+  longer than 40 characters, an unparsable required date and a non-ISO currency. An `.isdocx` without an ISDOC →
+  `invalid_xml`. DTDs are refused (`invalid_xml`). `invalid_amount` also covers a VAT rate outside 0–100 or with
+  more than 2 dp.
+- **Batch:** a `.zip` holds at most 10 000 entries (else `invalid_archive`). A later document with the same identity
+  as an earlier one (issued: type + number; received: supplier IČO or name + number) is a `duplicate` and keeps
+  its own key. Two entries with the same path (e.g. two uploads of the same name) get unique keys: the later one is
+  suffixed `#2`, `#3`, …
+- **Upload:** the 50 MiB counts the `files` parts; the route body limit is 50 MiB + 1 MiB of multipart overhead (also
+  → 413 `too_large`). No `files` part → 422 `files: required`. A top-level file that is neither `.zip` nor `.isdocx`
+  is read as ISDOC XML; inside a zip only `.isdoc` / `.isdocx` / `.zip` count. "Unpacked" counts the bytes
+  actually decompressed from archives, never the header sizes.
+- **Confirm `options`:** a multipart **text** part holding JSON (no content type needed). Missing or malformed → 422
+  `{"fields":{"options":"invalid"}}`; `selected` defaults to `[]`. `categoryId` must name an active expense category
+  (else `categoryId: invalid` / `inactive`). Entries are imported in rank order (proforma → invoice / simplified /
+  DDPP → corrections), so a selected original is committed before a document that links to it; results are listed
+  in upload order. Database lookups (existing duplicate, contact, related) run only for the selected entries; the
+  in-batch duplicate pass covers all. Each entry's transaction takes `pg_advisory_xact_lock` on its identity
+  (direction + type / supplier + number) and re-checks the duplicate rule, so two concurrent confirms cannot import
+  the same received document twice (no unique index backs supplier + supplier number). A duplicate found then is
+  `failed` with `duplicate`. Failure codes: `rate_unavailable`, `duplicate`, `number_taken` (the received series
+  counter collides), `internal`.
+- **`markPaid`:** the payment is dated `dueDate ?? issueDate`; types: all but `advance_tax_doc`, `payable > 0`.
+
+Export
+- `{number}` in file names is reduced to `[A-Za-z0-9._-]` (as the PDF download). The single export of a received
+  document → 404, of a draft → 409 `invalid_state` (checked in that order).
+- When the PDF cannot be obtained for any reason (mdcast down, archive file unreadable, no original) the export is a
+  plain `.isdoc`; the failure is logged.
+- A simplified document without a customer writes `AnonymousCustomerParty` (`ID` `anonymous`, empty `IDScheme`):
+  the schema requires a customer party, so it cannot be omitted. Import reads its absence as "no customer".
+- Header: `IssuingSystem` `invoice`; `TaxPointDate` whenever stored (never for a proforma);
+  `ElectronicPossibilityAgreementReference` empty; `CurrRate` = the stored rate (1 for CZK), `RefCurrRate` 1.
+  `Note` = header note, then `Důvod opravy: {reason}` on its own line. Party `Country/Name` "Česká republika" for CZ,
+  else the code; `BuildingNumber` empty (the street holds it); DIČ with `TaxScheme` `VAT`; registration as
+  `Preformatted`.
+- Lines: `ID` = 1-based counter of exported lines; `VATCalculationMethod` 0; line VAT = `round2(base × rate)` in
+  VAT-charging mode, else 0; a foreign-currency line converts at the document rate (CZK 2 dp, `UnitPrice` 4 dp).
+  A document with no item / text line gets one zero `InvoiceLine` (the schema needs one).
+- `PaymentMeans` is always written: `PaidAmount` = payable, due date (issue date if none), account split at `/` into
+  `ID` / `BankCode`, `IBAN`, `BIC` (empty elements when unknown), VS, KS.
+- Bulk: ordered by issue date, number; entries are the per-document files; a name collision gets `-2`, `-3`, … before
+  the extension. The 1000 limit counts after excluding drafts. Entries are written into the ZIP as they are produced
+  (PDFs rendered lazily one after another). A document that cannot be exported is skipped and logged, and
+  `errors.txt` in the ZIP lists `{number}: export failed ({code})` per skipped document (`code` is the generic error
+  code, e.g. `internal`); when nothing at all could be exported the first error is returned instead.

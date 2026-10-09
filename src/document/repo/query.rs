@@ -139,7 +139,7 @@ fn search(term: &str) -> Condition {
         .add(live_name)
 }
 
-fn filtered(q: &ListQuery, term: Option<&str>, today: NaiveDate) -> Select<Entity> {
+pub(crate) fn filtered(q: &ListQuery, term: Option<&str>, today: NaiveDate) -> Select<Entity> {
     let mut cond = Condition::all();
     if let Some(d) = &q.direction {
         cond = cond.add(Column::Direction.eq(d.as_str()));

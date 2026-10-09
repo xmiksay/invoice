@@ -38,7 +38,10 @@ function open(id: string) {
   <section class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h1 class="text-2xl font-semibold">{{ t(`received.list.title.${docType}`) }}</h1>
-      <RouterLink :to="{ name: 'received-new', query: { docType } }" class="btn btn-primary" data-test="new-document">{{ t(`received.newTitle.${docType}`) }}</RouterLink>
+      <div class="flex flex-wrap gap-2">
+        <RouterLink :to="{ name: 'isdoc-import', query: { from: 'received' } }" class="btn" data-test="import-isdoc">{{ t("isdoc.import.action") }}</RouterLink>
+        <RouterLink :to="{ name: 'received-new', query: { docType } }" class="btn btn-primary" data-test="new-document">{{ t(`received.newTitle.${docType}`) }}</RouterLink>
+      </div>
     </div>
 
     <DocTypeTabs :current="docType" direction="received" label-prefix="documents.list.tab" />

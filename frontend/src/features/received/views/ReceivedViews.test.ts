@@ -49,6 +49,7 @@ async function mountAt(path: string) {
     routes: [
       { path: "/received", name: "received", component: ReceivedListView },
       { path: "/received/new", name: "received-new", component: stub },
+      { path: "/import/isdoc", name: "isdoc-import", component: stub },
       { path: "/received/:id", name: "received-detail", component: ReceivedDetailView },
       { path: "/received/:id/edit", name: "received-edit", component: stub },
       { path: "/invoices/:id", name: "invoice-detail", component: stub },
@@ -91,6 +92,7 @@ describe("ReceivedListView", () => {
     expect(w.find("h1").text()).toBe("Received credit notes");
     expect(w.find('[data-test="new-document"]').attributes("href")).toBe("/received/new?docType=credit_note");
     expect(w.find('[data-test="tab-proforma"]').attributes("href")).toBe("/received?type=proforma");
+    expect(w.find('[data-test="import-isdoc"]').attributes("href")).toBe("/import/isdoc?from=received");
   });
 
   it("records any of the seven types, e.g. a debit note", async () => {
@@ -147,6 +149,20 @@ describe("ReceivedDetailView", () => {
     await flushPromises();
     const put = fetch.mock.calls.find(([, init]) => init?.method === "PUT");
     expect(JSON.parse(String(put?.[1]?.body))).toEqual({ categoryId: "k1", customFields: { po: "PO-9" }, internalNote: null });
+  });
+
+  it("shows ISDOC-imported lines read-only, and nothing when there are none", async () => {
+    const routesFor = (doc: unknown) => ({ "GET /api/documents/r1": doc, "GET /api/documents/r1/payments": [], "GET /api/settings/categories": [], "GET /api/settings/custom-fields": [] });
+    mockFetchRoutes(routesFor(stored));
+    const { w } = await mountAt("/received/r1");
+    const section = w.find('[data-test="received-lines"]');
+    expect(section.find("h2").text()).toBe("Document lines");
+    expect(section.find('[data-test="detail-line-1"]').exists()).toBe(true);
+    expect(section.find("input").exists()).toBe(false);
+
+    mockFetchRoutes(routesFor({ ...stored, lines: [] }));
+    const { w: empty } = await mountAt("/received/r1");
+    expect(empty.find('[data-test="received-lines"]').exists()).toBe(false);
   });
 
   it("deletes after confirmation and returns to the list tab", async () => {

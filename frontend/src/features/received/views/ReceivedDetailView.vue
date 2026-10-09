@@ -3,6 +3,7 @@ import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { useAction } from "@/composables/useAction";
+import DocumentLinesTable from "@/features/documents/components/DocumentLinesTable.vue";
 import OriginalPdfPanel from "@/features/documents/components/OriginalPdfPanel.vue";
 import PartiesCard from "@/features/documents/components/PartiesCard.vue";
 import PaymentsPanel from "@/features/documents/components/PaymentsPanel.vue";
@@ -80,6 +81,12 @@ function remove() {
       <PartiesCard :supplier="doc.supplier" :customer="doc.customer ?? company.company" />
       <RelatedDocumentsPanel :parent="doc.parent" :children="doc.relatedDocuments" :currency="doc.currency" direction="received" />
       <ReceivedInfoCard :doc="doc" />
+      <!-- Lines only come from an ISDOC import and are informational: the recap below is what counts. -->
+      <section v-if="doc.lines?.length" class="space-y-2" data-test="received-lines">
+        <h2 class="font-semibold">{{ t("received.lines.title") }}</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400">{{ t("received.lines.hint") }}</p>
+        <DocumentLinesTable :lines="doc.lines" :currency="doc.currency" />
+      </section>
       <TotalsPanel :totals="doc.totals" :currency="doc.currency" :exchange-rate="doc.exchangeRate" :sign="doc.sign" />
       <PaymentsPanel v-if="hasPayments" :doc="doc" />
       <MetadataCard :doc="doc" />

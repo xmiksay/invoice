@@ -1,14 +1,14 @@
 //! Received documents behind the shared `/api/documents` routes: validate,
 //! resolve the ČNB rate (before any transaction), compute totals, store.
 
-use sea_orm::{DatabaseConnection, EntityTrait};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
 use uuid::Uuid;
 
 use super::received_input::{ReceivedCtx, ReceivedData, ReceivedInput};
 use crate::app::AppState;
 use crate::contact::entity::contact;
-use crate::document::compute::Overflow;
-use crate::document::entity::document;
+use crate::document::compute::{Overflow, RecapRow};
+use crate::document::entity::{document, vat_recap};
 use crate::document::received;
 use crate::document::repo::issue::{self as issue_repo, Rate, customer};
 use crate::document::repo::meta;
@@ -128,6 +128,31 @@ pub async fn update(
     {
         return Err(AppError::field("direction", "invalid"));
     }
-    let r = record(state, input, Some(doc)).await?;
+    let mut r = record(state, input, Some(doc)).await?;
+    let stored: Vec<RecapRow> = vat_recap::Entity::find()
+        .filter(vat_recap::Column::DocumentId.eq(doc.id))
+        .order_by_desc(vat_recap::Column::VatRate)
+        .all(&state.db)
+        .await?
+        .into_iter()
+        .map(|v| RecapRow {
+            vat_rate: v.vat_rate,
+            base: v.base,
+            vat: v.vat,
+            base_czk: v.base_czk,
+            vat_czk: v.vat_czk,
+        })
+        .collect();
+    received::keep_stored_czk(
+        &mut r.totals,
+        r.rate.rate,
+        received::Stored {
+            recap: &stored,
+            rounding: doc.rounding,
+            payable: doc.payable,
+            total_czk: doc.total_czk,
+            rate: doc.exchange_rate,
+        },
+    );
     repo::update(&state.db, doc.id, r).await
 }

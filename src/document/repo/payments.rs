@@ -143,7 +143,7 @@ async fn locked_issued(txn: &DatabaseTransaction, id: Uuid) -> Result<document::
     Ok(doc)
 }
 
-async fn resum(txn: &DatabaseTransaction, id: Uuid) -> Result<(), AppError> {
+pub(crate) async fn resum(txn: &DatabaseTransaction, id: Uuid) -> Result<(), AppError> {
     txn.execute(Statement::from_sql_and_values(
         txn.get_database_backend(),
         "UPDATE documents SET paid = (SELECT COALESCE(SUM(amount), 0) FROM payments \

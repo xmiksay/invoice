@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { documentsApi } from "./api";
+import { documentsApi, type DocumentFilterQuery } from "./api";
 import {
   DOCUMENT_TYPES,
   type Direction,
@@ -56,25 +56,28 @@ const defineListStore = (id: string, direction: Direction) => defineStore(id, ()
   // Drops responses that arrive after a newer query was started.
   let seq = 0;
 
+  /** The current tab + filters as a wire query (no paging). */
+  function query(): DocumentFilterQuery {
+    const f = filters.value;
+    return {
+      direction,
+      docType: docType.value,
+      status: f.status || undefined,
+      paymentState: f.paymentState || undefined,
+      overdue: f.overdue,
+      q: f.q,
+      from: f.from || undefined,
+      to: f.to || undefined,
+      categoryId: f.categoryId || undefined,
+      imported: f.imported === "" ? undefined : f.imported === "true",
+    };
+  }
+
   async function load(): Promise<void> {
     const mine = ++seq;
     loading.value = true;
-    const f = filters.value;
     try {
-      const page = await documentsApi.list({
-        direction,
-        docType: docType.value,
-        status: f.status || undefined,
-        paymentState: f.paymentState || undefined,
-        overdue: f.overdue,
-        q: f.q,
-        from: f.from || undefined,
-        to: f.to || undefined,
-        categoryId: f.categoryId || undefined,
-        imported: f.imported === "" ? undefined : f.imported === "true",
-        limit: PAGE_SIZE,
-        offset: offset.value,
-      });
+      const page = await documentsApi.list({ ...query(), limit: PAGE_SIZE, offset: offset.value });
       if (mine !== seq) return;
       items.value = page.items;
       total.value = page.total;
@@ -104,7 +107,7 @@ const defineListStore = (id: string, direction: Direction) => defineStore(id, ()
     await load();
   }
 
-  return { items, total, docType, filters, offset, loading, load, applyFilters, goTo, setDocType };
+  return { items, total, docType, filters, offset, loading, query, load, applyFilters, goTo, setDocType };
 });
 
 export const useInvoiceListStore = defineListStore("documents/invoices", "issued");

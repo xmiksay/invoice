@@ -29,7 +29,7 @@ Open the SPA and log in with the API token.
 | `make frontend-install` / `make frontend-build` | `npm ci` / production SPA build |
 | `make fmt` / `make fmt-check` / `make clippy` | Rust formatting and lints |
 | `make lint` | `lint-backend` + `lint-frontend` (eslint + vue-tsc) |
-| `make test-unit` / `make test-integration` | Rust unit / integration tests (integration needs Postgres) |
+| `make test-unit` / `make test-integration` | Rust unit / integration tests (integration needs Postgres and `xmllint` from `libxml2-utils`) |
 | `make test` | `test-backend` + `test-frontend` |
 | `make migrate` / `make migrate-status` | Apply / show migrations |
 | `make docker-build` | Build the Docker image (`IMAGE=...` to override the tag) |
