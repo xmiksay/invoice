@@ -40,6 +40,7 @@ function open(id: string) {
       <h1 class="text-2xl font-semibold">{{ t(`received.list.title.${docType}`) }}</h1>
       <div class="flex flex-wrap gap-2">
         <RouterLink :to="{ name: 'isdoc-import', query: { from: 'received' } }" class="btn" data-test="import-isdoc">{{ t("isdoc.import.action") }}</RouterLink>
+        <RouterLink :to="{ name: 'csv-import', query: { from: 'received' } }" class="btn" data-test="import-csv">{{ t("csvImport.import.action") }}</RouterLink>
         <RouterLink :to="{ name: 'received-new', query: { docType } }" class="btn btn-primary" data-test="new-document">{{ t(`received.newTitle.${docType}`) }}</RouterLink>
       </div>
     </div>

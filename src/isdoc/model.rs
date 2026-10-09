@@ -3,6 +3,7 @@
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
+pub use crate::import::model::Party;
 use crate::settings::doc_type::DocType;
 
 /// ISDOC 6 namespace (also the version check: 5.x uses another one).
@@ -16,22 +17,6 @@ pub const MANIFEST_NS: &str = "http://isdoc.cz/namespace/2013/manifest";
 pub struct Money {
     pub doc: Decimal,
     pub czk: Option<Decimal>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Party {
-    pub name: String,
-    /// `PartyIdentification/ID`, whitespace stripped.
-    pub ico: Option<String>,
-    pub dic: Option<String>,
-    pub street: String,
-    pub city: String,
-    pub zip: String,
-    /// ISO 3166-1 alpha-2, default `CZ`.
-    pub country: String,
-    pub registration: Option<String>,
-    pub email: Option<String>,
-    pub phone: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

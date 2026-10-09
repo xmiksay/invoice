@@ -21,6 +21,7 @@ use invoice::secret::Secret;
 use sea_orm::{ConnectOptions, ConnectionTrait, Database, DatabaseConnection};
 use tower::ServiceExt;
 
+pub mod csvio;
 pub mod documents;
 pub mod isdoc;
 pub mod mdcast;

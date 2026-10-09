@@ -130,6 +130,15 @@ Storage (#9, before 2a):
 2b CSV/XLSX import: one template for both directions and all seven types, one row = one document, VAT recap in
 per-rate columns (`base_21`, `vat_21`, `base_12`, `vat_12`, `base_0`), contacts matched by IČO or created, sample
 downloadable in the UI, preview → confirm like ISDOC.
+- Decided in the 2b grill: one format for import and export (export → import round-trips); recap per rate **in CZK
+  only** (foreign documents: `total` in their currency + `exchange_rate`, the currency recap is derived on import);
+  rate columns dynamic from Settings → VAT rates; UTF-8 with Windows-1250 fallback; `paid_date` = one full payment;
+  contacts matched by IČO → DIČ → exact name, else created; unknown categories created; limits as ISDOC (50 MiB /
+  500 rows); 2b and 2c stay separate PRs. A per-space accounting currency and rounding are noted on #3.
+  Contract: [`docs/api/csv.md`](api/csv.md).
+- As implemented: the ISDOC import pipeline (lookups, per-entry check, transaction, wire types) moved to
+  `src/import/` and both imports use it; the format lives in `src/csvio/format.rs` + `write.rs` for 2c to reuse;
+  details in the csv.md Clarifications.
 
 2c CSV export for the accountant: issued and received per the list filter, one row = one document, `;` separator,
 UTF-8 with BOM, decimal comma, dates `dd.mm.yyyy`; columns direction, type, number, supplier number, dates,

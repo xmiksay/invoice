@@ -71,5 +71,7 @@ describe("router auth guard", () => {
     await router.push("/invoices/d1/edit");
     expect(router.currentRoute.value.name).toBe("invoice-edit");
     expect(router.currentRoute.value.params.id).toBe("d1");
+    await router.push("/import/csv?from=received");
+    expect(router.currentRoute.value.name).toBe("csv-import");
   });
 });

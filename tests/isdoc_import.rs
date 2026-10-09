@@ -336,7 +336,7 @@ async fn foreign_currency_rates() {
 async fn confirm_rechecks_duplicates_under_a_lock() {
     use invoice::document::repo::issue::Rate;
     use invoice::error::AppError;
-    use invoice::isdoc::store::{self, Options};
+    use invoice::import::store::{self, Options};
     use invoice::isdoc::{parse, plan};
 
     let db = TestDb::new().await;
@@ -344,8 +344,8 @@ async fn confirm_rechecks_duplicates_under_a_lock() {
     set_company(&app, true).await;
     let pdf = common::pdf_service(&dead_url(), common::shared_storage());
     let opts = Options {
-        mark_paid: false,
-        category_id: None,
+        paid_on: None,
+        category: None,
         vat_deductible: true,
     };
     let rate = Rate {

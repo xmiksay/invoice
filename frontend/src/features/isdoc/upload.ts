@@ -1,22 +1,15 @@
 import { ApiError } from "@/api/client";
-import type { PreviewEntry } from "./types";
+import { hasExtension } from "@/features/imports/upload";
 
-/** Server limit for one upload (413 `too_large` above it). */
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 export const ACCEPTED_EXTENSIONS = [".isdoc", ".isdocx", ".zip"] as const;
 export const ACCEPT_ATTR = ACCEPTED_EXTENSIONS.join(",");
 
-const accepted = (file: File) => ACCEPTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext));
+const accepted = (file: File) => hasExtension(file, ACCEPTED_EXTENSIONS);
 
 /** Splits picked / dropped files into the ones to upload and the names of the ignored rest. */
 export function partitionFiles(files: File[]): { files: File[]; ignored: string[] } {
   return { files: files.filter(accepted), ignored: files.filter((f) => !accepted(f)).map((f) => f.name) };
 }
-
-export const totalBytes = (files: File[]) => files.reduce((sum, f) => sum + f.size, 0);
-
-/** Only `ok` entries can be imported; they start selected. */
-export const defaultSelection = (entries: PreviewEntry[]): string[] => entries.filter((e) => e.status === "ok").map((e) => e.key);
 
 export const ENTRY_ERRORS = [
   "invalid_xml",

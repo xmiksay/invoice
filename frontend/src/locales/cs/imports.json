@@ -1,0 +1,46 @@
+{
+  "status": {
+    "ok": "V pořádku",
+    "duplicate": "Duplicita",
+    "error": "Chyba"
+  },
+  "direction": {
+    "issued": "Vydaný",
+    "received": "Přijatý"
+  },
+  "contactMatch": {
+    "existing": "Existující kontakt",
+    "new": "Nový kontakt"
+  },
+  "preview": {
+    "selectAll": "Vybrat vše",
+    "select": "Vybrat {key}",
+    "status": "Stav",
+    "document": "Doklad",
+    "counterparty": "Protistrana",
+    "dates": "Data",
+    "total": "Celkem",
+    "ico": "IČO {ico}",
+    "issueDate": "Vystaveno {date}",
+    "taxPointDate": "DUZP {date}",
+    "dueDate": "Splatnost {date}"
+  },
+  "result": {
+    "summary": "Importováno {imported} z {total}.",
+    "outcome": "Výsledek",
+    "open": "Otevřít doklad",
+    "notSelected": "Neimportováno (nevybráno, nebo už není v pořádku).",
+    "status": {
+      "imported": "Importováno",
+      "skipped": "Přeskočeno",
+      "failed": "Selhalo"
+    }
+  },
+  "page": {
+    "back": "Zpět na seznam",
+    "reading": "Načítám náhled…",
+    "importing": "Importuji…",
+    "confirm": "Importovat vybrané ({n})",
+    "selected": "Vybráno {n} z {total}"
+  }
+}
