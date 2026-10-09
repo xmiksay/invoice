@@ -124,6 +124,8 @@ Storage (#9, before 2a):
   template on the sample in strict mode; an error → 422 with line + message, the active template stays.
 - Sending is synchronous (30 s timeout); every attempt is logged (to/cc/bcc, subject, time, ok/error, Message-ID);
   success sets `sentAt`; re-sending allowed; the history is shown on the document detail.
+- Decided in the 2a grill: one template set for all document types (the type is a variable); `Reply-To` = the
+  company e-mail when set; the log stores the body too. Contract: [`docs/api/email.md`](api/email.md).
 
 2b CSV/XLSX import: one template for both directions and all seven types, one row = one document, VAT recap in
 per-rate columns (`base_21`, `vat_21`, `base_12`, `vat_12`, `base_0`), contacts matched by IČO or created, sample
