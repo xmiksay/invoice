@@ -1,7 +1,8 @@
 import { defineStore } from "pinia";
 import { ref, type Ref } from "vue";
-import { bankAccountsApi, categoriesApi, companyApi, customFieldsApi, numberSeriesApi, pdfApi, vatRatesApi, type CrudApi } from "./api";
+import { accountingApi, bankAccountsApi, categoriesApi, companyApi, customFieldsApi, numberSeriesApi, pdfApi, vatRatesApi, type CrudApi } from "./api";
 import type {
+  AccountingSettings,
   BankAccount,
   BankAccountInput,
   Category,
@@ -28,6 +29,20 @@ export const useCompanyStore = defineStore("settings/company", () => {
   }
 
   return { company, load, save };
+});
+
+export const useAccountingStore = defineStore("settings/accounting", () => {
+  const settings = ref<AccountingSettings | null>(null);
+
+  async function load(): Promise<void> {
+    settings.value = await accountingApi.get();
+  }
+
+  async function save(input: AccountingSettings): Promise<void> {
+    settings.value = await accountingApi.update(input);
+  }
+
+  return { settings, load, save };
 });
 
 /**

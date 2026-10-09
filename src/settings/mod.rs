@@ -49,6 +49,10 @@ pub fn router() -> Router<AppState> {
             "/custom-fields/{id}",
             put(custom_fields::update).delete(custom_fields::delete),
         )
+        .route(
+            "/accounting",
+            get(crate::accounting::handlers::get).put(crate::accounting::handlers::put),
+        )
         .route("/number-series", get(number_series::list))
         .route("/number-series/{doc_type}", put(number_series::put_pattern))
         .route(

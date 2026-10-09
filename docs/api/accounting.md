@@ -88,3 +88,123 @@ AccountingSettings {
   codes present / absent; skipped document; settings GET/PUT validation.
 
 ## Clarifications (as implemented)
+Additive details and deviations settled during the Phase 3b backend. Element names and enumerations were checked
+against the official version 2 XSDs (vendored in `tests/fixtures/pohoda/schema/`, downloaded 2026-10-10 from
+`https://www.stormware.cz/xml/schema/version_2/`).
+
+Route
+- `format`: `csv` (default) | `pohoda`. Anything else, `money` included until 3c, → 422 `format: invalid`. It is
+  reported together with the other query errors.
+- `Content-Type: application/xml; charset=windows-1250`, `Cache-Control: no-store`. It uses the 2c document set,
+  order, 10 000 cap and snapshot transaction. Documents are loaded 500 at a time without payments or categories.
+  Unlike the CSV, **the whole file is built inside the snapshot before anything is sent**: the accountant never
+  gets a file with documents silently missing.
+- **Empty period** → 422 `{"code":"validation","fields":{"from":"empty"}}`. An empty `dat:dataPack` would not pass
+  the XSD (`dataPackItem minOccurs=1`). The CSV keeps its header-only file.
+- **Unexportable document** → 422 with no file:
+  `{"code":"validation","fields":{"documents":"unexportable"},"detail":"<number>: <reason>; <number>: <reason>"}`.
+  - `<number>` is our number for an issued document and the supplier number for a received one (else the internal
+    number, else the id).
+  - The detail is capped at 2000 characters and then ends with `; … (+N more)`. Every failure is logged at `warn`.
+  - Reasons:
+    - a recap rate with no Pohoda slot (`VAT rate 10 % maps to no Pohoda rate slot`);
+    - `number` or `originalDocument` longer than 32 characters, or `symVar` longer than 20 (numbers are never
+      cut);
+    - an undecodable snapshot;
+    - an unknown stored value (direction, type, VAT mode, payment method);
+    - a foreign recap with neither a CZK amount nor an exchange rate.
+  - The CSV keeps skip-and-log. Its logs name the export as `list csv` / `accountant csv`.
+- OpenAPI declares both `200` content types.
+
+Settings
+- **Code length ≤ 19** (not 20): Pohoda's `typ:idsType` has `maxLength` 19. Longer → `too_long`.
+- 422 keys:
+  - `pohoda.ico`: `invalid_ico` (mod-11 check, inner spaces removed);
+  - `pohoda.codes.N.direction` / `docType`: `invalid`;
+  - `pohoda.codes.N.docType`: `duplicate`;
+  - `pohoda.codes.N.{accounting|classificationVat|classificationVatNonDeductible|numberSeries}`: `too_long`;
+  - `pohoda.codes.N.classificationVatNonDeductible`: `invalid` on an issued row.
+
+  `N` is the index in the request. Invalid input is the wrong value inside a valid JSON shape; a wrong JSON type is
+  400 `bad_request`.
+- PUT takes any subset of rows. The stored value and both responses always hold the 12 rows: issued first, types in
+  the order invoice, credit_note, debit_note, advance_tax_doc, advance_credit_note, simplified. `{}` clears
+  everything.
+- **Additive field** `classificationVatNonDeductible: string | null` on every code row (received rows only;
+  always null on issued rows): the členění DPH of a received document without the VAT deduction
+  (`vatDeductible` false).
+- **Money S3:** the `money` section is omitted until 3c. A `money` key in a PUT is ignored.
+- Storage: table `accounting_settings` (singleton `id = 1`, `data jsonb`), migration
+  `m20261015_000001_accounting_settings`.
+
+Pohoda XML
+- `dataPack`: `id` = `invoice-{from}-{to}`, `ico` = the settings IČO, else the company IČO, else omitted (it is
+  optional). `dataPackItem/@id` = the document UUID.
+- **Agenda / `invoiceType`** (enumeration `inv:invoiceTypeType`): invoice and simplified →
+  `issuedInvoice` / `receivedInvoice`; credit_note → `issuedCreditNotice` / `receivedCreditNotice`; debit_note →
+  `issuedDebitNote` / `receivedDebitNote`.
+  - **Deviation: DDPP (`advance_tax_doc`) and its correction (`advance_credit_note`), both directions, go to
+    Interní doklady (`int:intDoc` version 2.0).** They do not go to `issuedAdvanceInvoice` /
+    `receivedAdvanceInvoice`. A Pohoda advance invoice (zálohová faktura) is not a tax document:
+    `classificationVAT` "is not used for advance invoices" per the XSD, and it never enters the VAT return. Pohoda
+    itself creates a DDPP from a paid advance invoice in Interní doklady ("Záznam / Vytvořit daňový doklad"), and
+    received DDPPs are recorded there as well.
+  - The correction is the same agenda with negative amounts.
+  - `int:intDoc` has no `invoiceType`, `originalDocument`, `dateDue`, `paymentType` or `account`, so none is
+    written.
+  - `issuedCorrectiveTax` / `receivedCorrectiveTax` (CZ "opravný daňový doklad") are Pohoda's §44 bad-debt
+    corrections, so they are not used for credit notes.
+- **Header** (`invoiceHeader` / `intDocHeader`, both `xsd:all`, written in XSD order):
+  - `number` (`typ:numberType` is `xsd:all`, both children allowed): `typ:numberRequested` = our number (received:
+    the internal number) **always**, plus `typ:ids` = the series code when one is set. Pohoda keeps our number, and
+    `checkDuplicity` (default `true`) refuses a second import of the same number.
+  - `symVar`; `originalDocument` (invoice agenda only): issued = our number, received = the supplier number.
+  - `date` = issue date; `dateTax` = DUZP (received: else the received date). `dateAccounting`: issued = the tax
+    date, received = the received date (else the tax date). `dateDue` (invoice agenda only).
+  - `accounting/typ:ids` and `classificationVAT/typ:ids` come from the settings row of the document's direction ×
+    type. No code → the element is left out.
+  - **Non-deductible received documents** (`vatDeductible` false) take `classificationVatNonDeductible` instead,
+    never the deductible code. When it is empty they get `classificationVAT/typ:classificationVATType` =
+    `nonSubsume` ("Nezahrnovat do DPH", the schema's only other value). Leaving the element out would not work:
+    Pohoda's default is `inland`, which deducts. The XSD has no other element that marks non-deductible VAT.
+  - **Linked original:** the CZ schema has no element for it. `originalDocumentNumber` is marked "pouze SK verze",
+    and `links` / `linkedDocuments` / `correctiveDocument` need the original to exist in Pohoda. So the original's
+    number (issued: its number, received: its supplier number) goes into `text`.
+  - `text` = label + shown number (+ ` k {original}`), cut to 240. Labels are the UI's Czech names, e.g.
+    `Faktura FA-1`, `Dobropis DB-1 k FA-1`, `Přijatá faktura FV-42`,
+    `Opravný daňový doklad k platbě OD-1 k DD-1`.
+  - `partnerIdentity/typ:address`, from the snapshot:
+    - `company` = the name (our snapshot has one name; `name` is not written), then `city`, `street`, `zip`, `ico`,
+      `dic`, `country/typ:ids`;
+    - empty values are left out;
+    - text is cut to the XSD lengths (company 255, city 45, street 64, zip 15, ico 15, dic 18);
+    - no snapshot (contactless simplified) → no element.
+  - `paymentType/typ:paymentType` (enumeration `typ:paymentType`): bank_transfer → `draft`, cash → `cash`, card →
+    `creditcard`; `other` → no element (Pohoda's default).
+  - `account` (issued, invoice agenda only): the bank snapshot's `accountNumber` split at `/` into `typ:accountNo` +
+    `typ:bankCode` (≤ 34 / ≤ 11). IBAN-only or too long → no element.
+  - The VAT modes add nothing beyond the slots below.
+- **Summary** (`invoiceSummary` / `intDocSummary`):
+  - `roundingDocument` (enumeration `typ:typeRoundingDocument`), chosen so Pohoda's total equals our payable:
+    - no rounding → `none`;
+    - otherwise the mathematical mode that reproduces the stored rounding exactly from `total`: `math2one` (our
+      "round the total"), then `math2half`, then `math2tenth`;
+    - no mode matches (an imported odd rounding) → the element is left out, so it cannot contradict `priceRound`.
+      This applies to foreign documents too (their home amounts carry no `round`).
+  - `homeCurrency` holds only the slots the document uses: `priceNone`, `priceLow` + `priceLowVAT`, `priceHigh` +
+    `priceHighVAT`, `price3` + `price3VAT`. Amounts are in CZK from the stored recap, 2 dp, `.` decimal point.
+  - Credit notes and DDPP corrections (both directions) are negative.
+  - CZK documents also carry `typ:round/typ:priceRound` = `rounding` (signed).
+  - **Rate slots:** 21 % → high, 12 % → low, 0 % → none. `price3` = the **first active** Settings → VAT rate
+    (Settings order) that is not 0 / 12 / 21. Only that one rate can use it. Any other rate → skip + log.
+  - Exempt and non-payer documents put every base in `priceNone` (they have no VAT; a rate slot would make Pohoda
+    tax it). Reverse charge keeps the rate slot with VAT 0, because Pohoda's PDP classification computes the
+    self-assessed VAT from that slot's base.
+  - **Foreign currency:** `homeCurrency` (stored CZK recap, no `round`) plus `foreignCurrency`: `currency/typ:ids`,
+    `rate` (the stored rate when there is one), `amount` 1, `priceSum` = total + rounding in the currency (signed).
+    Per the XSD, Pohoda ignores the home amounts of a foreign document on import and computes them from the
+    foreign ones. They are written for completeness.
+  - `*VAT` elements are annotated "jen pro export" in `type.xsd`. The contract wants them and the XSD allows them,
+    so they are written.
+- **Encoding:** the text is encoded with `encoding_rs` WINDOWS_1250. A character outside it becomes a decimal
+  numeric character reference (`Ж` → `&#1046;`), valid in both text and attributes.

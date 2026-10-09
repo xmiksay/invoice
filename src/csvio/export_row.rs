@@ -46,7 +46,8 @@ pub fn paid_date(
     })
 }
 
-fn party(snapshot: &Option<serde_json::Value>) -> anyhow::Result<Option<Party>> {
+/// The counterparty of a stored snapshot (`None` when there is none).
+pub fn party(snapshot: &Option<serde_json::Value>) -> anyhow::Result<Option<Party>> {
     let Some(v) = snapshot else { return Ok(None) };
     let s: PartySnapshot =
         serde_json::from_value(v.clone()).context("decode counterparty snapshot")?;
@@ -73,20 +74,41 @@ fn czk(stored: Option<Decimal>, amount: Decimal, rate: Option<Decimal>) -> Optio
     })
 }
 
-pub fn out_row(s: &Source) -> anyhow::Result<OutRow> {
-    let doc = s.doc;
-    let (direction, issued) = match doc.direction.as_str() {
-        ISSUED => (ISSUED, true),
-        RECEIVED => (RECEIVED, false),
-        other => anyhow::bail!("stored direction {other}"),
-    };
-    let doc_type = DocType::parse_document(&doc.doc_type).context("stored document type")?;
-    let vat_mode = VatMode::parse(&doc.vat_mode).context("stored VAT mode")?;
-    let status = Status::parse(&doc.status).context("stored status")?;
+/// The stored direction, type and VAT mode of a document, decoded; an
+/// unknown stored value is an error (the export skips or refuses it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Kind {
+    pub direction: &'static str,
+    pub issued: bool,
+    pub doc_type: DocType,
+    pub vat_mode: VatMode,
+}
+
+impl Kind {
+    pub fn of(doc: &document::Model) -> anyhow::Result<Self> {
+        let (direction, issued) = match doc.direction.as_str() {
+            ISSUED => (ISSUED, true),
+            RECEIVED => (RECEIVED, false),
+            other => anyhow::bail!("stored direction {other}"),
+        };
+        Ok(Self {
+            direction,
+            issued,
+            doc_type: DocType::parse_document(&doc.doc_type).context("stored document type")?,
+            vat_mode: VatMode::parse(&doc.vat_mode).context("stored VAT mode")?,
+        })
+    }
+}
+
+/// The stored recap in CZK as `(rate, base, VAT)`, positive as stored: a
+/// CZK document's as is, a foreign one's `baseCzk` / `vatCzk`.
+pub fn czk_recap(
+    doc: &document::Model,
+    recap: &[vat_recap::Model],
+) -> anyhow::Result<Vec<(Decimal, Decimal, Decimal)>> {
     let is_czk = doc.currency == "CZK";
     let rate = (!is_czk).then_some(doc.exchange_rate).flatten();
-    let recap = s
-        .recap
+    recap
         .iter()
         .map(|r| match is_czk {
             true => Some((r.vat_rate, r.base, r.vat)),
@@ -97,7 +119,21 @@ pub fn out_row(s: &Source) -> anyhow::Result<OutRow> {
             )),
         })
         .collect::<Option<Vec<_>>>()
-        .context("foreign recap without a CZK amount or an exchange rate")?;
+        .context("foreign recap without a CZK amount or an exchange rate")
+}
+
+pub fn out_row(s: &Source) -> anyhow::Result<OutRow> {
+    let doc = s.doc;
+    let Kind {
+        direction,
+        issued,
+        doc_type,
+        vat_mode,
+    } = Kind::of(doc)?;
+    let status = Status::parse(&doc.status).context("stored status")?;
+    let is_czk = doc.currency == "CZK";
+    let rate = (!is_czk).then_some(doc.exchange_rate).flatten();
+    let recap = czk_recap(doc, s.recap)?;
     let total = doc.total + doc.rounding;
     Ok(OutRow {
         direction,

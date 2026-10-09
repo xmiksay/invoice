@@ -1,6 +1,8 @@
 {
   "preparing": "Připravuji export…",
   "tooMany": "Odpovídá víc než 10 000 dokladů. Zužte filtr nebo období.",
+  "unexportable": "Některý doklad nelze do účetního programu exportovat. Opravte ho, nebo export omezte (období, doklady).",
+  "empty": "V období nejsou žádné doklady.",
   "list": {
     "action": "Exportovat CSV",
     "hint": "Všechny doklady aktuální záložky a filtru kromě konceptů a stornovaných. Soubor lze znovu naimportovat."
@@ -8,7 +10,7 @@
   "accountant": {
     "action": "Export pro účetní",
     "title": "Export pro účetní",
-    "intro": "Vydané a přijaté daňové doklady (bez zálohových faktur), jejichž DUZP spadá do období, v jednom souboru CSV. Koncepty a stornované doklady se neexportují.",
+    "intro": "Vydané a přijaté daňové doklady (bez zálohových faktur), jejichž DUZP spadá do období, v jednom souboru — CSV, nebo XML pro import do účetního programu. Koncepty a stornované doklady se neexportují.",
     "from": "Od",
     "to": "Do",
     "periodHint": "Podle DUZP (u přijatých DUZP, jinak data přijetí); nejvýše 366 dní.",
@@ -18,6 +20,15 @@
       "issued": "Jen vydané",
       "received": "Jen přijaté"
     },
-    "download": "Stáhnout CSV"
+    "download": "Stáhnout {format}",
+    "format": "Formát",
+    "formats": {
+      "csv": "CSV",
+      "pohoda": "Pohoda XML"
+    },
+    "formatHints": {
+      "csv": "Hlavička dokladu a rekapitulace DPH v Kč; soubor lze znovu naimportovat.",
+      "pohoda": "Pohoda XML použije předkontace, členění DPH a číselné řady z Nastavení → Účetnictví."
+    }
   }
 }

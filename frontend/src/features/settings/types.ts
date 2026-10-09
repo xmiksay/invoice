@@ -1,4 +1,5 @@
 import type { DocLocale } from "@/api/types";
+import type { Direction } from "@/features/documents/types";
 
 /** `GET/PUT /api/settings/company` — singleton, seeded with name "". */
 export interface Company {
@@ -124,3 +125,33 @@ export interface CustomField {
   position: number;
 }
 export type CustomFieldInput = Omit<CustomField, "id">;
+
+/** The document types exported to accounting programs (no proformas), in display order. */
+export const ACCOUNTING_DOC_TYPES = ["invoice", "credit_note", "debit_note", "advance_tax_doc", "advance_credit_note", "simplified"] as const;
+export type AccountingDocType = (typeof ACCOUNTING_DOC_TYPES)[number];
+export const ACCOUNTING_DIRECTIONS = ["issued", "received"] as const satisfies readonly Direction[];
+
+/** One direction × doc type row of Pohoda codes; null = the element is not written. */
+export interface PohodaCodes {
+  direction: Direction;
+  docType: AccountingDocType;
+  /** Předkontace (`typ:ids`). */
+  accounting: string | null;
+  /** Členění DPH (`typ:ids`). */
+  classificationVat: string | null;
+  /** Číselná řada (`typ:ids`). */
+  numberSeries: string | null;
+  /** Členění DPH of a received document without VAT deduction (`vatDeductible` false); received rows only. */
+  classificationVatNonDeductible: string | null;
+}
+
+/** `GET/PUT /api/settings/accounting` — GET returns every direction × doc type row. */
+export interface AccountingSettings {
+  pohoda: {
+    /** `dataPack/@ico`; null → the company IČO. */
+    ico: string | null;
+    codes: PohodaCodes[];
+  };
+  /** Money S3 codes (3c); omitted by the server until then, passed back unchanged when present. */
+  money?: { codes: unknown[] };
+}

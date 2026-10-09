@@ -1,5 +1,6 @@
 //! `GET /api/export/csv` (the list filter) and `GET /api/export/accountant`
-//! (a tax-date period): issued documents as CSV in the import format.
+//! (a tax-date period): issued documents as CSV in the import format, or
+//! (accountant) as Pohoda XML.
 
 use axum::extract::State;
 use axum::response::Response;
@@ -14,6 +15,7 @@ use utoipa::IntoParams;
 use uuid::Uuid;
 
 use super::export_load;
+use crate::accounting::pohoda_export;
 use crate::app::AppState;
 use crate::document::entity::document::{Column, Entity};
 use crate::document::handlers::dto::ListQuery;
@@ -27,6 +29,9 @@ use crate::time::today;
 
 /// Most documents one export may hold.
 pub const MAX_ROWS: u64 = 10_000;
+
+const CSV: &str = "text/csv; charset=utf-8";
+const POHODA: &str = "application/xml; charset=windows-1250";
 
 /// Longest accountant period, `to − from` in days.
 pub const MAX_PERIOD_DAYS: i64 = 366;
@@ -63,12 +68,22 @@ async fn ids<C: ConnectionTrait>(db: &C, select: Select<Entity>) -> Result<Vec<U
     Ok(ids)
 }
 
-/// The whole export reads one snapshot: the transaction lives in the
-/// streamed body, so the header's rate columns, the id list and every chunk
-/// agree even while documents change.
+/// What an export writes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Format {
+    /// Streamed CSV; the label names the export in the logs.
+    Csv(&'static str),
+    /// The accountant period as Pohoda XML (built whole, then sent).
+    Pohoda { from: NaiveDate, to: NaiveDate },
+}
+
+/// The whole export reads one snapshot: for CSV the transaction lives in
+/// the streamed body, so the header's rate columns, the id list and every
+/// chunk agree even while documents change.
 async fn export(
     state: &AppState,
     select: Select<Entity>,
+    format: Format,
     filename: &str,
 ) -> Result<Response, AppError> {
     let txn = state
@@ -81,14 +96,18 @@ async fn export(
     let ids = match ids(&txn, select).await {
         Ok(ids) => ids,
         Err(e) => {
-            if let Err(r) = txn.rollback().await {
-                tracing::warn!(error = %r, "CSV export rollback failed");
-            }
+            export_load::rollback(txn, "export").await;
             return Err(e);
         }
     };
-    let body = export_load::body(txn, ids).await?;
-    Ok(attachment("text/csv; charset=utf-8", filename, body))
+    Ok(match format {
+        Format::Csv(label) => attachment(CSV, filename, export_load::body(txn, ids, label).await?),
+        Format::Pohoda { from, to } => attachment(
+            POHODA,
+            filename,
+            pohoda_export::file(txn, &ids, from, to).await?,
+        ),
+    })
 }
 
 /// `issued` | `received`; absent → `required`, anything else → `invalid`.
@@ -120,7 +139,8 @@ pub async fn list_csv(
     q.direction = Some(direction.into());
     let today = today();
     let select = query::export_select(&q, today);
-    export(&state, select, &format!("doklady-{direction}-{today}.csv")).await
+    let name = format!("doklady-{direction}-{today}.csv");
+    export(&state, select, Format::Csv("list csv"), &name).await
 }
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
@@ -132,6 +152,15 @@ pub struct AccountantQuery {
     pub to: Option<String>,
     /// `issued` | `received` | `both` (default).
     pub direction: Option<String>,
+    /// `csv` (default) | `pohoda` (`money` comes in 3c).
+    pub format: Option<String>,
+}
+
+/// The file the accountant asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccountantFormat {
+    Csv,
+    Pohoda,
 }
 
 /// A checked accountant request: the period and the direction (`None` =
@@ -141,6 +170,7 @@ pub struct Accountant {
     pub from: NaiveDate,
     pub to: NaiveDate,
     pub direction: Option<&'static str>,
+    pub format: AccountantFormat,
 }
 
 impl AccountantQuery {
@@ -162,6 +192,14 @@ impl AccountantQuery {
                 Some(_) => Err("invalid"),
             },
         );
+        let format = e.check(
+            "format",
+            match self.format.as_deref().map(str::trim) {
+                None | Some("csv") => Ok(AccountantFormat::Csv),
+                Some("pohoda") => Ok(AccountantFormat::Pohoda),
+                Some(_) => Err("invalid"),
+            },
+        );
         if let (Some(f), Some(t)) = (from, to)
             && (t < f || (t - f).num_days() > MAX_PERIOD_DAYS)
         {
@@ -169,11 +207,12 @@ impl AccountantQuery {
             e.add("to", "invalid");
         }
         e.into_result()?;
-        match (from, to, direction) {
-            (Some(from), Some(to), Some(direction)) => Ok(Accountant {
+        match (from, to, direction, format) {
+            (Some(from), Some(to), Some(direction), Some(format)) => Ok(Accountant {
                 from,
                 to,
                 direction,
+                format,
             }),
             _ => Err(anyhow::anyhow!("checked accountant query incomplete").into()),
         }
@@ -187,8 +226,11 @@ impl AccountantQuery {
     security(("bearer" = [])),
     params(AccountantQuery),
     responses(
-        (status = 200, description = "`ucetni-{from}-{to}.csv`: every non-proforma, non-draft, non-cancelled document whose tax date (received: else the received date) is in the period, streamed", content_type = "text/csv"),
-        (status = 422, description = "`from` / `to` / `direction`: `invalid`; `filter`: `too_many` (more than 10 000)", body = ErrorBody),
+        (status = 200, description = "Every non-proforma, non-draft, non-cancelled document whose tax date (received: else the received date) is in the period. `format=csv`: `ucetni-{from}-{to}.csv`, streamed; `format=pohoda`: `pohoda-{from}-{to}.xml` (Windows-1250, Stormware dataPack 2.0)", content(
+            (String = "text/csv; charset=utf-8"),
+            (String = "application/xml; charset=windows-1250"),
+        )),
+        (status = 422, description = "`from` / `to` / `direction` / `format`: `invalid`; `filter`: `too_many` (more than 10 000); Pohoda only: `from`: `empty` (no document in the period), `documents`: `unexportable` (`detail` = `<number>: <reason>; …`)", body = ErrorBody),
     )
 )]
 pub async fn accountant(
@@ -205,7 +247,20 @@ pub async fn accountant(
     if let Some(d) = a.direction {
         select = select.filter(Column::Direction.eq(d));
     }
-    export(&state, select, &format!("ucetni-{}-{}.csv", a.from, a.to)).await
+    let (format, name) = match a.format {
+        AccountantFormat::Csv => (
+            Format::Csv("accountant csv"),
+            format!("ucetni-{}-{}.csv", a.from, a.to),
+        ),
+        AccountantFormat::Pohoda => (
+            Format::Pohoda {
+                from: a.from,
+                to: a.to,
+            },
+            format!("pohoda-{}-{}.xml", a.from, a.to),
+        ),
+    };
+    export(&state, select, format, &name).await
 }
 
 #[cfg(test)]
@@ -217,13 +272,14 @@ mod tests {
             from: from.map(str::to_string),
             to: to.map(str::to_string),
             direction: direction.map(str::to_string),
+            format: None,
         }
     }
 
     fn fields(r: Result<Accountant, AppError>) -> Vec<(String, &'static str)> {
         match r {
             Err(AppError::Validation(e)) => {
-                let mut v: Vec<_> = ["from", "to", "direction"]
+                let mut v: Vec<_> = ["from", "to", "direction", "format"]
                     .into_iter()
                     .filter_map(|f| e.get(f).map(|r| (f.to_string(), r)))
                     .collect();
@@ -244,7 +300,8 @@ mod tests {
             Accountant {
                 from: date(1, 1),
                 to: date(1, 31),
-                direction: None
+                direction: None,
+                format: AccountantFormat::Csv,
             }
         );
         let one_day = q(Some("2026-03-05"), Some("2026-03-05"), Some("received"));
@@ -268,6 +325,28 @@ mod tests {
             fields(q(None, Some("31.01.2026"), Some("x")).check()),
             [inv("direction"), inv("from"), inv("to")]
         );
+    }
+
+    #[test]
+    fn accountant_formats() {
+        let with = |f: &str| AccountantQuery {
+            format: Some(f.into()),
+            ..q(Some("2026-01-01"), Some("2026-01-31"), None)
+        };
+        assert_eq!(
+            with("pohoda").check().expect("ok").format,
+            AccountantFormat::Pohoda
+        );
+        assert_eq!(
+            with(" csv ").check().expect("ok").format,
+            AccountantFormat::Csv
+        );
+        for bad in ["money", "xml", ""] {
+            assert_eq!(
+                fields(with(bad).check()),
+                [("format".to_string(), "invalid")]
+            );
+        }
     }
 
     #[test]

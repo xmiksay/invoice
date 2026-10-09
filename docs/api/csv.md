@@ -153,6 +153,7 @@ exported. Rows are ordered by direction (issued first), tax date (issue date whe
   `from ≤ to`, at most 366 days apart → else 422 `from`/`to` `invalid`). `direction` default `both`.
 - Every type **except proforma** (not a tax document); drafts and cancelled excluded.
 - Filename `ucetni-{from}-{to}.csv`.
+- `format=csv` (default) | `pohoda` (3b, [accounting.md](accounting.md)); anything else → 422 `format: invalid`.
 
 ### Both
 - `200 text/csv; charset=utf-8`, `Content-Disposition: attachment`, streamed. More than 10 000 matching documents →

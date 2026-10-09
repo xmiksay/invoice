@@ -27,6 +27,7 @@ pub mod documents;
 pub mod isdoc;
 pub mod mcp;
 pub mod mdcast;
+pub mod pohoda;
 pub mod received;
 pub mod smtp;
 pub mod storage;

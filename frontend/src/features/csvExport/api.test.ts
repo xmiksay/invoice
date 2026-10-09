@@ -14,9 +14,10 @@ describe("csvExportApi", () => {
     expect(sentHeaders(fetch).get("Accept")).toContain("text/csv");
   });
 
-  it("accountant sends the period and direction", async () => {
+  it("accountant sends the period, direction and format and accepts XML", async () => {
     const fetch = mockFetch(200, "");
-    await csvExportApi.accountant({ from: "2026-09-01", to: "2026-09-30", direction: "both" });
-    expect(String(fetch.mock.calls[0]![0])).toBe("/api/export/accountant?from=2026-09-01&to=2026-09-30&direction=both");
+    await csvExportApi.accountant({ from: "2026-09-01", to: "2026-09-30", direction: "both", format: "pohoda" });
+    expect(String(fetch.mock.calls[0]![0])).toBe("/api/export/accountant?from=2026-09-01&to=2026-09-30&direction=both&format=pohoda");
+    expect(sentHeaders(fetch).get("Accept")).toContain("application/xml");
   });
 });
