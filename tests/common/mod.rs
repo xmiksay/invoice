@@ -25,6 +25,7 @@ pub mod documents;
 pub mod isdoc;
 pub mod mdcast;
 pub mod received;
+pub mod smtp;
 pub mod storage;
 
 pub const TEST_TOKEN: &str = "test-token-0123456789";
@@ -161,6 +162,7 @@ pub fn state(db: DatabaseConnection, ares_url: &str, cnb_url: &str, pdf: PdfServ
         ares: AresClient::new(ares_url).expect("build ARES client"),
         cnb: CnbClient::new(cnb_url).expect("build ČNB client"),
         pdf,
+        email: None,
     }
 }
 

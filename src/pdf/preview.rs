@@ -9,7 +9,10 @@ use crate::document::compute::{self, Params};
 use crate::document::handlers::dto::{BankSnapshot, Line, PartySnapshot, Totals, lines_out};
 use crate::document::line::{ItemData, LineData, Status, VatMode};
 use crate::document::repo::issue::supplier;
+use crate::error::AppError;
 use crate::settings::entity::{bank_account, company};
+use crate::time::today;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 
 pub struct Sample {
     locale: Locale,
@@ -106,6 +109,20 @@ fn sample_customer(locale: Locale) -> PartySnapshot {
 }
 
 impl Sample {
+    /// Today's sample for `company` with its default CZK account.
+    pub async fn load(
+        db: &DatabaseConnection,
+        company: &company::Model,
+        locale: Locale,
+    ) -> Result<Sample, AppError> {
+        let bank = bank_account::Entity::find()
+            .filter(bank_account::Column::Currency.eq("CZK"))
+            .filter(bank_account::Column::IsDefault.eq(true))
+            .one(db)
+            .await?;
+        Ok(Sample::new(company, bank.as_ref(), locale, today())?)
+    }
+
     pub fn new(
         company: &company::Model,
         bank: Option<&bank_account::Model>,

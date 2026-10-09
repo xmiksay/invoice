@@ -9,5 +9,6 @@
   "exceeds_original": "Credit notes would exceed the original invoice for some VAT rate.",
   "mixed_vat": "All items of a group must share one VAT rate.",
   "unknown": "Unknown field.",
-  "inactive": "An inactive value cannot be newly assigned."
+  "inactive": "An inactive value cannot be newly assigned.",
+  "template_invalid": "The template cannot be rendered."
 }

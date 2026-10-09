@@ -10,7 +10,7 @@ MiniJinja plain-text templates (one set for all document types, per locale), edi
 | `INVOICE__SMTP__HOST` | SMTP server; unset → e-mail not configured (sending → 503 `smtp_not_configured`) |
 | `INVOICE__SMTP__PORT` | default by TLS mode: `starttls` 587, `tls` 465, `none` 25 |
 | `INVOICE__SMTP__TLS` | `starttls` (default) \| `tls` (implicit TLS) \| `none` (plain, tests / local relay only) |
-| `INVOICE__SMTP__USERNAME`, `INVOICE__SMTP__PASSWORD` | both or neither (one alone → `serve` refuses to start) |
+| `INVOICE__SMTP__USERNAME`, `INVOICE__SMTP__PASSWORD` | both or neither (one alone → `serve` refuses to start); with `TLS=none` only to a loopback HOST (`localhost`, `127.0.0.0/8`, `::1`), else `serve` refuses to start |
 | `INVOICE__SMTP__FROM` | sender, `addr@x` or `Name <addr@x>`; required when HOST is set |
 
 - Invalid config (bad FROM, unknown TLS mode, HOST without FROM) → `serve` refuses to start with a clear message.
@@ -22,8 +22,9 @@ MiniJinja plain-text templates (one set for all document types, per locale), edi
 ## Templates
 
 - One template set for all seven document types: `subject` + `body` per locale (`cs`, `en`). Defaults are embedded
-  in the binary (`src/email/defaults/{cs,en}/{subject,body}.txt`); overrides live in Storage under
-  `email/templates/{locale}/subject.txt` and `…/body.txt` (both written together on save). Storage unreachable →
+  in the binary (`src/email/defaults/{cs,en}/{subject,body}.txt`); an override lives in Storage as one object per
+  locale, `email/templates/{locale}.json` = `{"subject": "…", "body": "…"}` (one atomic write on save, so a save
+  never leaves half an override). Storage unreachable →
   503 `storage_unavailable`.
 - MiniJinja, `UndefinedBehavior::Strict`, no HTML auto-escape, `none` renders as an empty string. The rendered
   subject is trimmed and newlines in it are replaced by spaces; the body keeps its text, trailing whitespace trimmed.
@@ -131,3 +132,49 @@ EmailLogEntry { id, createdAt: datetime, to: [string], cc: [string], bcc: [strin
   to reject (5xx) — no external SMTP in CI.
 
 ## Clarifications (as implemented)
+- Context additions / precision: `doc.toPay: bool` (not paid, not cancelled, and owed to us — false for credit notes
+  and DDPP corrections); the default body uses it for the due-date line. `doc.payable` = `max(payable − payments, 0)`
+  with the document's sign (credit notes negative, like the PDF); `doc.paid` = that remainder is zero, or always for a
+  DDPP. `doc.dueDate` is always set for an issued document. `company` is the current Settings → Company (not the
+  issue-time snapshot); `contact.name` is the customer snapshot's name (as printed), `contact.email` the live
+  contact's e-mail when set, else the snapshot's; `contact` is `none` when the document has no customer snapshot.
+  In strict mode `contact.*` on a `none` contact is an error — guard it with `{% if contact %}`.
+- Validation (save and preview) renders on a matrix of variants of the PDF preview's sample invoice, in this order,
+  so strict errors inside branches the base sample does not take are caught at save time. A failure on a variant is
+  422 `template_invalid` with `detail` led by the variant's prefix (exact strings, for localization):
+
+  | Prefix | Variant |
+  |---|---|
+  | *(none)* | base: unpaid invoice with bank account, VS, due date and a contact — the preview shows this rendering |
+  | `paid: ` | fully paid (`doc.paid` true, `doc.toPay` false, `doc.payable` zero) |
+  | `cancelled: ` | cancelled (`doc.cancelled` true, `doc.toPay` false) |
+  | `credit note: ` | credit note (`doc.type` `credit_note`, negative amounts, `doc.originalNumber` set) |
+  | `no bank account: ` | `doc.bankAccount`, `doc.iban`, `doc.variableSymbol`, `doc.taxDate`, `doc.dueDate` all `none` |
+  | `without contact: ` | contactless simplified document (`contact = none`, `doc.type` `simplified`) |
+
+  E.g. `without contact: line 2: undefined value`, `paid: line 1: undefined value`.
+- Subject normalization: each line trimmed, empty lines dropped, the rest joined with single spaces.
+- `template_invalid.detail` = `line N: <MiniJinja error kind>[: <detail>]` (e.g. `line 3: undefined value`). Template
+  `PUT` / `preview` need both `subject` and `body` as strings (missing → 400 `bad_request`); an empty body is allowed.
+  An unknown locale → 404 before any validation.
+- Order of checks on `POST …/email`: 404 / 409 (state) → 503 `smtp_not_configured` → 422 → attachment preparation →
+  SMTP. The test route checks `smtp_not_configured` before its 422; its body is optional (empty → company e-mail).
+  The test message is fixed text in the company's default locale (cs "Testovací e-mail", en "Test e-mail"), with
+  `Reply-To` like a document e-mail.
+- Sending a **cancelled** document sets `sentAt` too (`lifecycle::email_sent`); `POST …/mark-sent` still refuses
+  cancelled documents.
+- After the SMTP server accepted a message, logging it and setting `sentAt` are best effort: a failure there is
+  logged server-side and the route still answers 200 with the entry (so the user does not send it again); that entry
+  is then missing from the history. A failed attempt that cannot be logged still answers 502 `smtp_failed`.
+- Log: `to` / `cc` / `bcc` are stored trimmed as entered (display names kept, e.g. `Odběratel <a@x.cz>`);
+  `attachments` lists the filenames actually attached; `messageId` is set only on `ok: true` entries (`null` when the
+  SMTP exchange failed). History of a draft → `[]`; unknown / received → 404.
+- Attachment filenames use the document number made header-safe like the PDF download (`[A-Za-z0-9._-]`, anything
+  else → `_`): `FV-2019/0042` → `FV-2019_0042.pdf`. `pdf.available` is true for a native document whose archive is not
+  rendered yet (rendered lazily during the send).
+- A company e-mail that is not a valid address is left out of `Reply-To` (warning logged) instead of failing the send.
+- Timeout: `lettre`'s per-command timeout is 30 s and a 30 s total timeout wraps connect + send; hitting it →
+  502 `smtp_failed` with `detail` `timed out after 30 s`. `smtp_failed.detail` is lettre's error text, e.g.
+  `permanent error (550): 5.7.1 relay denied`.
+- `GET /api/settings/email` `from` is the configured mailbox as formatted by lettre (`Name <addr@x>` or `addr@x`).
+- TLS uses rustls with the bundled webpki root certificates (no system store needed in the image).

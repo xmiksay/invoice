@@ -13,6 +13,7 @@ export const REASON_CODES = [
   "mixed_vat",
   "unknown",
   "inactive",
+  "template_invalid",
 ] as const;
 
 /** Field errors of a 422 `validation` response, or null for any other failure. */
@@ -54,6 +55,10 @@ const KNOWN_CODES: Record<string, string> = {
   too_large: "errors.tooLarge",
   category_in_use: "errors.categoryInUse",
   number_taken: "errors.numberTaken",
+  // 502 with the SMTP response as `detail`; must win over the generic "unreachable" for 502.
+  smtp_failed: "errors.smtpFailed",
+  smtp_not_configured: "errors.smtpNotConfigured",
+  template_invalid: "errors.templateInvalid",
 };
 
 /** i18n key + params for a non-field error message. */
@@ -67,7 +72,7 @@ export function errorMessageKey(err: unknown): { key: string; params?: Record<st
   return { key: "errors.unexpected", params: { code: "unknown" } };
 }
 
-/** Diagnostic text the server attached to the error (502 `pdf_render_failed`), else null. */
+/** Diagnostic text the server attached to the error (`pdf_render_failed`, `smtp_failed`, `template_invalid`), else null. */
 export function errorDetailOf(err: unknown): string | null {
   return err instanceof ApiError ? err.detail : null;
 }

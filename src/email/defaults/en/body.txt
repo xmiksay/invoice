@@ -1,0 +1,10 @@
+Hello,
+
+please find attached document no. {{ doc.number }} ({{ doc.typeLabel }}) for {{ doc.total }}.
+{% if doc.paid %}
+Do not pay – already paid.
+{% elif doc.toPay %}
+Please pay {{ doc.payable }} by {{ doc.dueDate }}{% if doc.variableSymbol %} with variable symbol {{ doc.variableSymbol }}{% endif %}.
+{% endif %}
+Kind regards
+{{ company.name }}

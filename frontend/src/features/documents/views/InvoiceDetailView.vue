@@ -10,6 +10,8 @@ import DocumentInfoCard from "../components/DocumentInfoCard.vue";
 import DocumentLinesTable from "../components/DocumentLinesTable.vue";
 import DocumentPdf from "../components/DocumentPdf.vue";
 import OriginalPdfPanel from "../components/OriginalPdfPanel.vue";
+import EmailHistory from "@/features/email/components/EmailHistory.vue";
+import SendEmailButton from "@/features/email/components/SendEmailButton.vue";
 import IsdocDownloadButton from "@/features/isdoc/components/IsdocDownloadButton.vue";
 import MetadataCard from "@/features/metadata/components/MetadataCard.vue";
 import PartiesCard from "../components/PartiesCard.vue";
@@ -86,7 +88,10 @@ const hasPayments = computed(() => !isDraft.value && doc.value?.docType !== "adv
       <SimplifiedLimitNote :doc-type="doc.docType" :currency="doc.currency" :totals="doc.totals" />
 
       <DocumentActions :doc="doc" />
-      <IsdocDownloadButton v-if="!isDraft && doc.number" :id="doc.id" :number="doc.number" />
+      <div v-if="!isDraft" class="flex flex-wrap items-center gap-2">
+        <SendEmailButton :document-id="doc.id" />
+        <IsdocDownloadButton v-if="doc.number" :id="doc.id" :number="doc.number" />
+      </div>
       <!-- An imported document is never rendered with our design: its PDF is the uploaded original. -->
       <OriginalPdfPanel v-if="doc.imported" :doc="doc" />
       <DocumentPdf v-else :doc="doc" />
@@ -97,6 +102,7 @@ const hasPayments = computed(() => !isDraft.value && doc.value?.docType !== "adv
       <DocumentLinesTable :lines="doc.lines" :currency="doc.currency" />
       <TotalsPanel :totals="doc.totals" :currency="doc.currency" :exchange-rate="doc.exchangeRate" :sign="doc.sign" />
       <PaymentsPanel v-if="hasPayments" :doc="doc" />
+      <EmailHistory v-if="!isDraft" :document-id="doc.id" />
       <MetadataCard :doc="doc" />
     </template>
   </section>

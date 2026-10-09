@@ -20,5 +20,8 @@
   "tooLarge": "Soubor je příliš velký (nejvýše 20 MB).",
   "categoryInUse": "Kategorii nelze smazat, protože ji používají doklady. Místo smazání ji deaktivujte.",
   "numberTaken": "Přidělené číslo už má importovaný doklad. Nastavte počítadlo číselné řady v Nastavení.",
-  "exceedsOriginal": "Storno nelze provést: dobropisy by v některé sazbě DPH přesáhly původní doklad navýšený o vrubopisy."
+  "exceedsOriginal": "Storno nelze provést: dobropisy by v některé sazbě DPH přesáhly původní doklad navýšený o vrubopisy.",
+  "smtpFailed": "Odeslání e-mailu selhalo – SMTP server zprávu odmítl nebo není dostupný.",
+  "smtpNotConfigured": "Odesílání e-mailů není nastaveno (SMTP server chybí v konfiguraci).",
+  "templateInvalid": "Šablona e-mailu obsahuje chybu."
 }

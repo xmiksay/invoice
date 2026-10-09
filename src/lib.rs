@@ -6,6 +6,7 @@ pub mod cnb;
 pub mod config;
 pub mod contact;
 pub mod document;
+pub mod email;
 pub mod error;
 pub mod extract;
 pub mod health;

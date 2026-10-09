@@ -27,6 +27,7 @@ Everything goes through `make` (`make help` lists targets). `CARGO_BUILD_JOBS=4`
 - Toolchain is pinned: `rust-toolchain.toml` (1.97.0) must match `dtolnay/rust-toolchain` in `.github/workflows/ci.yml` and the `rust:` image in `Dockerfile`; Node is `frontend/.nvmrc` (22). Bump them together.
 - Integration tests need Postgres (`TEST_DATABASE_URL`); each test gets a throwaway schema (`tests/common/mod.rs`). They fail, not skip, without it.
 - The storage tests also need the S3 test bucket (`TEST_S3_*`, in `.env` locally, GitHub secrets in CI; random prefix per test, cleaned up) — they fail, not skip, without it. The ISDOC export tests also need `xmllint` (`libxml2-utils`) for XSD validation.
+- E-mail tests (`tests/email*.rs`) send through an in-process mock SMTP server (`tests/common/smtp.rs`, plain SMTP, can be told to reject) — never a real SMTP server.
 - Errors to clients are `{"code": "..."}`, plus a `fields` map on 422 (`{"code":"validation","fields":{"<camelCaseField>":"<reason>"}}`) — internal/DB detail is logged, never returned (`src/error.rs`).
 - Wire format and every route are specified in [`docs/api/`](../docs/api/README.md) (one file per area, each < 400 lines) — update it with any API change.
 - All `/api/*` except `/api/health` and `/api/openapi.json` require the Bearer token (`src/auth.rs`).
