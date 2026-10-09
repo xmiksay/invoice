@@ -3,6 +3,7 @@ import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import AppHeader from "@/components/AppHeader.vue";
+import AppToast from "@/components/AppToast.vue";
 import { useHealthStore } from "@/stores/health";
 
 const { t } = useI18n();
@@ -29,5 +30,6 @@ watch(
       <template v-if="health.version">{{ t("app.backendVersion", { version: health.version }) }}</template>
       <template v-else-if="health.failed">{{ t("app.backendUnavailable") }}</template>
     </footer>
+    <AppToast />
   </div>
 </template>

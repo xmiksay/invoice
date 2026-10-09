@@ -20,5 +20,8 @@
   "tooLarge": "The file is too large (20 MB at most).",
   "categoryInUse": "The category cannot be deleted because documents use it. Deactivate it instead.",
   "numberTaken": "The allocated number is already used by an imported document. Set the number series counter in Settings.",
-  "exceedsOriginal": "Cannot cancel: the credit notes would exceed the original document plus its debit notes for some VAT rate."
+  "exceedsOriginal": "Cannot cancel: the credit notes would exceed the original document plus its debit notes for some VAT rate.",
+  "smtpFailed": "Sending the e-mail failed – the SMTP server rejected the message or is unreachable.",
+  "smtpNotConfigured": "E-mail sending is not configured (no SMTP server in the configuration).",
+  "templateInvalid": "The e-mail template contains an error."
 }

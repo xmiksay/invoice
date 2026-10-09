@@ -187,3 +187,36 @@ async fn pdf_errors_carry_detail_only_for_render_failures() {
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(json, serde_json::json!({ "code": "storage_unavailable" }));
 }
+
+#[tokio::test]
+async fn email_errors() {
+    assert_eq!(
+        body(AppError::SmtpNotConfigured).await,
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            serde_json::json!({ "code": "smtp_not_configured" })
+        )
+    );
+    assert_eq!(
+        body(AppError::SmtpFailed("permanent error (550): no".into())).await,
+        (
+            StatusCode::BAD_GATEWAY,
+            serde_json::json!({ "code": "smtp_failed", "detail": "permanent error (550): no" })
+        )
+    );
+    assert_eq!(
+        body(AppError::TemplateInvalid {
+            field: "body",
+            detail: "line 3: undefined value".into()
+        })
+        .await,
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            serde_json::json!({
+                "code": "template_invalid",
+                "fields": { "body": "template_invalid" },
+                "detail": "line 3: undefined value"
+            })
+        )
+    );
+}

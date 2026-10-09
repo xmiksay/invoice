@@ -143,6 +143,21 @@ pub enum AppError {
     #[error("storage unavailable: {0}")]
     StorageUnavailable(String),
 
+    /// No SMTP server configured (`INVOICE__SMTP__HOST` unset).
+    #[error("e-mail is not configured")]
+    SmtpNotConfigured,
+
+    /// The SMTP server refused the message or could not be reached; the
+    /// server's response / transport error (never credentials) is returned
+    /// as `detail`.
+    #[error("SMTP failed: {0}")]
+    SmtpFailed(String),
+
+    /// An e-mail template does not compile or render on the sample:
+    /// `fields.{field}` = `template_invalid`, `detail` = line + message.
+    #[error("template {field} invalid: {detail}")]
+    TemplateInvalid { field: &'static str, detail: String },
+
     #[error("internal error: {0:#}")]
     Internal(#[from] anyhow::Error),
 
@@ -183,6 +198,9 @@ impl AppError {
             Self::PdfRenderFailed(_) | Self::PdfUpstream(_) => {
                 (StatusCode::BAD_GATEWAY, "pdf_render_failed")
             }
+            Self::SmtpNotConfigured => (StatusCode::SERVICE_UNAVAILABLE, "smtp_not_configured"),
+            Self::SmtpFailed(_) => (StatusCode::BAD_GATEWAY, "smtp_failed"),
+            Self::TemplateInvalid { .. } => (StatusCode::UNPROCESSABLE_ENTITY, "template_invalid"),
             Self::Internal(_) | Self::Database(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")
             }
@@ -258,10 +276,11 @@ impl From<PathRejection> for AppError {
 pub struct ErrorBody {
     /// Machine-readable error code, e.g. `unauthorized`, `not_found`, `validation`, `internal`.
     pub code: &'static str,
-    /// Only for `validation`: camelCase field name → reason code.
+    /// Only for `validation` / `template_invalid`: camelCase field name → reason code.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fields: Option<BTreeMap<String, String>>,
-    /// Only for `pdf_render_failed`: the render service's message.
+    /// Only for `pdf_render_failed` (the render service's message), `smtp_failed`
+    /// (the SMTP server's response) and `template_invalid` (line + message).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
 }
@@ -278,6 +297,7 @@ impl IntoResponse for AppError {
                 tracing::warn!(error = %self, "PDF render failed")
             }
             Self::StorageUnavailable(_) => tracing::error!(error = %self, "storage failed"),
+            Self::SmtpFailed(_) => tracing::warn!(error = %self, "e-mail not sent"),
             Self::BadRequest(_) | Self::Conflict(_) => tracing::debug!(error = %self, "rejected"),
             _ => {}
         }
@@ -288,10 +308,15 @@ impl IntoResponse for AppError {
                     .map(|(k, v)| (k.clone(), (*v).to_string()))
                     .collect(),
             ),
+            Self::TemplateInvalid { field, .. } => Some(BTreeMap::from([(
+                field.to_string(),
+                "template_invalid".into(),
+            )])),
             _ => None,
         };
         let detail = match &self {
-            Self::PdfRenderFailed(d) => Some(d.clone()),
+            Self::PdfRenderFailed(d) | Self::SmtpFailed(d) => Some(d.clone()),
+            Self::TemplateInvalid { detail, .. } => Some(detail.clone()),
             _ => None,
         };
         let mut resp = (

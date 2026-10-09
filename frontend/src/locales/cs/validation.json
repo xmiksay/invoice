@@ -9,5 +9,6 @@
   "exceeds_original": "Dobropisy by v některé sazbě DPH přesáhly původní fakturu.",
   "mixed_vat": "Všechny položky skupiny musí mít stejnou sazbu DPH.",
   "unknown": "Neznámé pole.",
-  "inactive": "Neaktivní hodnotu nelze nově přiřadit."
+  "inactive": "Neaktivní hodnotu nelze nově přiřadit.",
+  "template_invalid": "Šablonu nelze vykreslit."
 }

@@ -16,10 +16,7 @@ use crate::app::AppState;
 use crate::document::line::Status;
 use crate::error::{AppError, ErrorBody};
 use crate::extract::{ApiPath, ApiQuery};
-use crate::settings::entity::bank_account;
 use crate::settings::repo::company;
-use crate::time::today;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
@@ -129,12 +126,7 @@ pub async fn preview(
         Some(l) => Locale::parse(l).ok_or(AppError::field("locale", "invalid"))?,
         None => Locale::parse(&company.default_locale).unwrap_or(Locale::Cs),
     };
-    let bank = bank_account::Entity::find()
-        .filter(bank_account::Column::Currency.eq("CZK"))
-        .filter(bank_account::Column::IsDefault.eq(true))
-        .one(&state.db)
-        .await?;
-    let sample = Sample::new(&company, bank.as_ref(), locale, today())?;
+    let sample = Sample::load(&state.db, &company, locale).await?;
     let bytes = state.pdf.render(payload::build(&sample.input())?).await?;
     Ok(pdf_response(
         PdfBody::Rendered(bytes.into()),

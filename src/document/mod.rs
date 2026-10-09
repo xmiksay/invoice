@@ -54,4 +54,5 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/debit-note", post(actions::debit_note))
         .route("/{id}/payments", get(payments::list).post(payments::create))
         .route("/{id}/payments/{payment_id}", delete(payments::delete))
+        .merge(crate::email::document_router())
 }

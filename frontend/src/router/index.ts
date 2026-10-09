@@ -138,6 +138,11 @@ const routes = [
         name: "settings-design",
         component: () => import("@/features/settings/views/DesignTab.vue"),
       },
+      {
+        path: "email",
+        name: "settings-email",
+        component: () => import("@/features/email/views/EmailTab.vue"),
+      },
     ],
   },
   { path: "/:pathMatch(.*)*", redirect: "/" },

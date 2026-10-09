@@ -20,6 +20,7 @@ pub struct RateInfo {
 }
 
 /// Everything the payload is built from.
+#[derive(Clone, Copy)]
 pub struct Input<'a> {
     pub locale: Locale,
     /// Draft → watermark "NÁVRH", cancelled → "STORNO"; only issued gets a QR.
