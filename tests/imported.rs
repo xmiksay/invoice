@@ -25,7 +25,7 @@ fn imported(base: &Value, doc_type: &str, number: &str) -> Value {
 async fn imported_draft_issues_without_numbering_or_render() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let base = issuable(&app).await;
     let draft = create_doc(&app, imported(&base, "invoice", "FV-2019/0042")).await;
     assert_eq!(
@@ -85,7 +85,7 @@ async fn imported_draft_issues_without_numbering_or_render() {
 async fn import_rules() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let base = issuable(&app).await;
     let post = |body: Value| {
         let app = app.clone();
@@ -188,7 +188,7 @@ async fn import_rules() {
 async fn related_documents_and_proforma_payments() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let base = issuable(&app).await;
     let pf = create_doc(&app, imported(&base, "proforma", "ZF-OLD-7")).await;
     let (status, pf) = issue(&app, &id(&pf)).await;
@@ -217,7 +217,7 @@ async fn related_documents_and_proforma_payments() {
 async fn native_issue_colliding_with_imported_number() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let base = issuable(&app).await;
     let imp = create_doc(&app, imported(&base, "invoice", "20260001")).await;
     issue(&app, &id(&imp)).await;

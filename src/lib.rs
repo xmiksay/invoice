@@ -16,5 +16,6 @@ pub mod pdf;
 pub mod secret;
 pub mod settings;
 pub mod spa;
+pub mod storage;
 pub mod time;
 pub mod validation;

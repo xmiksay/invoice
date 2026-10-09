@@ -8,10 +8,13 @@ Documents are rendered to PDF by the mdcast service (`POST {INVOICE__MDCAST_URL}
 
 - The default design is embedded in the binary from the repo directory `design/`: `invoice.typ`, `fonts/Inter-*.ttf`
   (+ `fonts/OFL.txt`). Minimalist layout, black/grey, one accent colour, no logo.
-- `INVOICE__DESIGN_DIR` (optional) overrides it **file by file**: the effective set is embedded ∪ dir, the dir wins on
-  the same relative path. The dir is re-read on every render (design edits apply without a restart). Hidden files
-  (`.`-prefixed path segments) are ignored; a file > 10 MB → render fails (`pdf_render_failed`). Set but not an
-  existing directory → server refuses to start.
+- The storage keys `design/…` (see [Storage](#storage)) override it **file by file**: the effective set is embedded ∪
+  `design/`, the stored file wins on the same relative path (`design/logo.svg` → `logo.svg`). The prefix is listed on
+  every render (design edits apply without a restart); file contents are cached in memory by key + version (ETag,
+  size, modification time from the listing), so only new or changed files are downloaded. Hidden files
+  (`.`-prefixed path segments) are ignored; a file > 10 MB → render fails (`pdf_render_failed`, checked on the
+  listed size before any download). Files get there with `invoice design push <dir>` (or straight into the bucket);
+  `invoice design pull <dir>` / `ls` / `rm <path>…` complete the set.
 - Every `fonts/**/*.ttf|*.otf` is registered with the typst font book (request `fonts`, sorted by path); every other
   file goes into the bundle under its relative path, so `#image("logo.png")` / `#import "parts.typ"` resolve like on a
   filesystem.
@@ -92,11 +95,12 @@ snapshot has an IBAN, `payable > 0`. Generated server-side as SVG (crate `qrcode
 
 ## Archive
 
-- Columns on `documents`: `pdf_path text null` (relative to `INVOICE__STORAGE_DIR`, `documents/{numberYear}/{id}.pdf`),
-  `pdf_sha256 text null`, `pdf_rendered_at timestamptz null`. Written to a temp file in the same dir, fsync, rename.
+- Columns on `documents`: `pdf_path text null` (the storage key `documents/{numberYear}/{id}.pdf`),
+  `pdf_sha256 text null`, `pdf_rendered_at timestamptz null`. Written atomically (see [Storage](#storage)).
 - **Issue** (`POST /api/documents/{id}/issue`, all doc types) renders and archives inside the issue transaction after
-  the number and snapshots are assigned; render failure → transaction rolls back, nothing is issued (503
-  `pdf_unavailable` / 502 `pdf_render_failed`); commit failure → the written file is removed (best effort).
+  the number and snapshots are assigned; render or storage failure → transaction rolls back, nothing is issued (503
+  `pdf_unavailable` / 502 `pdf_render_failed` / 503 `storage_unavailable`); commit failure → the written file is
+  removed (best effort).
 - **DDPP** (auto-issued with a payment): the payment never fails because of PDF. After the payment transaction
   commits, the handler tries to render + archive once (failure logged). A DDPP without an archive is rendered and
   archived on its first `GET …/pdf` (concurrent first downloads: `UPDATE … WHERE pdf_path IS NULL`, the loser serves
@@ -108,20 +112,22 @@ snapshot has an IBAN, `payable > 0`. Generated server-side as SVG (crate `qrcode
 - `GET /api/documents/{id}/pdf?download=1` → `200 application/pdf`, `Content-Disposition: inline` (`attachment` with
   `download=1`), filename `{number}.pdf` (draft: `draft-{first 8 chars of id}.pdf`), `Cache-Control: no-store`.
   - draft → rendered live, `draft: true`, never stored;
-  - issued / cancelled with an archive → the stored file (sha256 not re-checked);
+  - issued / cancelled with an archive → the stored file, streamed with `Content-Length` (sha256 not re-checked);
   - issued / cancelled without an archive (DDPP only) → render + archive, as above;
-  - archive file missing on disk → 500 (logged).
+  - archive object missing → 500 (logged); storage unreachable → 503 `storage_unavailable`.
 - `GET /api/pdf/preview?locale=cs|en` → `200 application/pdf` of a sample invoice (never stored): supplier = the
   company profile (placeholder name when empty), fictional customer, CZK, standard VAT, items at 21 % and 12 %, one
   with a 10 % discount, a collapsed subtotal group, a text line, bank = default CZK account (if any → QR shown),
   `draft: false`, number `{YYYY}0001`-style sample. `locale` missing → company `defaultLocale`; invalid → 422.
-- `GET /api/pdf/design` → `{ designDir: string | null, files: [ { path, source: "custom" | "default", size } ] }`
-  (effective set, sorted by path).
+- `GET /api/pdf/design` → `{ storage: "fs" | "s3", files: [ { path, source: "custom" | "default", size } ] }`
+  (effective set, sorted by path; `custom` = from the storage's `design/`).
 
 Fetch the PDF with the Bearer header (blob → object URL); a plain link cannot carry the token.
 
 ## Errors
 - 503 `{"code":"pdf_unavailable"}` — mdcast unreachable, token rejected, gateway 502–504.
+- 503 `{"code":"storage_unavailable"}` — the storage (directory or bucket) failed: design listing / download, archive
+  write or read. The cause is logged only.
 - 502 `{"code":"pdf_render_failed","detail":"…"}` — mdcast answered but the template failed (typst diagnostics), or a
   design file is too large. `detail` is the mdcast message (the template is the user's own; no DB/internal data).
 - Document `pdf` field (added to the Document DTO): `{ sha256, renderedAt } | null`.
@@ -131,10 +137,38 @@ Fetch the PDF with the Bearer header (blob → object URL); a plain link cannot 
 |---|---|---|
 | `INVOICE__MDCAST_URL` | `https://mdcast.nexial.cz` | empty → default |
 | `INVOICE__MDCAST_TOKEN` | — | optional Bearer for mdcast |
-| `INVOICE__DESIGN_DIR` | — | optional override dir (must exist when set) |
-| `INVOICE__STORAGE_DIR` | `./data` | created at start; Docker image uses `/data` (volume) |
+| `INVOICE__STORAGE_KIND` | `fs` | `fs` or `s3` (see [Storage](#storage)) |
+| `INVOICE__STORAGE_DIR` | `./data` | `fs` root, created at start; Docker image uses `/data` (volume) |
+| `INVOICE__S3__ENDPOINT` / `BUCKET` / `REGION` / `ACCESS_KEY_ID` / `SECRET_ACCESS_KEY` / `PATH_STYLE` | — / — / `us-east-1` / — / — / `false` | `s3` only; endpoint empty → AWS |
 
 mdcast HTTP timeout 60 s.
+
+## Storage
+
+All files (archives, originals, design overrides) go through one `Storage` (`src/storage/`, crate `object_store`):
+put (returns sha256; atomic — `fs` writes a temp file, fsyncs it, renames and fsyncs the directory; an S3 PUT is
+atomic), get (whole or streamed), delete (idempotent), exists / head, list by prefix. Keys are `/`-separated, never
+contain empty, `.` or `..` segments: `documents/{year}/{id}.pdf`, `documents/{year}/{id}-original-{sha8}.pdf`,
+`design/…`.
+
+- `fs` (default): `INVOICE__STORAGE_DIR`. `s3`: any S3-compatible service; bucket, access key id and secret are
+  required, `PATH_STYLE=true` for Garage / MinIO. Invalid settings (unknown kind, missing bucket / credentials,
+  endpoint without `http(s)://`, unparsable `PATH_STYLE`) → the server refuses to start. Reachability is probed once
+  at start and only logged.
+- S3 requests: 5 s connect timeout, 30 s read timeout (each wait for headers or the next chunk; no total timeout, so a
+  slow 20 MB download is not cut off), at most 2 retries within 15 s — then 503 `storage_unavailable`.
+- Virtual-hosted style (`PATH_STYLE=false`) with a custom endpoint puts the bucket into the host
+  (`https://s3.example` → `https://{bucket}.s3.example`; unchanged when the host already starts with `{bucket}.`).
+- A leftover `INVOICE__DESIGN_DIR` refuses the start (its files would silently stop applying).
+- A failed original upload or ISDOC import (write or commit) removes the possibly written object again, unless a
+  document row points at that key (keys are content-addressed).
+- `invoice storage migrate --from-dir <old INVOICE__STORAGE_DIR> [--design-dir <old INVOICE__DESIGN_DIR>]` copies
+  every non-hidden file into the configured backend (keys = relative paths; the design dir under `design/`), reads
+  each one back and compares sha256. Identical objects are skipped (re-runs are no-ops; decided by size + the MD5
+  ETag of single-part S3 objects without a download, by downloading when the ETag is no MD5, e.g. fs); an existing
+  object with different content is reported and kept; unreadable local entries (a dangling symlink, an unreadable
+  `lost+found`) are skipped and reported. Any problem → exit code 1 after the rest is copied. The source is never
+  modified. `invoice design rm` of a path that is not stored prints "not found" and exits 1.
 
 ## Clarifications (as implemented)
 
@@ -145,8 +179,8 @@ mdcast HTTP timeout 60 s.
   `"STORNO"`/`"CANCELLED"` on a cancelled document rendered without an archive, else `null`); recaps carry `columns: { rate, base, vat, total }` header labels and `rateNote` (`null` on `vatRecap`);
   a recap `total` row's `rate` holds the "Celkem"/"Total" label; `columns.base` is "Základ"/"Net", for a non-payer
   "Celkem"/"Amount".
-- **Empty env values** mean the default: `INVOICE__MDCAST_URL`, `INVOICE__MDCAST_TOKEN`, `INVOICE__DESIGN_DIR`,
-  `INVOICE__STORAGE_DIR`.
+- **Empty env values** mean the default: `INVOICE__MDCAST_URL`, `INVOICE__MDCAST_TOKEN`, `INVOICE__STORAGE_KIND`,
+  `INVOICE__STORAGE_DIR`, every `INVOICE__S3__*`.
 - **Formatting**: negative money `-1 234,50 Kč` / `CZK -1,234.50`; `en` percent without a space (`21%`), `cs` with
   NBSP (`21 %`); dates use plain spaces; exchange rates print with at least 3 decimals.
 - **Lines**: collapsed subtotals hide their members recursively (a member that is itself a subtotal hides its own
@@ -175,10 +209,11 @@ mdcast HTTP timeout 60 s.
   `pdf_render_failed` **without** `detail`; the upstream body is logged only.
 - **Design**: font files are bundled too (request `fonts` are keys into the bundle); `invoice.typ` is sent as the
   template source, not as an asset; `GET /api/pdf/design` also lists files over 10 MB (they only fail a render). An
-  unreadable design dir → 500 `internal`. Symlinks are followed (files and dirs), each real directory is entered
-  once, so a link back into the tree (`shared -> .`) cannot loop. Embedded default files are passed to the bundle
-  without copying in release builds; only `INVOICE__DESIGN_DIR` files are read per render. (The client still
-  hashes every asset per render to build the manifest — inherent to `AssetBundle`.) A non-UTF-8 `invoice.typ` → `pdf_render_failed`.
+  unreachable storage → 503 `storage_unavailable`. `design push` / `storage migrate` walk local directories
+  following symlinks, each real directory entered once, so a link back into the tree (`shared -> .`) cannot loop.
+  Embedded default files are passed to the bundle without copying in release builds; stored overrides come from the
+  cache unless their listed version changed. (The client still hashes every asset per render to build the manifest —
+  inherent to `AssetBundle`.) A non-UTF-8 `invoice.typ` → `pdf_render_failed`.
 - **mdcast token**: without `INVOICE__MDCAST_TOKEN` a placeholder Bearer is sent (`mdcast-client` requires one; a
   server without a gate ignores it). `https://mdcast.nexial.cz` requires a real token for renders — without it every
   render is 503 `pdf_unavailable` (401 maps there).

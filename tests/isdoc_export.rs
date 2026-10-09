@@ -35,7 +35,7 @@ fn entry<'a>(files: &'a [(String, Vec<u8>)], name: &str) -> &'a [u8] {
 async fn native_invoice_exports_as_a_valid_isdocx() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let mut body = issuable(&app).await;
     body["lines"] = json!([
         item("10", "100", "21"),
@@ -92,7 +92,7 @@ async fn native_invoice_exports_as_a_valid_isdocx() {
 async fn foreign_currency_export_is_valid() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     set_company(&app, true).await;
     let contact = create_contact(&app, json!({})).await;
     create_bank(&app, "EUR").await;
@@ -119,7 +119,7 @@ async fn foreign_currency_export_is_valid() {
 async fn states_and_plain_isdoc_without_pdf() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let base = issuable(&app).await;
     let draft = create_doc(&app, base.clone()).await;
     let (status, body) = call(
@@ -170,7 +170,7 @@ async fn states_and_plain_isdoc_without_pdf() {
 
     // A native document whose PDF cannot be rendered → plain `.isdoc`.
     let issued = create_issued(&app, base).await;
-    let down = env.router_at(db.conn.clone(), &common::documents::dead_url(), None);
+    let down = env.router_at(db.conn.clone(), &common::documents::dead_url());
     // Drop the archive so the export would have to render it.
     let row = invoice::document::entity::document::Entity::find_by_id(
         id(&issued).parse::<uuid::Uuid>().expect("uuid"),
@@ -190,7 +190,7 @@ async fn states_and_plain_isdoc_without_pdf() {
 async fn bulk_export_follows_the_list_filters() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let base = issuable(&app).await;
     let a = create_issued(&app, base.clone()).await;
     let b = create_issued(&app, base.clone()).await;
@@ -224,7 +224,7 @@ async fn bulk_export_follows_the_list_filters() {
 async fn round_trip_reproduces_the_document() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let mut body = issuable(&app).await;
     body["lines"] = json!([
         item("10", "100", "21"),
@@ -235,7 +235,7 @@ async fn round_trip_reproduces_the_document() {
     let (_, _, isdocx) = get_raw(&app, &format!("/api/documents/{}/isdoc", id(&doc))).await;
 
     let db2 = TestDb::new().await;
-    let other = env.router(db2.conn.clone(), None);
+    let other = env.router(db2.conn.clone());
     set_company(&other, true).await;
     let files = [("export.isdocx", isdocx.as_slice())];
     let results = confirm(
@@ -286,7 +286,7 @@ async fn round_trip_reproduces_the_document() {
     // The other direction: a third database where the customer is the
     // company receives the same export with its lines.
     let db3 = TestDb::new().await;
-    let receiver = env.router(db3.conn.clone(), None);
+    let receiver = env.router(db3.conn.clone());
     set_company(&receiver, true).await;
     let (status, _) = call(
         &receiver,
@@ -313,7 +313,7 @@ async fn bulk_export_skips_a_failing_document() {
     use sea_orm::{ActiveModelTrait, EntityTrait, Set};
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let base = issuable(&app).await;
     let good = create_issued(&app, base.clone()).await;
     let bad = create_issued(&app, base).await;

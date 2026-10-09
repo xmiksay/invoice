@@ -190,7 +190,7 @@ async fn debit_notes_raise_the_credit_cap_and_guard_their_cancel() {
 async fn pdf_title_reference_and_qr() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     set_company(&app, true).await;
     let contact = create_contact(&app, json!({})).await;
     let (status, bank) = call(

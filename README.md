@@ -29,7 +29,7 @@ Open the SPA and log in with the API token.
 | `make frontend-install` / `make frontend-build` | `npm ci` / production SPA build |
 | `make fmt` / `make fmt-check` / `make clippy` | Rust formatting and lints |
 | `make lint` | `lint-backend` + `lint-frontend` (eslint + vue-tsc) |
-| `make test-unit` / `make test-integration` | Rust unit / integration tests (integration needs Postgres and `xmllint` from `libxml2-utils`) |
+| `make test-unit` / `make test-integration` | Rust unit / integration tests (integration needs Postgres, the S3 test bucket via `TEST_S3_*` in `.env`, and `xmllint` from `libxml2-utils`) |
 | `make test` | `test-backend` + `test-frontend` |
 | `make migrate` / `make migrate-status` | Apply / show migrations |
 | `make docker-build` | Build the Docker image (`IMAGE=...` to override the tag) |
@@ -38,3 +38,14 @@ Open the SPA and log in with the API token.
 ## Configuration
 
 See [.env.example](.env.example) and the table in [docs/architecture.md](docs/architecture.md#configuration).
+
+Files (PDF archive, uploaded originals, design overrides) live in a local directory (`INVOICE__STORAGE_KIND=fs`,
+default, `INVOICE__STORAGE_DIR`) or an S3-compatible bucket (`INVOICE__STORAGE_KIND=s3`, `INVOICE__S3__*`).
+
+```sh
+invoice storage migrate --from-dir ./data --design-dir ./my-design   # fs archive (+ old design dir) → configured storage
+invoice design push ./my-design     # override design files (invoice.typ, fonts/, logo.svg|png, signature.png)
+invoice design ls                   # effective design: custom vs built-in
+invoice design pull ./backup        # download the overrides
+invoice design rm logo.png          # back to the built-in file
+```

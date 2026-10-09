@@ -78,15 +78,15 @@ export interface NumberSeries {
   nextNumberPreview: string;
 }
 
-/** `GET /api/pdf/design` — the effective design files (built-in ∪ `INVOICE__DESIGN_DIR`), sorted by path. */
+/** `GET /api/pdf/design` — the effective design files (built-in ∪ storage keys `design/…`), sorted by path. */
 export interface DesignInfo {
-  /** null = only the built-in design. */
-  designDir: string | null;
+  /** The storage backend the custom files come from. */
+  storage: "fs" | "s3";
   files: DesignFile[];
 }
 export interface DesignFile {
   path: string;
-  /** `custom` = from the design dir (overrides the built-in file of the same path). */
+  /** `custom` = from the storage (overrides the built-in file of the same path). */
   source: "custom" | "default";
   /** Bytes. */
   size: number;

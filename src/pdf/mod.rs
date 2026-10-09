@@ -13,11 +13,9 @@ pub mod preview;
 pub mod reference;
 pub mod source;
 pub mod spayd;
-pub mod storage;
 #[cfg(test)]
 mod test_fixtures;
 
-use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::Context as _;
@@ -27,27 +25,23 @@ use mdcast_client::{AssetBundle, Client, request};
 
 use crate::app::AppState;
 use crate::error::AppError;
+use crate::storage::Storage;
 use payload::Payload;
 
 pub const DEFAULT_MDCAST_URL: &str = "https://mdcast.nexial.cz";
 const MDCAST_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// The mdcast client plus where designs come from and archives go.
+/// The mdcast client plus the storage designs come from and archives go to.
 #[derive(Clone)]
 pub struct PdfService {
     client: Client,
-    design_dir: Option<PathBuf>,
-    storage_dir: PathBuf,
+    storage: Storage,
+    design_cache: design::Cache,
 }
 
 impl PdfService {
-    /// Builds the client (no network) and creates the storage directory.
-    pub fn new(
-        url: &str,
-        token: Option<&str>,
-        design_dir: Option<PathBuf>,
-        storage_dir: PathBuf,
-    ) -> anyhow::Result<Self> {
+    /// Builds the client (no network).
+    pub fn new(url: &str, token: Option<&str>, storage: Storage) -> anyhow::Result<Self> {
         let http = reqwest::Client::builder()
             .timeout(MDCAST_TIMEOUT)
             .build()
@@ -62,29 +56,25 @@ impl PdfService {
             .http_client(http)
             .build()
             .context("INVOICE__MDCAST_URL must start with http:// or https://")?;
-        std::fs::create_dir_all(&storage_dir).with_context(|| {
-            format!(
-                "create INVOICE__STORAGE_DIR {}",
-                storage_dir.to_string_lossy()
-            )
-        })?;
         Ok(Self {
             client,
-            design_dir,
-            storage_dir,
+            storage,
+            design_cache: design::Cache::default(),
         })
     }
 
-    pub fn design_dir(&self) -> Option<&Path> {
-        self.design_dir.as_deref()
+    /// Archives, originals and the design overrides.
+    pub fn storage(&self) -> &Storage {
+        &self.storage
     }
 
-    /// Render `payload` with the current design (re-read every time).
+    pub fn design_cache(&self) -> &design::Cache {
+        &self.design_cache
+    }
+
+    /// Render `payload` with the current design (listed every time).
     pub async fn render(&self, mut payload: Payload) -> Result<Vec<u8>, AppError> {
-        let dir = self.design_dir.clone();
-        let design = tokio::task::spawn_blocking(move || design::load(dir.as_deref()))
-            .await
-            .context("design loader panicked")??;
+        let design = design::load(&self.storage, &self.design_cache).await?;
         payload.assets = payload::Assets {
             logo: design.logo(),
             signature: design.signature(),
@@ -106,40 +96,6 @@ impl PdfService {
             .await
             .map_err(client::map_error)?;
         Ok(artifact.bytes.to_vec())
-    }
-
-    async fn blocking<T: Send + 'static>(
-        &self,
-        f: impl FnOnce(&Path) -> anyhow::Result<T> + Send + 'static,
-    ) -> anyhow::Result<T> {
-        let root = self.storage_dir.clone();
-        tokio::task::spawn_blocking(move || f(&root))
-            .await
-            .context("storage task panicked")?
-    }
-
-    pub async fn write(&self, rel: &str, bytes: Vec<u8>) -> anyhow::Result<()> {
-        let rel = rel.to_string();
-        self.blocking(move |root| storage::write_atomic(root, &rel, &bytes))
-            .await
-    }
-
-    pub async fn read(&self, rel: &str) -> anyhow::Result<Vec<u8>> {
-        let rel = rel.to_string();
-        self.blocking(move |root| storage::read(root, &rel)).await
-    }
-
-    pub async fn remove(&self, rel: &str) {
-        let rel = rel.to_string();
-        let removed = self
-            .blocking(move |root| {
-                storage::remove(root, &rel);
-                Ok(())
-            })
-            .await;
-        if let Err(e) = removed {
-            tracing::warn!(error = %e, "remove orphaned PDF");
-        }
     }
 }
 

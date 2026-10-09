@@ -172,7 +172,7 @@ fn pdf_choice() {
     };
     assert_eq!(
         pdf_bytes(Some(&pdf(b"%PDF-1"))),
-        Ok(Some(b"%PDF-1".to_vec()))
+        Ok(Some(bytes::Bytes::from_static(b"%PDF-1")))
     );
     assert_eq!(pdf_bytes(Some(&pdf(b"<html>"))), Ok(None));
     assert_eq!(pdf_bytes(None), Ok(None));

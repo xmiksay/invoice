@@ -22,9 +22,9 @@ no OAuth, no stock/task/cost-center links). Module layout follows the infra
 | Exchange rate | ČNB daily rate at the tax point date (received invoices: date of receipt), stored on the invoice, manually overridable; if ČNB is unreachable the user must enter it. |
 | Numbering | Configurable pattern per document type, e.g. `{YYYY}{NNNN}`, yearly reset, number assigned at issue (drafts have none). Counter is manually settable in Settings. Imported invoices keep their own number and do **not** move the counter. |
 | Lifecycle | `draft → issued → sent → paid`, `cancelled`. On issue the invoice is locked, supplier/customer snapshots are stored and the PDF is rendered and archived; issuing fails if mdcast is down. "Overdue" is derived, never stored. Payments: date + amount. |
-| PDF | mdcast `/v1/render/template` (typst + JSON data). Default design (minimalist, Inter) embedded in the binary; `INVOICE__DESIGN_DIR` (sub-directory on the PVC) overrides it file by file (`invoice.typ`, fonts, logo, signature). Preview of a sample invoice in Settings → Design. Invoice language cs/en per document. SPAYD QR payment code. Details: [api/pdf.md](api/pdf.md). |
+| PDF | mdcast `/v1/render/template` (typst + JSON data). Default design (minimalist, Inter) embedded in the binary; storage keys `design/…` override it file by file (`invoice.typ`, fonts, logo, signature). Preview of a sample invoice in Settings → Design. Invoice language cs/en per document. SPAYD QR payment code. Details: [api/pdf.md](api/pdf.md). |
 | Received invoices | Metadata entered manually + original PDF upload. |
-| File storage | Filesystem, `INVOICE__STORAGE_DIR` (PVC); DB keeps path + sha256. |
+| File storage | `Storage` over `object_store`: filesystem (`INVOICE__STORAGE_DIR`, PVC) or S3-compatible bucket (#9); DB keeps key + sha256. |
 | Contacts | One address book for customers and suppliers, ARES lookup by IČO. Invoices store a snapshot, so editing/deleting a contact never changes an invoice. ISDOC import matches contacts by IČO or creates one. |
 | Received invoices numbering | Internal evidence number from its own series (e.g. `P{YYYY}{NNNN}`) assigned on save, plus the supplier's original number and VS. |
 | Payments | Multiple (partial) payments per document (date, amount, note). Status becomes `paid` automatically when payments cover the payable amount. A DDPP is issued per received advance payment. |
@@ -104,6 +104,14 @@ Storage (#9, before 2a):
 - Tests: one shared suite against fs and S3. S3 = test bucket `invoice-test` on our Garage (`s3.mmik.cz`, path-style,
   region `garage`), `TEST_S3_*` in `.env` locally and GitHub secrets in CI; every test uses a random prefix and cleans
   up. Fails, not skips, without it.
+- As implemented: `invoice design rm <path>…` added next to push / pull / ls; `migrate` never overwrites an object with
+  different content (reported, exit 1); the design cache compares the listed version (ETag + size + modification
+  time); `GET /api/pdf/design` returns `storage: "fs" | "s3"` instead of `designDir`; an ISDOC export whose PDF cannot
+  be read because the storage is down fails with 503 instead of silently leaving the PDF out (the bulk export stops at
+  the first such document); a leftover `INVOICE__DESIGN_DIR` refuses the start; `migrate` / `design push` decide
+  "identical" by size + MD5 ETag where the backend offers one (full download otherwise) and report unreadable local
+  entries (exit 1); a custom endpoint without path-style gets the bucket put into its host; an ISDOC import confirm whose
+  storage is down fails that entry with `storage_unavailable` (like `rate_unavailable`).
 
 2a e-mail (SMTP via `lettre`):
 - SMTP from env only (`INVOICE__SMTP__HOST/PORT/USERNAME/PASSWORD/FROM/TLS`); Settings shows configured yes/no and

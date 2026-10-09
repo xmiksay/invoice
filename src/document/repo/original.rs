@@ -1,14 +1,19 @@
 //! The uploaded original PDF of a received or imported document.
 
+use bytes::Bytes;
 use chrono::Datelike;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, DatabaseTransaction, Set, TransactionTrait};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection,
+    DatabaseTransaction, EntityTrait, PaginatorTrait, QueryFilter, Set, TransactionTrait,
+};
 use uuid::Uuid;
 
 use super::query;
 use crate::document::entity::document;
 use crate::error::AppError;
-use crate::pdf::{PdfService, storage};
+use crate::pdf::PdfService;
 use crate::settings::doc_type::RECEIVED;
+use crate::storage::{self, Storage};
 
 /// `documents/{year}/{id}-original-{sha8}.pdf`: content-addressed, so a
 /// replacement never overwrites the committed file.
@@ -27,10 +32,29 @@ fn allowed(doc: &document::Model) -> Result<(), AppError> {
     }
 }
 
+/// Best effort: remove an object a failed write or rollback may have left —
+/// but only when no document points at it. Keys are content-addressed, so a
+/// re-upload of identical content shares its key with the stored row.
+pub async fn remove_unreferenced<C: ConnectionTrait>(db: &C, storage: &Storage, key: &str) {
+    let referenced = document::Entity::find()
+        .filter(
+            Condition::any()
+                .add(document::Column::OriginalPath.eq(key))
+                .add(document::Column::PdfPath.eq(key)),
+        )
+        .count(db)
+        .await;
+    match referenced {
+        Ok(0) => storage.remove(key).await,
+        Ok(_) => {}
+        Err(e) => tracing::warn!(key, error = %e, "keep a possibly orphaned object"),
+    }
+}
+
 /// Store `bytes` (already checked to be a PDF) as the document's original,
-/// replacing any previous one. The new file gets its own name and is written
-/// inside the transaction; the old file is removed only after the commit, the
-/// new one if the commit fails.
+/// replacing any previous one. The row is updated and the new file written
+/// inside the transaction; the old file is removed only after the commit,
+/// the new one (when unreferenced) if the write or the commit fails.
 pub async fn put(
     db: &DatabaseConnection,
     pdf: &PdfService,
@@ -38,40 +62,41 @@ pub async fn put(
     bytes: Vec<u8>,
 ) -> Result<(), AppError> {
     let txn = db.begin().await?;
-    let (rel, previous) = match put_in(&txn, pdf, id, bytes).await {
+    let (rel, previous) = match put_in(&txn, id, &bytes).await {
         Ok(paths) => paths,
-        Err(e) => {
-            if let Err(r) = txn.rollback().await {
-                tracing::warn!(error = %r, "rollback original upload");
-            }
-            return Err(e);
-        }
+        Err(e) => return Err(rollback(txn, e).await),
     };
-    // Same content → same name: then that file backs the stored row whatever
-    // happens, so it is never removed.
-    let same = previous.as_deref() == Some(rel.as_str());
+    if let Err(e) = pdf.storage().put(&rel, Bytes::from(bytes)).await {
+        let e = rollback(txn, e.into()).await;
+        remove_unreferenced(db, pdf.storage(), &rel).await;
+        return Err(e);
+    }
     if let Err(e) = txn.commit().await {
-        if !same {
-            pdf.remove(&rel).await;
-        }
+        remove_unreferenced(db, pdf.storage(), &rel).await;
         return Err(e.into());
     }
-    if let Some(old) = previous.filter(|_| !same) {
-        pdf.remove(&old).await;
+    if let Some(old) = previous.filter(|old| *old != rel) {
+        pdf.storage().remove(&old).await;
     }
     Ok(())
 }
 
-/// Returns the new path and the previously stored one.
+async fn rollback(txn: DatabaseTransaction, e: AppError) -> AppError {
+    if let Err(r) = txn.rollback().await {
+        tracing::warn!(error = %r, "rollback original upload");
+    }
+    e
+}
+
+/// Updates the row; returns the new key and the previously stored one.
 async fn put_in(
     txn: &DatabaseTransaction,
-    pdf: &PdfService,
     id: Uuid,
-    bytes: Vec<u8>,
+    bytes: &[u8],
 ) -> Result<(String, Option<String>), AppError> {
     let doc = query::lock(txn, id).await?;
     allowed(&doc)?;
-    let sha256 = storage::sha256_hex(&bytes);
+    let sha256 = storage::sha256_hex(bytes);
     let year = doc.number_year.unwrap_or(doc.issue_date.year());
     let rel = relative_path(year, id, &sha256);
     let previous = doc.original_path.clone();
@@ -84,7 +109,6 @@ async fn put_in(
     row.original_uploaded_at = Set(Some(now.into()));
     row.updated_at = Set(now.into());
     row.update(txn).await?;
-    pdf.write(&rel, bytes).await?;
     Ok((rel, previous))
 }
 
@@ -108,7 +132,7 @@ pub async fn delete(db: &DatabaseConnection, pdf: &PdfService, id: Uuid) -> Resu
         })
         .await?;
     if let Some(rel) = removed {
-        pdf.remove(&rel).await;
+        pdf.storage().remove(&rel).await;
     }
     Ok(())
 }

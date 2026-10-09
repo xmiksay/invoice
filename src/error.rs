@@ -139,6 +139,10 @@ pub enum AppError {
     #[error("PDF service error: {0}")]
     PdfUpstream(String),
 
+    /// The file storage (directory or S3 bucket) failed; the cause is logged.
+    #[error("storage unavailable: {0}")]
+    StorageUnavailable(String),
+
     #[error("internal error: {0:#}")]
     Internal(#[from] anyhow::Error),
 
@@ -175,6 +179,7 @@ impl AppError {
             Self::PdfMissing => (StatusCode::NOT_FOUND, "pdf_missing"),
             Self::TooLarge => (StatusCode::PAYLOAD_TOO_LARGE, "too_large"),
             Self::PdfUnavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "pdf_unavailable"),
+            Self::StorageUnavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "storage_unavailable"),
             Self::PdfRenderFailed(_) | Self::PdfUpstream(_) => {
                 (StatusCode::BAD_GATEWAY, "pdf_render_failed")
             }
@@ -272,6 +277,7 @@ impl IntoResponse for AppError {
             Self::PdfUnavailable(_) | Self::PdfRenderFailed(_) | Self::PdfUpstream(_) => {
                 tracing::warn!(error = %self, "PDF render failed")
             }
+            Self::StorageUnavailable(_) => tracing::error!(error = %self, "storage failed"),
             Self::BadRequest(_) | Self::Conflict(_) => tracing::debug!(error = %self, "rejected"),
             _ => {}
         }

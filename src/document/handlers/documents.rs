@@ -151,7 +151,7 @@ pub async fn delete(
     };
     // After the commit: a failed delete never loses the file.
     if let Some(rel) = original {
-        state.pdf.remove(&rel).await;
+        state.pdf.storage().remove(&rel).await;
     }
     Ok(StatusCode::NO_CONTENT)
 }

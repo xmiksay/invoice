@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 async fn issues_without_a_customer() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     set_company(&app, true).await;
     create_bank(&app, "CZK").await;
     let draft = create_doc(
@@ -109,7 +109,7 @@ async fn no_advance_lines_and_settle_still_makes_an_invoice() {
 async fn credit_and_debit_notes_reference_the_simplified_document() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let mut body = issuable(&app).await;
     body["docType"] = json!("simplified");
     let doc = create_issued(&app, body).await;
@@ -149,7 +149,7 @@ async fn credit_and_debit_notes_reference_the_simplified_document() {
 async fn corrections_of_a_simplified_document_without_customer_issue() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     set_company(&app, true).await;
     create_bank(&app, "CZK").await;
     let doc = create_issued(

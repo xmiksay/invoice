@@ -29,7 +29,7 @@ use crate::validation as v;
         (status = 409, description = "`invalid_state` (not a draft)", body = ErrorBody),
         (status = 422, description = "Not issuable (contactId, lines, dueDate, taxPointDate, bankAccountId, exchangeRate, correctionReason, lines.N.advanceDocumentId, lines: exceeds_original)", body = ErrorBody),
         (status = 502, description = "`pdf_render_failed` (+ `detail`); nothing issued", body = ErrorBody),
-        (status = 503, description = "`pdf_unavailable`; nothing issued", body = ErrorBody),
+        (status = 503, description = "`pdf_unavailable` or `storage_unavailable`; nothing issued", body = ErrorBody),
     )
 )]
 pub async fn issue(

@@ -30,7 +30,7 @@ async fn qr_draft(app: &axum::Router) -> Value {
 async fn issue_archives_the_pdf() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let body = issuable(&app).await;
     let draft = create_doc(&app, body).await;
     assert_eq!(draft["pdf"], Value::Null);
@@ -45,7 +45,7 @@ async fn issue_archives_the_pdf() {
     let stored = std::fs::read(&path).expect("archived file exists");
     assert_eq!(stored, render.pdf);
     let sha = doc["pdf"]["sha256"].as_str().expect("sha256");
-    assert_eq!(sha, invoice::pdf::storage::sha256_hex(&stored));
+    assert_eq!(sha, invoice::storage::sha256_hex(&stored));
     assert!(doc["pdf"]["renderedAt"].is_string());
 
     // What mdcast received: the issued document, fonts sorted, no template in the bundle.
@@ -91,7 +91,7 @@ async fn issue_archives_the_pdf() {
 async fn mdcast_down_issues_nothing() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let down = env.router_at(db.conn.clone(), &dead_url(), None);
+    let down = env.router_at(db.conn.clone(), &dead_url());
     let body = issuable(&down).await;
     let draft = create_doc(&down, body).await;
 
@@ -106,7 +106,7 @@ async fn mdcast_down_issues_nothing() {
     assert_eq!(doc["supplier"], Value::Null);
 
     // The counter did not move: the retry gets the first number.
-    let up = env.router(db.conn.clone(), None);
+    let up = env.router(db.conn.clone());
     let (status, doc) = issue(&up, &id(&draft)).await;
     assert_eq!(status, StatusCode::OK, "{doc}");
     assert_eq!(doc["number"], "20260001");
@@ -116,7 +116,7 @@ async fn mdcast_down_issues_nothing() {
 async fn render_error_is_502_with_detail() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let body = issuable(&app).await;
     let draft = create_doc(&app, body).await;
     env.mock.fail_with("error: unknown variable: totalz");
@@ -138,7 +138,7 @@ async fn render_error_is_502_with_detail() {
 async fn upstream_failure_is_502_without_detail() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let body = issuable(&app).await;
     let draft = create_doc(&app, body).await;
     env.mock
@@ -154,7 +154,7 @@ async fn upstream_failure_is_502_without_detail() {
 async fn qr_only_for_bank_transfer_with_iban() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let body = qr_draft(&app).await;
 
     let (status, doc) = issue(&app, &id(&create_doc(&app, body.clone()).await)).await;
@@ -200,7 +200,7 @@ async fn qr_only_for_bank_transfer_with_iban() {
 async fn credit_note_prints_negated() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let body = issuable(&app).await;
     let (_, invoice) = issue(&app, &id(&create_doc(&app, body).await)).await;
     let (status, cn) = call(

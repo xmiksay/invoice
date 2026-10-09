@@ -28,7 +28,7 @@ pub struct Ready {
     pub plan: Plan,
     pub status: Status,
     /// The original PDF to store.
-    pub pdf: Option<Vec<u8>>,
+    pub pdf: Option<bytes::Bytes>,
     pub warnings: Vec<Code>,
     /// `Some(true)`: an existing contact matches the counterparty.
     pub contact_exists: Option<bool>,
@@ -42,7 +42,7 @@ pub struct Analyzed {
 }
 
 /// A plan, its original PDF and whether a too-large PDF was skipped.
-type Planned = (Plan, Option<Vec<u8>>, bool);
+type Planned = (Plan, Option<bytes::Bytes>, bool);
 type Keyed = (String, Result<Planned, Code>);
 
 /// Unpack, parse and plan: CPU-bound, run off the async workers.
