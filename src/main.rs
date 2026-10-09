@@ -6,6 +6,7 @@ use invoice::app::{self, AppState};
 use invoice::ares::AresClient;
 use invoice::cnb::CnbClient;
 use invoice::config::{Config, DbConfig};
+use invoice::email::Mailer;
 use invoice::migration::{Migrator, MigratorTrait};
 use invoice::pdf::{PdfService, design};
 use invoice::storage::transfer::{self, Report};
@@ -125,6 +126,7 @@ async fn serve() -> Result<()> {
             cfg.mdcast_token.as_ref().map(|t| t.expose().as_str()),
             storage,
         )?,
+        email: cfg.smtp.as_ref().map(Mailer::new).transpose()?,
     };
     let listener = tokio::net::TcpListener::bind(&cfg.bind)
         .await

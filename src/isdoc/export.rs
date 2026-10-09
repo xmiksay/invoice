@@ -201,14 +201,9 @@ pub async fn export(
     if full.doc.direction != ISSUED || full.doc.status == Status::Draft.as_str() {
         return Err(AppError::InvalidState);
     }
-    let stem = safe_filename(full.doc.number.as_deref().unwrap_or("document"));
+    let stem = stem(&full.doc);
     let Some(pdf_bytes) = visual(db, pdf, &full.doc).await? else {
-        let xml = export_xml::render(&source(db, full, None).await?);
-        return Ok(Exported {
-            filename: format!("{stem}.isdoc"),
-            content_type: "application/xml",
-            bytes: xml.into_bytes(),
-        });
+        return plain_of(db, full).await;
     };
     let (main, pdf_name) = (format!("{stem}.isdoc"), format!("{stem}.pdf"));
     let supplement = Supplement {
@@ -227,6 +222,28 @@ pub async fn export(
         content_type: "application/zip",
         bytes,
     })
+}
+
+/// The number, header-safe: every exported file is named after it.
+pub fn stem(doc: &document::Model) -> String {
+    safe_filename(doc.number.as_deref().unwrap_or("document"))
+}
+
+/// `{number}.isdoc`: the plain XML without a PDF supplement.
+async fn plain_of(db: &DatabaseConnection, full: Full) -> Result<Exported, AppError> {
+    let stem = stem(&full.doc);
+    let xml = export_xml::render(&source(db, full, None).await?);
+    Ok(Exported {
+        filename: format!("{stem}.isdoc"),
+        content_type: "application/xml",
+        bytes: xml.into_bytes(),
+    })
+}
+
+/// The plain ISDOC XML of an issued, non-draft document (the e-mail
+/// attachment; the caller checks the state).
+pub async fn plain(db: &DatabaseConnection, id: Uuid) -> Result<Exported, AppError> {
+    plain_of(db, query::load(db, id).await?).await
 }
 
 fn attachment(e: Exported) -> Response {

@@ -1,0 +1,10 @@
+Dobrý den,
+
+v příloze Vám zasíláme doklad č. {{ doc.number }} ({{ doc.typeLabel }}) na částku {{ doc.total }}.
+{% if doc.paid %}
+Neplaťte – již uhrazeno.
+{% elif doc.toPay %}
+Částku {{ doc.payable }} prosím uhraďte do {{ doc.dueDate }}{% if doc.variableSymbol %} pod variabilním symbolem {{ doc.variableSymbol }}{% endif %}.
+{% endif %}
+S pozdravem
+{{ company.name }}

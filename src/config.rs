@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use crate::ares::DEFAULT_ARES_URL;
 use crate::cnb::DEFAULT_CNB_URL;
+use crate::email::SmtpConfig;
 use crate::pdf::DEFAULT_MDCAST_URL;
 use crate::secret::Secret;
 use crate::storage::StorageConfig;
@@ -31,6 +32,9 @@ pub struct Config {
     /// `INVOICE__STORAGE_KIND` / `INVOICE__STORAGE_DIR` / `INVOICE__S3__*`.
     #[serde(skip)]
     pub storage: StorageConfig,
+    /// `INVOICE__SMTP__*`; `None` → e-mail not configured.
+    #[serde(skip)]
+    pub smtp: Option<SmtpConfig>,
     /// Removed setting, read only to refuse a start that would silently fall
     /// back to the default design (archives are immutable).
     #[serde(default, rename = "design_dir")]
@@ -54,7 +58,8 @@ impl Config {
         let mut cfg: Self = raw.clone().try_deserialize().context(
             "invalid configuration (INVOICE__DATABASE_URL and INVOICE__API_TOKEN are required)",
         )?;
-        cfg.storage = StorageConfig::from_config(raw)?;
+        cfg.storage = StorageConfig::from_config(raw.clone())?;
+        cfg.smtp = SmtpConfig::from_config(raw)?;
         let cfg = cfg.normalized();
         cfg.validate()?;
         Ok(cfg)
@@ -248,6 +253,30 @@ mod tests {
             format!("{err:#}").contains("INVOICE__S3__BUCKET"),
             "{err:#}"
         );
+    }
+
+    #[test]
+    fn smtp_is_optional_and_validated() {
+        let base = [
+            ("INVOICE__DATABASE_URL", "postgres://x"),
+            ("INVOICE__API_TOKEN", "tok"),
+        ];
+        assert!(
+            Config::from_source(env(&base))
+                .expect("valid")
+                .smtp
+                .is_none()
+        );
+        let mut with_host = base.to_vec();
+        with_host.push(("INVOICE__SMTP__HOST", "smtp.example.com"));
+        let err = Config::from_source(env(&with_host)).expect_err("HOST without FROM");
+        assert!(
+            format!("{err:#}").contains("INVOICE__SMTP__FROM"),
+            "{err:#}"
+        );
+        with_host.push(("INVOICE__SMTP__FROM", "faktury@example.com"));
+        let cfg = Config::from_source(env(&with_host)).expect("valid");
+        assert_eq!(cfg.smtp.map(|s| s.port), Some(587));
     }
 
     #[test]

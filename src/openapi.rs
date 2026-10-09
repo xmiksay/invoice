@@ -74,6 +74,15 @@ use utoipa::{Modify, OpenApi};
         crate::isdoc::import::confirm,
         crate::isdoc::export::document_isdoc,
         crate::isdoc::export::bulk,
+        crate::email::handlers::settings::status,
+        crate::email::handlers::settings::test,
+        crate::email::handlers::settings::list_templates,
+        crate::email::handlers::settings::put_template,
+        crate::email::handlers::settings::delete_template,
+        crate::email::handlers::settings::preview,
+        crate::email::handlers::document::prefill,
+        crate::email::handlers::document::send,
+        crate::email::handlers::document::history,
     ),
     components(schemas(
         crate::health::HealthResponse,
@@ -148,6 +157,13 @@ mod tests {
             "/api/import/isdoc/confirm",
             "/api/documents/{id}/isdoc",
             "/api/documents/isdoc",
+            "/api/settings/email",
+            "/api/settings/email/test",
+            "/api/settings/email/templates",
+            "/api/settings/email/templates/{locale}",
+            "/api/settings/email/templates/{locale}/preview",
+            "/api/documents/{id}/email",
+            "/api/documents/{id}/emails",
         ] {
             assert!(doc.paths.paths.contains_key(path), "{path}");
         }

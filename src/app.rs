@@ -8,11 +8,12 @@ use tower_http::trace::TraceLayer;
 
 use crate::ares::AresClient;
 use crate::cnb::CnbClient;
+use crate::email::Mailer;
 use crate::error::AppError;
 use crate::pdf::PdfService;
 use crate::secret::Secret;
 use crate::{
-    ares, auth, catalog, cnb, contact, document, health, isdoc, openapi, pdf, settings, spa,
+    ares, auth, catalog, cnb, contact, document, email, health, isdoc, openapi, pdf, settings, spa,
 };
 
 #[derive(Clone)]
@@ -22,6 +23,8 @@ pub struct AppState {
     pub ares: AresClient,
     pub cnb: CnbClient,
     pub pdf: PdfService,
+    /// `None` when SMTP is not configured (`INVOICE__SMTP__HOST` unset).
+    pub email: Option<Mailer>,
 }
 
 /// `/api/health` and `/api/openapi.json` are public; every other `/api/*`
@@ -31,6 +34,7 @@ pub fn router(state: AppState) -> Router {
     let protected = Router::new()
         .route("/auth/check", get(auth::check))
         .nest("/settings", settings::router())
+        .nest("/settings/email", email::settings_router())
         .nest("/contacts", contact::router())
         .route("/ares/{ico}", get(ares::handlers::lookup))
         .nest("/documents", document::router())

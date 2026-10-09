@@ -42,6 +42,9 @@ See [.env.example](.env.example) and the table in [docs/architecture.md](docs/ar
 Files (PDF archive, uploaded originals, design overrides) live in a local directory (`INVOICE__STORAGE_KIND=fs`,
 default, `INVOICE__STORAGE_DIR`) or an S3-compatible bucket (`INVOICE__STORAGE_KIND=s3`, `INVOICE__S3__*`).
 
+Sending documents by e-mail needs an SMTP server (`INVOICE__SMTP__HOST`, `PORT`, `TLS`, `USERNAME`, `PASSWORD`,
+`FROM`); without `INVOICE__SMTP__HOST` the app runs with e-mail disabled.
+
 ```sh
 invoice storage migrate --from-dir ./data --design-dir ./my-design   # fs archive (+ old design dir) → configured storage
 invoice design push ./my-design     # override design files (invoice.typ, fonts/, logo.svg|png, signature.png)
