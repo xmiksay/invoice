@@ -10,37 +10,37 @@ use crate::document::line::Status;
 use crate::error::AppError;
 use crate::settings::doc_type::ISSUED;
 
-/// Lock the row, require `issued` and `allowed`, apply `f`. Anything else is
-/// `invalid_state`.
-async fn on_issued(
+const ISSUED_ONLY: &[Status] = &[Status::Issued];
+
+/// Lock the row, require one of `statuses` and `allowed`, apply `f`.
+/// Anything else is `invalid_state`.
+async fn on_status(
     db: &DatabaseConnection,
     id: Uuid,
+    statuses: &'static [Status],
     allowed: fn(&document::Model) -> bool,
     f: impl FnOnce(&mut document::ActiveModel) + Send + 'static,
 ) -> Result<(), AppError> {
     Ok(db
-        .transaction(|txn| Box::pin(on_issued_in(txn, id, allowed, f)))
+        .transaction(|txn| {
+            Box::pin(async move {
+                let doc = locked(txn, id, statuses, allowed).await?;
+                apply(txn, doc, f).await
+            })
+        })
         .await?)
 }
 
-async fn on_issued_in(
+/// Lock the row; received documents are only recorded (no cancel / mark-sent
+/// / e-mail).
+async fn locked(
     txn: &DatabaseTransaction,
     id: Uuid,
-    allowed: fn(&document::Model) -> bool,
-    f: impl FnOnce(&mut document::ActiveModel),
-) -> Result<(), AppError> {
-    let doc = locked_issued(txn, id, allowed).await?;
-    apply(txn, doc, f).await
-}
-
-/// Lock the row; received documents are only recorded (no cancel / mark-sent).
-async fn locked_issued(
-    txn: &DatabaseTransaction,
-    id: Uuid,
+    statuses: &[Status],
     allowed: fn(&document::Model) -> bool,
 ) -> Result<document::Model, AppError> {
     let doc = query::lock(txn, id).await?;
-    if view::status(&doc)? != Status::Issued || doc.direction != ISSUED || !allowed(&doc) {
+    if !statuses.contains(&view::status(&doc)?) || doc.direction != ISSUED || !allowed(&doc) {
         return Err(AppError::InvalidState);
     }
     Ok(doc)
@@ -80,7 +80,7 @@ pub async fn cancel(
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let doc = locked_issued(txn, id, cancellable).await?;
+                let doc = locked(txn, id, ISSUED_ONLY, cancellable).await?;
                 match doc.doc_type.as_str() {
                     "debit_note" => credit::check_debit_cancel(txn, &doc).await?,
                     "advance_credit_note" => ddpp_correction::check_linked(txn, &doc).await?,
@@ -104,9 +104,27 @@ pub async fn mark_sent(
     id: Uuid,
     sent_at: DateTime<FixedOffset>,
 ) -> Result<(), AppError> {
-    on_issued(
+    on_status(
         db,
         id,
+        ISSUED_ONLY,
+        |_| true,
+        move |row| row.sent_at = Set(Some(sent_at)),
+    )
+    .await
+}
+
+/// After an e-mail went out: like mark-sent, but a cancelled document
+/// (which can still be e-mailed) counts too.
+pub async fn email_sent(
+    db: &DatabaseConnection,
+    id: Uuid,
+    sent_at: DateTime<FixedOffset>,
+) -> Result<(), AppError> {
+    on_status(
+        db,
+        id,
+        &[Status::Issued, Status::Cancelled],
         |_| true,
         move |row| row.sent_at = Set(Some(sent_at)),
     )

@@ -196,8 +196,8 @@ describe("detail per document type", () => {
     expect(w.find('[data-test="payments-panel"]').exists()).toBe(false);
     expect(w.find("#meta-internalNote").exists()).toBe(true);
     expect(w.find('[data-test="related-parent"]').text()).toContain("Proforma invoice ZF20260001");
-    // The parent comes with the document; nothing else is fetched.
-    expect(calls(fetch).filter((c) => c.startsWith("GET /api/documents"))).toEqual(["GET /api/documents/dd1"]);
+    // The parent comes with the document; only the e-mail history is fetched besides it.
+    expect(calls(fetch).filter((c) => c.startsWith("GET /api/documents"))).toEqual(["GET /api/documents/dd1", "GET /api/documents/dd1/emails"]);
   });
 
   it("imported proforma: original PDF panel instead of ours, settle still offered, no DDPP rate, imported issue confirm", async () => {
