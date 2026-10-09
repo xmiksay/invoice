@@ -86,10 +86,44 @@ Document type decisions (1f-a, details in [api/doc-types.md](api/doc-types.md)):
 - Received counterparts `PV…`, `POP…`, `PZD…`; manual import accepts all seven types.
 
 ### Phase 2 — interchange
-CSV/XLSX bulk import (fixed documented template, sample downloadable
-in the UI, one row = one invoice with VAT recap, no lines), CSV export for the
-accountant, e-mail sending via SMTP (manual button, prefilled cs/en template,
-PDF + ISDOC attached (ISDOC export itself lands in 1f-b), send log in DB, status → `sent`).
+Order: storage abstraction (#9, pulled forward) → 2a e-mail → 2b CSV/XLSX import → 2c CSV export, one PR each.
+
+Storage (#9, before 2a):
+- `Storage` over the `object_store` crate: put (sha256, atomic), get (stream), delete, exists, list by prefix. Backend by
+  `INVOICE__STORAGE_KIND` = `fs` (default, `INVOICE__STORAGE_DIR`) or `s3` (`INVOICE__S3__ENDPOINT`, `BUCKET`, `REGION`,
+  `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, `PATH_STYLE`); the Docker image works without S3.
+- Everything goes through it: PDF archive, originals, e-mail templates (2a) **and the design** (keys `design/…`, overlaid
+  on the embedded default file by file as before). `INVOICE__DESIGN_DIR` is removed; files reach storage via
+  `invoice design push|pull|ls` or straight into the bucket (UI comes with #10). Keys stay as today
+  (`documents/{year}/…`); the `spaces/{id}/` prefix arrives with #3.
+- Design reads list the `design/` prefix per render and cache file contents by key + ETag/size, so unchanged fonts are
+  not downloaded again.
+- Storage unreachable → 503 `storage_unavailable` (issue fails and changes nothing, like mdcast down).
+- `invoice storage migrate --from-dir <path> [--design-dir <path>]` copies the fs archive (and an old design dir) into
+  the configured backend, verifies sha256, is idempotent and never deletes the source.
+- Tests: one shared suite against fs and S3. S3 = test bucket `invoice-test` on our Garage (`s3.mmik.cz`, path-style,
+  region `garage`), `TEST_S3_*` in `.env` locally and GitHub secrets in CI; every test uses a random prefix and cleans
+  up. Fails, not skips, without it.
+
+2a e-mail (SMTP via `lettre`):
+- SMTP from env only (`INVOICE__SMTP__HOST/PORT/USERNAME/PASSWORD/FROM/TLS`); Settings shows configured yes/no and
+  sends a test e-mail.
+- Send dialog: To (prefilled from the contact, several addresses), Cc, Bcc, optional Bcc to the company e-mail
+  (ticked), subject and body rendered from the template and editable before sending; attachments PDF and plain
+  `.isdoc` (checkboxes). Any issued, non-draft document of ours (cancelled too); never received ones.
+- Templates: MiniJinja, plain text, subject + body per locale (cs/en), defaults embedded, overrides stored in Storage;
+  Settings → E-mail editor with a preview on a sample document and "restore default". Saving compiles and renders the
+  template on the sample in strict mode; an error → 422 with line + message, the active template stays.
+- Sending is synchronous (30 s timeout); every attempt is logged (to/cc/bcc, subject, time, ok/error, Message-ID);
+  success sets `sentAt`; re-sending allowed; the history is shown on the document detail.
+
+2b CSV/XLSX import: one template for both directions and all seven types, one row = one document, VAT recap in
+per-rate columns (`base_21`, `vat_21`, `base_12`, `vat_12`, `base_0`), contacts matched by IČO or created, sample
+downloadable in the UI, preview → confirm like ISDOC.
+
+2c CSV export for the accountant: issued and received per the list filter, one row = one document, `;` separator,
+UTF-8 with BOM, decimal comma, dates `dd.mm.yyyy`; columns direction, type, number, supplier number, dates,
+counterparty + IČO/DIČ, currency, rate, base/VAT per rate in CZK, total, paid, category; credit notes negative.
 
 ### Phase 3 — accounting & MCP
 Pohoda XML (Stormware) and Money S3 XML export of issued + received invoices per
