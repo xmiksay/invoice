@@ -25,6 +25,7 @@ pub mod documents;
 pub mod isdoc;
 pub mod mdcast;
 pub mod received;
+pub mod storage;
 
 pub const TEST_TOKEN: &str = "test-token-0123456789";
 
@@ -139,26 +140,18 @@ pub fn router_with(db: DatabaseConnection, ares_url: &str, cnb_url: &str) -> Rou
         db,
         ares_url,
         cnb_url,
-        pdf_service(&mdcast_url, None, &shared_storage()),
+        pdf_service(&mdcast_url, shared_storage()),
     ))
 }
 
-pub fn shared_storage() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("storage")
+/// One fs storage per test binary; tests never write `design/` into it.
+pub fn shared_storage() -> invoice::storage::Storage {
+    let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("storage");
+    invoice::storage::Storage::local(&dir).expect("shared fs storage")
 }
 
-pub fn pdf_service(
-    mdcast_url: &str,
-    design_dir: Option<&std::path::Path>,
-    storage: &std::path::Path,
-) -> PdfService {
-    PdfService::new(
-        mdcast_url,
-        None,
-        design_dir.map(std::path::Path::to_path_buf),
-        storage.to_path_buf(),
-    )
-    .expect("build PDF service")
+pub fn pdf_service(mdcast_url: &str, storage: invoice::storage::Storage) -> PdfService {
+    PdfService::new(mdcast_url, None, storage).expect("build PDF service")
 }
 
 pub fn state(db: DatabaseConnection, ares_url: &str, cnb_url: &str, pdf: PdfService) -> AppState {

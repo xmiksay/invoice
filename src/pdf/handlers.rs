@@ -1,5 +1,5 @@
-use anyhow::Context as _;
 use axum::Json;
+use axum::body::Body;
 use axum::extract::State;
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
+use super::archive::{self, PdfBody};
 use super::design::{self, DesignFile};
 use super::format::Locale;
+use super::payload;
 use super::preview::Sample;
-use super::{archive, payload};
 use crate::app::AppState;
 use crate::document::line::Status;
 use crate::error::{AppError, ErrorBody};
@@ -37,7 +38,8 @@ pub struct PreviewQuery {
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DesignListing {
-    pub design_dir: Option<String>,
+    /// The storage backend the custom files come from: `fs` | `s3`.
+    pub storage: String,
     pub files: Vec<DesignFile>,
 }
 
@@ -54,19 +56,24 @@ pub(crate) fn safe_filename(stem: &str) -> String {
         .collect()
 }
 
-fn pdf_response(bytes: Vec<u8>, stem: &str, download: bool) -> Response {
+fn pdf_response(body: PdfBody, stem: &str, download: bool) -> Response {
     let disposition = format!(
         "{}; filename=\"{}.pdf\"",
         if download { "attachment" } else { "inline" },
         safe_filename(stem)
     );
+    let (length, body) = match body {
+        PdfBody::Rendered(bytes) => (bytes.len() as u64, Body::from(bytes)),
+        PdfBody::Stored(d) => (d.size, Body::from_stream(d.stream)),
+    };
     (
         [
             (header::CONTENT_TYPE, "application/pdf".to_string()),
             (header::CONTENT_DISPOSITION, disposition),
             (header::CACHE_CONTROL, "no-store".to_string()),
+            (header::CONTENT_LENGTH, length.to_string()),
         ],
-        bytes,
+        body,
     )
         .into_response()
 }
@@ -81,7 +88,7 @@ fn pdf_response(bytes: Vec<u8>, stem: &str, download: bool) -> Response {
         (status = 200, description = "The PDF: received / imported → the uploaded original; a draft rendered live (watermark, no QR, never stored); otherwise the archive", content_type = "application/pdf"),
         (status = 404, description = "`not_found`, or `pdf_missing` (received / imported without an original)", body = ErrorBody),
         (status = 502, description = "`pdf_render_failed` (+ `detail`)", body = ErrorBody),
-        (status = 503, description = "`pdf_unavailable`", body = ErrorBody),
+        (status = 503, description = "`pdf_unavailable`, `storage_unavailable`", body = ErrorBody),
     )
 )]
 pub async fn document_pdf(
@@ -89,7 +96,7 @@ pub async fn document_pdf(
     ApiPath(id): ApiPath<Uuid>,
     ApiQuery(q): ApiQuery<DownloadQuery>,
 ) -> Result<Response, AppError> {
-    let (row, bytes) = archive::document_pdf(&state.db, &state.pdf, id).await?;
+    let (row, body) = archive::document_pdf(&state.db, &state.pdf, id).await?;
     // An imported draft already has its own number.
     let unnumbered = row.status == Status::Draft.as_str() && !row.imported;
     let stem = match (&row.number, unnumbered) {
@@ -97,7 +104,7 @@ pub async fn document_pdf(
         _ => format!("draft-{}", &id.simple().to_string()[..8]),
     };
     let download = matches!(q.download.as_deref(), Some("1" | "true"));
-    Ok(pdf_response(bytes, &stem, download))
+    Ok(pdf_response(body, &stem, download))
 }
 
 #[utoipa::path(
@@ -110,7 +117,7 @@ pub async fn document_pdf(
         (status = 200, description = "A sample invoice in the current design", content_type = "application/pdf"),
         (status = 422, description = "`locale`: `invalid`", body = ErrorBody),
         (status = 502, description = "`pdf_render_failed` (+ `detail`)", body = ErrorBody),
-        (status = 503, description = "`pdf_unavailable`", body = ErrorBody),
+        (status = 503, description = "`pdf_unavailable`, `storage_unavailable`", body = ErrorBody),
     )
 )]
 pub async fn preview(
@@ -129,7 +136,11 @@ pub async fn preview(
         .await?;
     let sample = Sample::new(&company, bank.as_ref(), locale, today())?;
     let bytes = state.pdf.render(payload::build(&sample.input())?).await?;
-    Ok(pdf_response(bytes, "preview", false))
+    Ok(pdf_response(
+        PdfBody::Rendered(bytes.into()),
+        "preview",
+        false,
+    ))
 }
 
 #[utoipa::path(
@@ -137,15 +148,18 @@ pub async fn preview(
     path = "/api/pdf/design",
     tag = "pdf",
     security(("bearer" = [])),
-    responses((status = 200, body = DesignListing))
+    responses(
+        (status = 200, body = DesignListing),
+        (status = 503, description = "`storage_unavailable`", body = ErrorBody),
+    )
 )]
 pub async fn design(State(state): State<AppState>) -> Result<Json<DesignListing>, AppError> {
-    let dir = state.pdf.design_dir().map(|d| d.to_path_buf());
-    let design_dir = dir.as_ref().map(|d| d.to_string_lossy().into_owned());
-    let files = tokio::task::spawn_blocking(move || design::list(dir.as_deref()))
-        .await
-        .context("design listing panicked")??;
-    Ok(Json(DesignListing { design_dir, files }))
+    let storage = state.pdf.storage();
+    let files = design::list(storage).await?;
+    Ok(Json(DesignListing {
+        storage: storage.kind().to_string(),
+        files,
+    }))
 }
 
 #[cfg(test)]

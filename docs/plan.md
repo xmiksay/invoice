@@ -22,9 +22,9 @@ no OAuth, no stock/task/cost-center links). Module layout follows the infra
 | Exchange rate | ČNB daily rate at the tax point date (received invoices: date of receipt), stored on the invoice, manually overridable; if ČNB is unreachable the user must enter it. |
 | Numbering | Configurable pattern per document type, e.g. `{YYYY}{NNNN}`, yearly reset, number assigned at issue (drafts have none). Counter is manually settable in Settings. Imported invoices keep their own number and do **not** move the counter. |
 | Lifecycle | `draft → issued → sent → paid`, `cancelled`. On issue the invoice is locked, supplier/customer snapshots are stored and the PDF is rendered and archived; issuing fails if mdcast is down. "Overdue" is derived, never stored. Payments: date + amount. |
-| PDF | mdcast `/v1/render/template` (typst + JSON data). Default design (minimalist, Inter) embedded in the binary; `INVOICE__DESIGN_DIR` (sub-directory on the PVC) overrides it file by file (`invoice.typ`, fonts, logo, signature). Preview of a sample invoice in Settings → Design. Invoice language cs/en per document. SPAYD QR payment code. Details: [api/pdf.md](api/pdf.md). |
+| PDF | mdcast `/v1/render/template` (typst + JSON data). Default design (minimalist, Inter) embedded in the binary; storage keys `design/…` override it file by file (`invoice.typ`, fonts, logo, signature). Preview of a sample invoice in Settings → Design. Invoice language cs/en per document. SPAYD QR payment code. Details: [api/pdf.md](api/pdf.md). |
 | Received invoices | Metadata entered manually + original PDF upload. |
-| File storage | Filesystem, `INVOICE__STORAGE_DIR` (PVC); DB keeps path + sha256. |
+| File storage | `Storage` over `object_store`: filesystem (`INVOICE__STORAGE_DIR`, PVC) or S3-compatible bucket (#9); DB keeps key + sha256. |
 | Contacts | One address book for customers and suppliers, ARES lookup by IČO. Invoices store a snapshot, so editing/deleting a contact never changes an invoice. ISDOC import matches contacts by IČO or creates one. |
 | Received invoices numbering | Internal evidence number from its own series (e.g. `P{YYYY}{NNNN}`) assigned on save, plus the supplier's original number and VS. |
 | Payments | Multiple (partial) payments per document (date, amount, note). Status becomes `paid` automatically when payments cover the payable amount. A DDPP is issued per received advance payment. |
@@ -86,10 +86,52 @@ Document type decisions (1f-a, details in [api/doc-types.md](api/doc-types.md)):
 - Received counterparts `PV…`, `POP…`, `PZD…`; manual import accepts all seven types.
 
 ### Phase 2 — interchange
-CSV/XLSX bulk import (fixed documented template, sample downloadable
-in the UI, one row = one invoice with VAT recap, no lines), CSV export for the
-accountant, e-mail sending via SMTP (manual button, prefilled cs/en template,
-PDF + ISDOC attached (ISDOC export itself lands in 1f-b), send log in DB, status → `sent`).
+Order: storage abstraction (#9, pulled forward) → 2a e-mail → 2b CSV/XLSX import → 2c CSV export, one PR each.
+
+Storage (#9, before 2a):
+- `Storage` over the `object_store` crate: put (sha256, atomic), get (stream), delete, exists, list by prefix. Backend by
+  `INVOICE__STORAGE_KIND` = `fs` (default, `INVOICE__STORAGE_DIR`) or `s3` (`INVOICE__S3__ENDPOINT`, `BUCKET`, `REGION`,
+  `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, `PATH_STYLE`); the Docker image works without S3.
+- Everything goes through it: PDF archive, originals, e-mail templates (2a) **and the design** (keys `design/…`, overlaid
+  on the embedded default file by file as before). `INVOICE__DESIGN_DIR` is removed; files reach storage via
+  `invoice design push|pull|ls` or straight into the bucket (UI comes with #10). Keys stay as today
+  (`documents/{year}/…`); the `spaces/{id}/` prefix arrives with #3.
+- Design reads list the `design/` prefix per render and cache file contents by key + ETag/size, so unchanged fonts are
+  not downloaded again.
+- Storage unreachable → 503 `storage_unavailable` (issue fails and changes nothing, like mdcast down).
+- `invoice storage migrate --from-dir <path> [--design-dir <path>]` copies the fs archive (and an old design dir) into
+  the configured backend, verifies sha256, is idempotent and never deletes the source.
+- Tests: one shared suite against fs and S3. S3 = test bucket `invoice-test` on our Garage (`s3.mmik.cz`, path-style,
+  region `garage`), `TEST_S3_*` in `.env` locally and GitHub secrets in CI; every test uses a random prefix and cleans
+  up. Fails, not skips, without it.
+- As implemented: `invoice design rm <path>…` added next to push / pull / ls; `migrate` never overwrites an object with
+  different content (reported, exit 1); the design cache compares the listed version (ETag + size + modification
+  time); `GET /api/pdf/design` returns `storage: "fs" | "s3"` instead of `designDir`; an ISDOC export whose PDF cannot
+  be read because the storage is down fails with 503 instead of silently leaving the PDF out (the bulk export stops at
+  the first such document); a leftover `INVOICE__DESIGN_DIR` refuses the start; `migrate` / `design push` decide
+  "identical" by size + MD5 ETag where the backend offers one (full download otherwise) and report unreadable local
+  entries (exit 1); a custom endpoint without path-style gets the bucket put into its host; an ISDOC import confirm whose
+  storage is down fails that entry with `storage_unavailable` (like `rate_unavailable`).
+
+2a e-mail (SMTP via `lettre`):
+- SMTP from env only (`INVOICE__SMTP__HOST/PORT/USERNAME/PASSWORD/FROM/TLS`); Settings shows configured yes/no and
+  sends a test e-mail.
+- Send dialog: To (prefilled from the contact, several addresses), Cc, Bcc, optional Bcc to the company e-mail
+  (ticked), subject and body rendered from the template and editable before sending; attachments PDF and plain
+  `.isdoc` (checkboxes). Any issued, non-draft document of ours (cancelled too); never received ones.
+- Templates: MiniJinja, plain text, subject + body per locale (cs/en), defaults embedded, overrides stored in Storage;
+  Settings → E-mail editor with a preview on a sample document and "restore default". Saving compiles and renders the
+  template on the sample in strict mode; an error → 422 with line + message, the active template stays.
+- Sending is synchronous (30 s timeout); every attempt is logged (to/cc/bcc, subject, time, ok/error, Message-ID);
+  success sets `sentAt`; re-sending allowed; the history is shown on the document detail.
+
+2b CSV/XLSX import: one template for both directions and all seven types, one row = one document, VAT recap in
+per-rate columns (`base_21`, `vat_21`, `base_12`, `vat_12`, `base_0`), contacts matched by IČO or created, sample
+downloadable in the UI, preview → confirm like ISDOC.
+
+2c CSV export for the accountant: issued and received per the list filter, one row = one document, `;` separator,
+UTF-8 with BOM, decimal comma, dates `dd.mm.yyyy`; columns direction, type, number, supplier number, dates,
+counterparty + IČO/DIČ, currency, rate, base/VAT per rate in CZK, total, paid, category; credit notes negative.
 
 ### Phase 3 — accounting & MCP
 Pohoda XML (Stormware) and Money S3 XML export of issued + received invoices per

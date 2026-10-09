@@ -14,6 +14,7 @@
   "advanceInUse": "Platbu nelze smazat: její zálohu odečítá koncept vyúčtovací faktury, nebo k jejímu daňovému dokladu existuje opravný doklad. Nejprve odeberte řádek odpočtu zálohy, resp. smažte nebo stornujte opravný doklad.",
   "catalogItemInUse": "Položku nelze smazat: je jedinou položkou skupiny. Nejprve upravte nebo smažte skupinu.",
   "pdfUnavailable": "Služba pro PDF je nedostupná. Zkuste to později.",
+  "storageUnavailable": "Úložiště souborů je nedostupné. Zkuste to později.",
   "pdfRenderFailed": "Vykreslení PDF selhalo. Zkontrolujte šablonu designu.",
   "pdfMissing": "PDF nenahráno.",
   "tooLarge": "Soubor je příliš velký (nejvýše 20 MB).",

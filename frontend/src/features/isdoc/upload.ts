@@ -32,6 +32,7 @@ export const ENTRY_ERRORS = [
   "duplicate",
   "number_taken",
   "rate_unavailable",
+  "storage_unavailable",
   "internal",
 ] as const;
 

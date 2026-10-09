@@ -1,6 +1,7 @@
 //! Confirm: one analysed entry → one stored document, in its own transaction
 //! (contact, document, lines, recap, original PDF, payment).
 
+use bytes::Bytes;
 use chrono::Datelike;
 use rust_decimal::Decimal;
 use sea_orm::{
@@ -18,10 +19,11 @@ use crate::document::line::Status;
 use crate::document::repo::issue::Rate;
 use crate::document::repo::{lines, original, payments, write};
 use crate::error::{AppError, number_violation};
-use crate::pdf::{PdfService, storage};
+use crate::pdf::PdfService;
 use crate::settings::doc_type::{DocType, ISSUED, RECEIVED};
 use crate::settings::entity::bank_account;
 use crate::settings::repo::number_series;
+use crate::storage;
 use crate::validation::normalize_iban;
 
 /// Batch options of `confirm`.
@@ -98,7 +100,6 @@ struct Stored {
 
 async fn insert(
     txn: &DatabaseTransaction,
-    pdf: &PdfService,
     plan: &Plan,
     file: Option<&[u8]>,
     rate: &Rate,
@@ -229,39 +230,47 @@ async fn insert(
         .await?;
         payments::resum(txn, id).await?;
     }
-    if let (Some(rel), Some(bytes)) = (&stored_file, file) {
-        pdf.write(rel, bytes.to_vec()).await?;
-    }
     Ok(Stored {
         id,
         file: stored_file,
     })
 }
 
-/// Store one document; the PDF file is removed again if the commit fails.
+/// Store one document: rows first, then the PDF inside the transaction. A
+/// failed write or commit removes the possibly written PDF again (unless a
+/// row points at it).
 pub async fn import(
     db: &DatabaseConnection,
     pdf: &PdfService,
     plan: &Plan,
-    file: Option<&[u8]>,
+    file: Option<Bytes>,
     rate: &Rate,
     opts: &Options,
 ) -> Result<Uuid, AppError> {
     let txn = db.begin().await?;
-    let stored = match insert(&txn, pdf, plan, file, rate, opts).await {
+    let stored = match insert(&txn, plan, file.as_deref(), rate, opts).await {
         Ok(s) => s,
-        Err(e) => {
-            if let Err(r) = txn.rollback().await {
-                tracing::warn!(error = %r, "rollback ISDOC import");
-            }
-            return Err(e);
-        }
+        Err(e) => return Err(rollback(txn, e).await),
     };
+    if let (Some(rel), Some(bytes)) = (&stored.file, file)
+        && let Err(e) = pdf.storage().put(rel, bytes).await
+    {
+        let e = rollback(txn, e.into()).await;
+        original::remove_unreferenced(db, pdf.storage(), rel).await;
+        return Err(e);
+    }
     if let Err(e) = txn.commit().await {
         if let Some(rel) = &stored.file {
-            pdf.remove(rel).await;
+            original::remove_unreferenced(db, pdf.storage(), rel).await;
         }
         return Err(e.into());
     }
     Ok(stored.id)
+}
+
+async fn rollback(txn: DatabaseTransaction, e: AppError) -> AppError {
+    if let Err(r) = txn.rollback().await {
+        tracing::warn!(error = %r, "rollback ISDOC import");
+    }
+    e
 }

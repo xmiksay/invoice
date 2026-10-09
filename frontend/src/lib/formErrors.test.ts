@@ -75,6 +75,7 @@ describe("helpers", () => {
 describe("pdf errors", () => {
   it("maps the PDF codes before the generic unreachable statuses", () => {
     expect(errorMessageKey(new ApiError(503, "pdf_unavailable")).key).toBe("errors.pdfUnavailable");
+    expect(errorMessageKey(new ApiError(503, "storage_unavailable")).key).toBe("errors.storageUnavailable");
     expect(errorMessageKey(new ApiError(502, "pdf_render_failed", {}, "typst")).key).toBe("errors.pdfRenderFailed");
   });
 

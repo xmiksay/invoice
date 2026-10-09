@@ -67,7 +67,8 @@ save (refreshed on every PUT). `relatedDocuments` lists the link in both directi
 ## Original PDF (received and imported issued documents)
 - `PUT /api/documents/{id}/original` — `multipart/form-data`, one part `file`; must start with `%PDF-`, ≤ 20 MB
   (413 `{"code":"too_large"}`; other → 422 `{"fields":{"file":"invalid"}}`). Replaces any previous original. Stored
-  at `documents/{year}/{id}-original.pdf` under `INVOICE__STORAGE_DIR` (same temp+rename+sha256 as the archive).
+  under the storage key `documents/{year}/{id}-original-{sha8}.pdf` (atomic put + sha256 like the archive; see
+  [pdf.md § Storage](pdf.md#storage)); storage failure → 503 `storage_unavailable`, nothing changed.
   Allowed for every received document and for imported issued documents (any status); a non-imported issued
   document → 409 `invalid_state` (its PDF is the rendered archive).
 - `DELETE /api/documents/{id}/original` → 204 (same rules).

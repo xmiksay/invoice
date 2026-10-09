@@ -1,15 +1,46 @@
 //! The archive of issued documents: rendered once, stored, never re-rendered.
 
 use anyhow::Context as _;
+use bytes::Bytes;
+use futures_util::TryStreamExt as _;
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement, TransactionTrait};
 use uuid::Uuid;
 
-use super::{PdfService, payload, source, storage};
+use super::{PdfService, payload, source};
 use crate::document::entity::document;
 use crate::document::line::Status;
 use crate::document::repo::query;
 use crate::error::AppError;
 use crate::settings::doc_type::RECEIVED;
+use crate::storage::{self, Download};
+
+/// `documents/{numberYear}/{id}.pdf`.
+pub fn relative_path(number_year: i32, id: Uuid) -> String {
+    format!("documents/{number_year}/{id}.pdf")
+}
+
+/// A PDF to send: freshly rendered bytes, or a stored object streamed from
+/// the storage.
+pub enum PdfBody {
+    Rendered(Bytes),
+    Stored(Download),
+}
+
+impl PdfBody {
+    pub async fn into_bytes(self) -> Result<Bytes, AppError> {
+        match self {
+            Self::Rendered(bytes) => Ok(bytes),
+            Self::Stored(d) => {
+                let chunks: Vec<_> = d
+                    .stream
+                    .try_collect()
+                    .await
+                    .map_err(storage::Error::Unavailable)?;
+                Ok(Bytes::from(chunks.concat()))
+            }
+        }
+    }
+}
 
 /// Render the document as stored in `db` (draft → live data and watermark,
 /// cancelled → "STORNO" watermark; neither gets a QR code).
@@ -17,11 +48,11 @@ pub async fn render<C: ConnectionTrait>(
     db: &C,
     pdf: &PdfService,
     id: Uuid,
-) -> Result<(document::Model, Vec<u8>), AppError> {
+) -> Result<(document::Model, Bytes), AppError> {
     let src = source::load(db, id).await?;
     let data = payload::build(&src.input()?)?;
     let bytes = pdf.render(data).await?;
-    Ok((src.row, bytes))
+    Ok((src.row, Bytes::from(bytes)))
 }
 
 /// Record the archive on the row unless one is already recorded, then write
@@ -31,12 +62,12 @@ async fn store<C: ConnectionTrait>(
     txn: &C,
     pdf: &PdfService,
     row: &document::Model,
-    bytes: &[u8],
+    bytes: &Bytes,
 ) -> Result<Option<String>, AppError> {
     let year = row
         .number_year
         .with_context(|| format!("issued document {} has no number year", row.id))?;
-    let rel = storage::relative_path(year, row.id);
+    let rel = relative_path(year, row.id);
     let updated = txn
         .execute(Statement::from_sql_and_values(
             txn.get_database_backend(),
@@ -52,7 +83,7 @@ async fn store<C: ConnectionTrait>(
     if updated.rows_affected() == 0 {
         return Ok(None);
     }
-    pdf.write(&rel, bytes.to_vec()).await?;
+    pdf.storage().put(&rel, bytes.clone()).await?;
     Ok(Some(rel))
 }
 
@@ -76,7 +107,7 @@ pub async fn archive_missing(
     db: &DatabaseConnection,
     pdf: &PdfService,
     id: Uuid,
-) -> Result<Vec<u8>, AppError> {
+) -> Result<Bytes, AppError> {
     let (row, bytes) = render(db, pdf, id).await?;
     let txn = db.begin().await?;
     let stored = match store(&txn, pdf, &row, &bytes).await {
@@ -90,7 +121,7 @@ pub async fn archive_missing(
     };
     if let Err(e) = txn.commit().await {
         if let Some(rel) = &stored {
-            pdf.remove(rel).await;
+            pdf.storage().remove(rel).await;
         }
         return Err(e.into());
     }
@@ -102,7 +133,7 @@ pub async fn archive_missing(
     let rel = row
         .pdf_path
         .with_context(|| format!("document {id} lost the archive race but has no archive"))?;
-    Ok(pdf.read(&rel).await?)
+    Ok(pdf.storage().get(&rel).await?)
 }
 
 /// After an auto-issued DDPP's payment committed: archive it now if mdcast
@@ -122,24 +153,38 @@ pub fn spawn_archive_ddpp(db: DatabaseConnection, pdf: PdfService, id: Uuid) {
 /// The PDF for `GET /api/documents/{id}/pdf`: a received or imported
 /// document serves its uploaded original (none → `pdf_missing`), never a
 /// render; a draft is rendered live and never stored; an issued or cancelled
-/// document serves its archive.
+/// document serves its archive (stored ones streamed).
 pub async fn document_pdf(
     db: &DatabaseConnection,
     pdf: &PdfService,
     id: Uuid,
-) -> Result<(document::Model, Vec<u8>), AppError> {
+) -> Result<(document::Model, PdfBody), AppError> {
     let row = query::find(db, id).await?;
     if row.direction == RECEIVED || row.imported {
         let rel = row.original_path.as_deref().ok_or(AppError::PdfMissing)?;
-        let bytes = pdf.read(rel).await?;
-        return Ok((row, bytes));
+        let body = PdfBody::Stored(pdf.storage().get_stream(rel).await?);
+        return Ok((row, body));
     }
     if row.status == Status::Draft.as_str() {
-        return render(db, pdf, id).await;
+        let (row, bytes) = render(db, pdf, id).await?;
+        return Ok((row, PdfBody::Rendered(bytes)));
     }
-    let bytes = match &row.pdf_path {
-        Some(rel) => pdf.read(rel).await?,
-        None => archive_missing(db, pdf, id).await?,
+    let body = match &row.pdf_path {
+        Some(rel) => PdfBody::Stored(pdf.storage().get_stream(rel).await?),
+        None => PdfBody::Rendered(archive_missing(db, pdf, id).await?),
     };
-    Ok((row, bytes))
+    Ok((row, body))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn archive_path() {
+        assert_eq!(
+            relative_path(2026, Uuid::nil()),
+            "documents/2026/00000000-0000-0000-0000-000000000000.pdf"
+        );
+    }
 }

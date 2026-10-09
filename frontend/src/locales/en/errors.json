@@ -14,6 +14,7 @@
   "advanceInUse": "The payment cannot be deleted: its advance is deducted by a draft final invoice, or its advance payment tax document has a correction. Remove the advance line from that draft, or delete / cancel the correction first.",
   "catalogItemInUse": "The item cannot be deleted: it is the only item of a group. Edit or delete the group first.",
   "pdfUnavailable": "The PDF service is unavailable. Try again later.",
+  "storageUnavailable": "The file storage is unavailable. Try again later.",
   "pdfRenderFailed": "Rendering the PDF failed. Check the design template.",
   "pdfMissing": "No PDF uploaded.",
   "tooLarge": "The file is too large (20 MB at most).",

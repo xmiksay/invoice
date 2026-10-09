@@ -172,7 +172,8 @@ PreviewEntry {
     original for imported ones;
   - `manifest.xml`, per the ISDOC isdocx spec, naming both files.
 - An imported document without an original, or a native one whose PDF cannot be rendered (mdcast down), gets a
-  plain `.isdoc` (`application/xml`) instead, never a 5xx.
+  plain `.isdoc` (`application/xml`) instead. The one 5xx: the file storage is unreachable → 503
+  `{"code":"storage_unavailable"}` (no export without its stored PDF).
 - Filename: `{number}.isdocx` / `{number}.isdoc`.
 
 ### `GET /api/documents/isdoc?{list filters}`
@@ -180,6 +181,7 @@ PreviewEntry {
 - The response is a ZIP of the per-document files described above (`isdoc-export.zip`).
 - More than 1000 matching documents → 422 `{"fields":{"filter":"too_many"}}`.
 - A native document whose archive is missing and cannot be rendered is exported as plain `.isdoc`.
+- The storage unreachable → 503 `{"code":"storage_unavailable"}` at the first document that needs it (no partial ZIP).
 
 ### XML content
 - **Header:**
@@ -320,15 +322,17 @@ Import
   in-batch duplicate pass covers all. Each entry's transaction takes `pg_advisory_xact_lock` on its identity
   (direction + type / supplier + number) and re-checks the duplicate rule, so two concurrent confirms cannot import
   the same received document twice (no unique index backs supplier + supplier number). A duplicate found then is
-  `failed` with `duplicate`. Failure codes: `rate_unavailable`, `duplicate`, `number_taken` (the received series
-  counter collides), `internal`.
+  `failed` with `duplicate`. Failure codes: `rate_unavailable`, `storage_unavailable` (the file storage is down
+  while storing the entry's original PDF; the entry's transaction is rolled back, other entries are still tried),
+  `duplicate`, `number_taken` (the received series counter collides), `internal`.
 - **`markPaid`:** the payment is dated `dueDate ?? issueDate`; types: all but `advance_tax_doc`, `payable > 0`.
 
 Export
 - `{number}` in file names is reduced to `[A-Za-z0-9._-]` (as the PDF download). The single export of a received
   document → 404, of a draft → 409 `invalid_state` (checked in that order).
-- When the PDF cannot be obtained for any reason (mdcast down, archive file unreadable, no original) the export is a
-  plain `.isdoc`; the failure is logged.
+- When the PDF cannot be obtained (mdcast down, archive object missing, no original) the export is a plain `.isdoc`;
+  the failure is logged. An unreachable storage is the exception: the single export is 503 `storage_unavailable`,
+  and the bulk export stops at the first such document with the same 503 (no partial ZIP).
 - A simplified document without a customer writes `AnonymousCustomerParty` (`ID` `anonymous`, empty `IDScheme`):
   the schema requires a customer party, so it cannot be omitted. Import reads its absence as "no customer".
 - Header: `IssuingSystem` `invoice`; `TaxPointDate` whenever stored (never for a proforma);

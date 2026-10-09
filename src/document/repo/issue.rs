@@ -155,7 +155,7 @@ pub async fn issue(
     };
     if let Err(e) = txn.commit().await {
         if let Some(rel) = stored {
-            pdf.remove(&rel).await;
+            pdf.storage().remove(&rel).await;
         }
         return Err(e.into());
     }

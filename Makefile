@@ -4,6 +4,10 @@ SHELL := /usr/bin/env bash
 
 export CARGO_BUILD_JOBS ?= 4
 
+# The S3 storage tests read TEST_S3_* (see .env.example), taken from .env when present.
+-include .env
+export TEST_S3_ENDPOINT TEST_S3_BUCKET TEST_S3_REGION TEST_S3_ACCESS_KEY_ID TEST_S3_SECRET_ACCESS_KEY
+
 # Integration tests use the local Postgres (see .env.example for the one-time setup).
 TEST_DATABASE_URL ?= postgres://invoice:invoice@localhost:5432/invoice_test
 export TEST_DATABASE_URL
@@ -58,7 +62,7 @@ lint: lint-backend lint-frontend ## Lint backend and frontend
 test-unit: ## Rust unit tests (no DB)
 	cargo test --lib --bins
 
-test-integration: ## Rust integration tests (needs local Postgres, TEST_DATABASE_URL)
+test-integration: ## Rust integration tests (needs local Postgres + the S3 test bucket, TEST_DATABASE_URL / TEST_S3_*)
 	cargo test --test '*'
 
 test-backend: test-unit test-integration ## All Rust tests

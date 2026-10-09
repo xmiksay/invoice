@@ -163,40 +163,42 @@ pub fn spawn() -> (String, MdcastMock) {
     (format!("http://{addr}"), mock)
 }
 
-/// A mock mdcast plus a private storage dir, for tests that inspect both.
+/// A mock mdcast plus a private storage, for tests that inspect both.
 pub struct PdfEnv {
     pub url: String,
     pub mock: MdcastMock,
-    pub storage: tempfile::TempDir,
+    pub storage: super::storage::TestStorage,
 }
 
 impl PdfEnv {
+    /// fs storage in a throwaway directory.
     pub fn new() -> Self {
-        let (url, mock) = spawn();
-        Self {
-            url,
-            mock,
-            storage: tempfile::tempdir().expect("storage dir"),
-        }
+        Self::with_storage(super::storage::TestStorage::fs())
     }
 
-    /// The app rendering against this mock (`design_dir` overrides the design).
-    pub fn router(
-        &self,
-        db: sea_orm::DatabaseConnection,
-        design_dir: Option<&std::path::Path>,
-    ) -> Router {
-        self.router_at(db, &self.url, design_dir)
+    pub fn with_storage(storage: super::storage::TestStorage) -> Self {
+        let (url, mock) = spawn();
+        Self { url, mock, storage }
+    }
+
+    /// The app rendering against this mock.
+    pub fn router(&self, db: sea_orm::DatabaseConnection) -> Router {
+        self.router_at(db, &self.url)
     }
 
     /// Same storage, but mdcast at `url` (e.g. a dead one).
-    pub fn router_at(
+    pub fn router_at(&self, db: sea_orm::DatabaseConnection, url: &str) -> Router {
+        self.router_with(db, url, self.storage.storage.clone())
+    }
+
+    /// Same mock, any storage (e.g. an unreachable one).
+    pub fn router_with(
         &self,
         db: sea_orm::DatabaseConnection,
         url: &str,
-        design_dir: Option<&std::path::Path>,
+        storage: invoice::storage::Storage,
     ) -> Router {
-        let pdf = super::pdf_service(url, design_dir, self.storage.path());
+        let pdf = super::pdf_service(url, storage);
         invoice::app::router(super::state(
             db,
             invoice::ares::DEFAULT_ARES_URL,

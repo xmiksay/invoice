@@ -256,24 +256,22 @@ async fn rate(state: &AppState, r: &Ready) -> Result<Rate, Code> {
 
 async fn import_one(state: &AppState, r: &Ready, opts: &Options) -> Result<Uuid, Code> {
     let rate = rate(state, r).await?;
-    store::import(
-        &state.db,
-        &state.pdf,
-        &r.plan,
-        r.pdf.as_deref(),
-        &rate,
-        opts,
-    )
-    .await
-    .map_err(|e| match e {
-        AppError::Conflict(m) if m == DUPLICATE => DUPLICATE,
-        AppError::Conflict(m) if m == NUMBER_TAKEN => NUMBER_TAKEN,
-        AppError::NumberTaken => NUMBER_TAKEN,
-        other => {
-            tracing::error!(error = %other, "ISDOC import failed");
-            "internal"
-        }
-    })
+    store::import(&state.db, &state.pdf, &r.plan, r.pdf.clone(), &rate, opts)
+        .await
+        .map_err(|e| match e {
+            AppError::Conflict(m) if m == DUPLICATE => DUPLICATE,
+            AppError::Conflict(m) if m == NUMBER_TAKEN => NUMBER_TAKEN,
+            AppError::NumberTaken => NUMBER_TAKEN,
+            // Like `rate_unavailable`: a temporary outage, worth a retry later.
+            AppError::StorageUnavailable(m) => {
+                tracing::warn!(error = %m, "ISDOC import: storage unavailable");
+                "storage_unavailable"
+            }
+            other => {
+                tracing::error!(error = %other, "ISDOC import failed");
+                "internal"
+            }
+        })
 }
 
 #[utoipa::path(

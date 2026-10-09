@@ -31,10 +31,8 @@ const previews: { locale: DocLocale; label: string }[] = [
     <section class="card space-y-3">
       <p class="text-sm text-gray-700 dark:text-gray-300" data-test="design-help">{{ t("pdf.design.help") }}</p>
       <dl v-if="store.design" class="flex flex-wrap gap-x-2 text-sm">
-        <dt class="text-gray-600 dark:text-gray-400">{{ t("pdf.design.dir") }}:</dt>
-        <dd data-test="design-dir" :class="store.design.designDir ? 'font-mono break-all' : 'italic'">
-          {{ store.design.designDir ?? t("pdf.design.builtIn") }}
-        </dd>
+        <dt class="text-gray-600 dark:text-gray-400">{{ t("pdf.design.storage") }}:</dt>
+        <dd data-test="design-storage">{{ t(`pdf.design.storages.${store.design.storage}`) }}</dd>
       </dl>
       <div class="flex flex-wrap items-center gap-2">
         <button

@@ -6,16 +6,26 @@ use axum::http::{Method, StatusCode};
 use common::documents::{create_contact, create_issued, id, issuable, set_company};
 use common::mdcast::{PdfEnv, get_raw};
 use common::received::{create_received, multipart, upload, upload_raw};
+use common::storage::TestStorage;
 use common::{TestDb, call};
 use serde_json::{Value, json};
 
 const PDF: &[u8] = b"%PDF-1.4\n% synthetic test original\n%%EOF\n";
 
 #[tokio::test]
-async fn upload_replace_serve_delete() {
+async fn upload_replace_serve_delete_fs() {
+    upload_replace_serve_delete(TestStorage::fs()).await;
+}
+
+#[tokio::test]
+async fn upload_replace_serve_delete_s3() {
+    upload_replace_serve_delete(TestStorage::s3()).await;
+}
+
+async fn upload_replace_serve_delete(storage: TestStorage) {
     let db = TestDb::new().await;
-    let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let env = PdfEnv::with_storage(storage);
+    let app = env.router(db.conn.clone());
     set_company(&app, true).await;
     let s = create_contact(&app, json!({ "name": "Dodavatel Test s.r.o." })).await;
     let doc = create_received(&app, &s, json!({})).await;
@@ -32,26 +42,18 @@ async fn upload_replace_serve_delete() {
     let (_, d) = call(&app, Method::GET, &format!("/api/documents/{doc_id}"), None).await;
     assert_eq!(
         d["original"]["sha256"],
-        json!(invoice::pdf::storage::sha256_hex(PDF))
+        json!(invoice::storage::sha256_hex(PDF))
     );
     assert_eq!(d["original"]["size"], json!(PDF.len()));
     assert_eq!(d["pdf"], Value::Null);
-    let sha = invoice::pdf::storage::sha256_hex(PDF);
+    let sha = invoice::storage::sha256_hex(PDF);
     let rel = format!("documents/2026/{doc_id}-original-{}.pdf", &sha[..8]);
-    let dir = env.storage.path().join("documents/2026");
-    let files = |prefix: String| {
-        std::fs::read_dir(&dir)
-            .map(|d| {
-                d.filter_map(|e| e.ok())
-                    .filter(|e| e.file_name().to_string_lossy().starts_with(&prefix))
-                    .count()
-            })
-            .unwrap_or(0)
+    let originals = || async {
+        let prefix = format!("documents/2026/{doc_id}-original");
+        let keys = env.storage.keys("documents/2026").await;
+        keys.iter().filter(|k| k.starts_with(&prefix)).count()
     };
-    assert_eq!(
-        std::fs::read(env.storage.path().join(&rel)).expect("stored"),
-        PDF
-    );
+    assert_eq!(env.storage.bytes(&rel).await.as_deref(), Some(PDF));
     let (status, headers, bytes) = get_raw(&app, &uri).await;
     assert_eq!((status, bytes.as_slice()), (StatusCode::OK, PDF));
     assert_eq!(
@@ -69,13 +71,13 @@ async fn upload_replace_serve_delete() {
     assert_eq!(bytes.as_slice(), other);
     assert_eq!(env.mock.count(), 0, "never rendered");
     // The replaced file is gone; a same-content re-upload keeps the one file.
-    assert!(!env.storage.path().join(&rel).exists());
-    assert_eq!(files(format!("{doc_id}-original")), 1);
+    assert_eq!(env.storage.bytes(&rel).await, None);
+    assert_eq!(originals().await, 1);
     let (status, _) = upload(&app, &doc_id, other).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     let (_, _, bytes) = get_raw(&app, &uri).await;
     assert_eq!(bytes.as_slice(), other);
-    assert_eq!(files(format!("{doc_id}-original")), 1);
+    assert_eq!(originals().await, 1);
 
     // Delete (idempotent).
     for _ in 0..2 {
@@ -88,7 +90,7 @@ async fn upload_replace_serve_delete() {
         .await;
         assert_eq!(status, StatusCode::NO_CONTENT);
     }
-    assert_eq!(files(format!("{doc_id}-original")), 0);
+    assert_eq!(originals().await, 0);
     let (status, _, _) = get_raw(&app, &uri).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
@@ -102,14 +104,14 @@ async fn upload_replace_serve_delete() {
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    assert!(!env.storage.path().join(&rel).exists());
+    assert_eq!(env.storage.bytes(&rel).await, None);
 }
 
 #[tokio::test]
 async fn rejects_bad_uploads() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     set_company(&app, true).await;
     let s = create_contact(
         &app,

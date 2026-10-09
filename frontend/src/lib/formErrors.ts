@@ -50,6 +50,7 @@ const KNOWN_CODES: Record<string, string> = {
   pdf_unavailable: "errors.pdfUnavailable",
   pdf_render_failed: "errors.pdfRenderFailed",
   pdf_missing: "errors.pdfMissing",
+  storage_unavailable: "errors.storageUnavailable",
   too_large: "errors.tooLarge",
   category_in_use: "errors.categoryInUse",
   number_taken: "errors.numberTaken",

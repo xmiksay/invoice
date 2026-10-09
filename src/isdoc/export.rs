@@ -142,22 +142,32 @@ async fn source(
 }
 
 /// The visual form: the original of an imported document, the archive
-/// (rendered on first use) of a native one. Any failure → none.
+/// (rendered on first use) of a native one. An unreachable storage fails the
+/// export (503); any other failure → none.
 async fn visual(
     db: &DatabaseConnection,
     pdf: &PdfService,
     doc: &document::Model,
-) -> Option<Vec<u8>> {
+) -> Result<Option<bytes::Bytes>, AppError> {
     let got = if doc.imported {
         match &doc.original_path {
-            Some(rel) => pdf.read(rel).await.map_err(AppError::from),
-            None => return None,
+            Some(rel) => pdf.storage().get(rel).await.map_err(AppError::from),
+            None => return Ok(None),
         }
     } else {
-        archive::document_pdf(db, pdf, doc.id).await.map(|(_, b)| b)
+        match archive::document_pdf(db, pdf, doc.id).await {
+            Ok((_, body)) => body.into_bytes().await,
+            Err(e) => Err(e),
+        }
     };
-    got.map_err(|e| tracing::warn!(document = %doc.id, error = %e, "ISDOC export without PDF"))
-        .ok()
+    match got {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(e @ AppError::StorageUnavailable(_)) => Err(e),
+        Err(e) => {
+            tracing::warn!(document = %doc.id, error = %e, "ISDOC export without PDF");
+            Ok(None)
+        }
+    }
 }
 
 type ZipOut = zip::ZipWriter<Cursor<Vec<u8>>>;
@@ -192,7 +202,7 @@ pub async fn export(
         return Err(AppError::InvalidState);
     }
     let stem = safe_filename(full.doc.number.as_deref().unwrap_or("document"));
-    let Some(pdf_bytes) = visual(db, pdf, &full.doc).await else {
+    let Some(pdf_bytes) = visual(db, pdf, &full.doc).await? else {
         let xml = export_xml::render(&source(db, full, None).await?);
         return Ok(Exported {
             filename: format!("{stem}.isdoc"),
@@ -244,6 +254,7 @@ fn attachment(e: Exported) -> Response {
         (status = 200, description = "`{number}.isdocx` (ISDOC + PDF + manifest), or `{number}.isdoc` without a PDF", content_type = "application/zip"),
         (status = 404, description = "`not_found` (also a received document)", body = ErrorBody),
         (status = 409, description = "`invalid_state` (a draft)", body = ErrorBody),
+        (status = 503, description = "`storage_unavailable`", body = ErrorBody),
     )
 )]
 pub async fn document_isdoc(
@@ -274,6 +285,7 @@ fn unique_name(taken: &mut HashSet<String>, name: &str) -> String {
     responses(
         (status = 200, description = "`isdoc-export.zip` of the matching issued non-draft documents", content_type = "application/zip"),
         (status = 422, description = "`filter`: `too_many` (more than 1000)", body = ErrorBody),
+        (status = 503, description = "`storage_unavailable` (the export stops at the first document it hits)", body = ErrorBody),
     )
 )]
 pub async fn bulk(
@@ -314,6 +326,9 @@ pub async fn bulk(
                 zip_add(&mut w, &unique_name(&mut taken, &e.filename), &e.bytes)?;
                 written += 1;
             }
+            // Every further document would fail the same way: the whole
+            // export is unavailable, not a partial archive.
+            Err(e @ AppError::StorageUnavailable(_)) => return Err(e),
             Err(e) => {
                 tracing::warn!(document = %id, error = %e, "ISDOC bulk export skipped a document");
                 let number = number.unwrap_or_else(|| id.to_string());

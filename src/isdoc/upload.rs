@@ -278,13 +278,12 @@ pub fn choose_pdf(names: &[String], preview: Option<&str>) -> Option<usize> {
 
 /// The original's bytes: none without a PDF (or when it is no PDF at all),
 /// [`PDF_SKIPPED`] when it was too large.
-pub fn pdf_bytes(pdf: Option<&Pdf>) -> Result<Option<Vec<u8>>, Code> {
+pub fn pdf_bytes(pdf: Option<&Pdf>) -> Result<Option<bytes::Bytes>, Code> {
     match pdf {
         None => Ok(None),
         Some(Pdf { bytes: None, .. }) => Err(PDF_SKIPPED),
-        Some(Pdf { bytes: Some(b), .. }) => {
-            Ok(crate::document::handlers::original::is_pdf(b).then(|| b.clone()))
-        }
+        Some(Pdf { bytes: Some(b), .. }) => Ok(crate::document::handlers::original::is_pdf(b)
+            .then(|| bytes::Bytes::copy_from_slice(b))),
     }
 }
 

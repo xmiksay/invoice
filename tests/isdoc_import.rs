@@ -269,7 +269,7 @@ async fn confirm_options() {
 async fn isdocx_original_pdf_is_stored() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     set_company(&app, true).await;
     let pdf = b"%PDF-1.4\n% isdocx test original\n%%EOF\n";
     let manifest = br#"<?xml version="1.0"?><manifest xmlns="http://isdoc.cz/namespace/2013/manifest"><maindocument filename="doc.isdoc"/></manifest>"#;
@@ -342,7 +342,7 @@ async fn confirm_rechecks_duplicates_under_a_lock() {
     let db = TestDb::new().await;
     let app = router(db.conn.clone());
     set_company(&app, true).await;
-    let pdf = common::pdf_service(&dead_url(), None, &common::shared_storage());
+    let pdf = common::pdf_service(&dead_url(), common::shared_storage());
     let opts = Options {
         mark_paid: false,
         category_id: None,

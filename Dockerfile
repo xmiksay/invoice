@@ -31,7 +31,8 @@ RUN apt-get update \
 COPY --from=builder /app/target/release/invoice /usr/local/bin/invoice
 USER invoice
 ENV INVOICE__BIND=0.0.0.0:3000
-# Archived PDFs (keep on a persistent volume).
+# fs storage: archived PDFs, originals, design overrides (keep on a persistent
+# volume). With INVOICE__STORAGE_KIND=s3 the volume stays unused.
 ENV INVOICE__STORAGE_DIR=/data
 VOLUME /data
 EXPOSE 3000

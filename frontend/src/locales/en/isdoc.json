@@ -56,6 +56,7 @@
     "missing_field": "A required element is missing (number, issue date, currency or totals).",
     "invalid_amount": "Invalid amount.",
     "rate_unavailable": "The ČNB exchange rates are unavailable. Try the import later.",
+    "storage_unavailable": "The file storage is unavailable, the PDF cannot be stored. Try the import later.",
     "internal": "Unexpected server error.",
     "invalid_archive": "The ZIP archive cannot be read (damaged, or more than 10,000 entries).",
     "too_deep": "The ZIP is nested deeper than 3 levels.",

@@ -28,6 +28,7 @@ const detail = ref<string | null>(null);
 const ISSUE_PDF_MESSAGES: Record<string, string> = {
   pdf_unavailable: "pdf.issueUnavailable",
   pdf_render_failed: "pdf.issueRenderFailed",
+  storage_unavailable: "pdf.issueStorageUnavailable",
 };
 // A DDPP correction is refused (create, issue, cancel) once the DDPP is deducted by an invoice.
 const DDPP_CORRECTION_MESSAGES: Record<string, string> = {

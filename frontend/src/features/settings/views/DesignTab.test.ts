@@ -6,7 +6,7 @@ import { calls, mockFetchRoutes, pdfReply, reply } from "@/test-utils";
 import DesignTab from "./DesignTab.vue";
 
 const design = {
-  designDir: "/srv/design",
+  storage: "s3",
   files: [
     { path: "fonts/Inter-Regular.ttf", source: "default", size: 310_000 },
     { path: "invoice.typ", source: "custom", size: 5_120 },
@@ -35,7 +35,7 @@ describe("DesignTab", () => {
     mockFetchRoutes({ "GET /api/pdf/design": design });
     const w = await mountTab();
 
-    expect(w.find('[data-test="design-dir"]').text()).toBe("/srv/design");
+    expect(w.find('[data-test="design-storage"]').text()).toBe("S3 bucket");
     const rows = w.findAll('[data-test="design-file"]').map((r) => r.findAll("td").map((td) => td.text()));
     expect(rows).toEqual([
       ["fonts/Inter-Regular.ttf", "default", "302.7 kB"],
@@ -43,13 +43,13 @@ describe("DesignTab", () => {
       ["logo.svg", "custom", "812 B"],
     ]);
     expect(w.findAll('[data-test="source-custom"]')).toHaveLength(2);
-    expect(w.find('[data-test="design-help"]').text()).toContain("INVOICE__DESIGN_DIR");
+    expect(w.find('[data-test="design-help"]').text()).toContain("invoice design push");
   });
 
-  it("shows the built-in design when no dir is set", async () => {
-    mockFetchRoutes({ "GET /api/pdf/design": { designDir: null, files: [] } });
+  it("names the local storage", async () => {
+    mockFetchRoutes({ "GET /api/pdf/design": { storage: "fs", files: [] } });
     const w = await mountTab();
-    expect(w.find('[data-test="design-dir"]').text()).toBe("built-in design");
+    expect(w.find('[data-test="design-storage"]').text()).toBe("local directory");
   });
 
   it("opens the preview per locale", async () => {

@@ -21,10 +21,10 @@ async fn proforma(app: &axum::Router) -> Value {
 async fn ddpp_payment_survives_mdcast_down_and_first_download_archives() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let up = env.router(db.conn.clone(), None);
+    let up = env.router(db.conn.clone());
     let p = proforma(&up).await;
 
-    let down = env.router_at(db.conn.clone(), &dead_url(), None);
+    let down = env.router_at(db.conn.clone(), &dead_url());
     let (status, payment) = pay(&down, &id(&p), json!({ "amount": "1210" })).await;
     assert_eq!(status, StatusCode::CREATED, "{payment}");
     let ddpp = payment["advanceDocumentId"]
@@ -49,7 +49,7 @@ async fn ddpp_payment_survives_mdcast_down_and_first_download_archives() {
     let doc = get_doc(&up, &ddpp).await;
     assert_eq!(
         doc["pdf"]["sha256"],
-        json!(invoice::pdf::storage::sha256_hex(&bytes))
+        json!(invoice::storage::sha256_hex(&bytes))
     );
 
     // From now on the archive is served.
@@ -62,7 +62,7 @@ async fn ddpp_payment_survives_mdcast_down_and_first_download_archives() {
 async fn ddpp_is_archived_right_after_the_payment() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let p = proforma(&app).await;
     let (status, payment) = pay(&app, &id(&p), json!({ "amount": "605" })).await;
     assert_eq!(status, StatusCode::CREATED, "{payment}");
@@ -87,56 +87,12 @@ async fn ddpp_is_archived_right_after_the_payment() {
 }
 
 #[tokio::test]
-async fn design_dir_overrides_the_template_and_adds_a_logo() {
-    let db = TestDb::new().await;
-    let env = PdfEnv::new();
-    let design = tempfile::tempdir().expect("design dir");
-    std::fs::write(
-        design.path().join("invoice.typ"),
-        "// custom\n#json(\"/data.json\")",
-    )
-    .expect("write template");
-    std::fs::write(design.path().join("logo.png"), b"\x89PNG fake").expect("write logo");
-    let app = env.router(db.conn.clone(), Some(design.path()));
-
-    let body = issuable(&app).await;
-    let (status, _) = issue(&app, &id(&create_doc(&app, body).await)).await;
-    assert_eq!(status, StatusCode::OK);
-    let render = env.mock.last();
-    assert!(render.template.starts_with("// custom"));
-    assert_eq!(
-        render.data["assets"],
-        json!({ "logo": "logo.png", "signature": null })
-    );
-    assert!(render.assets.contains(&"logo.png".to_string()));
-
-    let (status, listing) = call(&app, Method::GET, "/api/pdf/design", None).await;
-    assert_eq!(status, StatusCode::OK, "{listing}");
-    assert_eq!(listing["designDir"], json!(design.path().to_string_lossy()));
-    let files = listing["files"].as_array().expect("files");
-    let source = |p: &str| {
-        files
-            .iter()
-            .find(|f| f["path"] == p)
-            .map(|f| f["source"].clone())
-    };
-    assert_eq!(source("invoice.typ"), Some(json!("custom")));
-    assert_eq!(source("logo.png"), Some(json!("custom")));
-    assert_eq!(source("fonts/Inter-Regular.ttf"), Some(json!("default")));
-    let logo = files
-        .iter()
-        .find(|f| f["path"] == "logo.png")
-        .expect("logo");
-    assert_eq!(logo["size"], 9);
-}
-
-#[tokio::test]
 async fn default_design_listing() {
     let db = TestDb::new().await;
     let app = router(db.conn.clone());
     let (status, listing) = call(&app, Method::GET, "/api/pdf/design", None).await;
     assert_eq!(status, StatusCode::OK, "{listing}");
-    assert_eq!(listing["designDir"], Value::Null);
+    assert_eq!(listing["storage"], "fs");
     let files = listing["files"].as_array().expect("files");
     assert!(files.iter().all(|f| f["source"] == "default"));
     assert!(files.iter().any(|f| f["path"] == "invoice.typ"));
@@ -146,7 +102,7 @@ async fn default_design_listing() {
 async fn preview_renders_a_sample() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
 
     let (status, headers, bytes) = get_raw(&app, "/api/pdf/preview").await;
     assert_eq!(status, StatusCode::OK);
@@ -205,7 +161,7 @@ async fn pdf_routes_need_the_token() {
 async fn missing_archive_file_is_500() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let body = issuable(&app).await;
     let (_, doc) = issue(&app, &id(&create_doc(&app, body).await)).await;
     let path = env
@@ -228,14 +184,14 @@ async fn missing_archive_file_is_500() {
 async fn race_loser_serves_the_stored_archive() {
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     let body = issuable(&app).await;
     let (_, doc) = issue(&app, &id(&create_doc(&app, body).await)).await;
     let stored = env.mock.last().pdf;
 
     // As if this caller had seen no archive: it renders, loses the
     // `WHERE pdf_path IS NULL` update and must serve the winner's file.
-    let pdf = common::pdf_service(&env.url, None, env.storage.path());
+    let pdf = common::pdf_service(&env.url, env.storage.storage.clone());
     let doc_id = id(&doc).parse().expect("uuid");
     let bytes = invoice::pdf::archive::archive_missing(&db.conn, &pdf, doc_id)
         .await
@@ -251,7 +207,7 @@ async fn cancelled_without_archive_renders_storno_without_qr() {
     use sea_orm::ConnectionTrait;
     let db = TestDb::new().await;
     let env = PdfEnv::new();
-    let app = env.router(db.conn.clone(), None);
+    let app = env.router(db.conn.clone());
     common::documents::set_company(&app, true).await;
     let contact = common::documents::create_contact(&app, json!({})).await;
     let (_, bank) = call(

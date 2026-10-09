@@ -98,6 +98,11 @@ fn maps_variants_to_status_and_code() {
             "pdf_unavailable",
         ),
         (
+            AppError::StorageUnavailable("down".into()),
+            StatusCode::SERVICE_UNAVAILABLE,
+            "storage_unavailable",
+        ),
+        (
             AppError::PdfRenderFailed("typst".into()),
             StatusCode::BAD_GATEWAY,
             "pdf_render_failed",
@@ -178,4 +183,7 @@ async fn pdf_errors_carry_detail_only_for_render_failures() {
     let (status, json) = body(AppError::PdfUnavailable("connect refused 10.0.0.1".into())).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(json, serde_json::json!({ "code": "pdf_unavailable" }));
+    let (status, json) = body(AppError::StorageUnavailable("bucket s3://x denied".into())).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(json, serde_json::json!({ "code": "storage_unavailable" }));
 }
