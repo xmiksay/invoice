@@ -28,6 +28,7 @@ Later phases add more codes (`document_locked`, `invalid_state`, `cnb_unavailabl
 | [isdoc.md](isdoc.md) | ISDOC bulk import (preview → confirm) and export (1f-b) |
 | [email.md](email.md) | SMTP sending, MiniJinja templates, send log (2a) |
 | [csv.md](csv.md) | CSV / XLSX interchange format, import (2b) and export (2c) |
+| [mcp.md](mcp.md) | MCP endpoint: read tools, drafts, issue, payments (3a) |
 
 Each part ends with a "Clarifications (as implemented)" section — the authoritative record of behaviour beyond the
 original contract. Keep every file under 400 lines; add a new part rather than growing one past the cap.

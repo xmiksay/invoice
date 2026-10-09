@@ -154,6 +154,14 @@ counterparty + IČO/DIČ, currency, rate, base/VAT per rate in CZK, total, paid,
 Pohoda XML (Stormware) and Money S3 XML export of issued + received invoices per
 period; MCP endpoint (list/create/issue invoices) behind the same Bearer token.
 
+Order (3 grill): 3a MCP → 3b Pohoda XML → 3c Money S3 XML, one PR each.
+- 3a MCP: streamable HTTP, stateless, `POST /api/mcp` (`rmcp`), same Bearer token. Tools: read (documents, contacts,
+  ARES, catalog, settings, compute) + create contact, create / update draft, issue (annotated destructive, no extra
+  confirm step), add payment, mark sent. No cancel / delete / credit notes / e-mail / received writes. No PDF over
+  MCP — results carry `pdfUrl` for a REST download with the same token. Contract: [`docs/api/mcp.md`](api/mcp.md).
+- 3b / 3c (both programs are used): summary per VAT rate in CZK (no lines), like the CSV export; accounting codes
+  (předkontace, členění DPH) configurable per document type in Settings, empty by default for the accountant to fill.
+
 ## Out of scope (for now)
 Deployment manifests, VAT return / control statement XML (EPO), automatic payment
 reminders, multiple own companies per instance, Pohoda/Money S3 import.
