@@ -13,7 +13,7 @@ All routes under `/api`, Bearer auth (already enforced). JSON camelCase on the w
 - ARES: 404 `{"code":"ares_not_found"}`, 502 `{"code":"ares_unavailable"}`, 422 `{"code":"validation","fields":{"ico":"invalid_ico"}}`.
 
 
-Later phases add more codes (`document_locked`, `invalid_state`, `cnb_unavailable`, `advance_settled`, …) — see each part.
+Later phases add more codes (`document_locked`, `invalid_state`, `cnb_unavailable`, `advance_settled`, `smtp_failed`, `template_invalid`, …) — see each part.
 422 field keys for list items use the 0-based array index: `lines.0.unitPrice`, `members.2.itemId`.
 
 ## Parts
@@ -26,6 +26,7 @@ Later phases add more codes (`document_locked`, `invalid_state`, `cnb_unavailabl
 | [received-import.md](received-import.md) | received documents, original PDF upload, manual import of issued, categories, custom fields (1e) |
 | [doc-types.md](doc-types.md) | debit notes, DDPP corrections, simplified tax documents (1f-a) |
 | [isdoc.md](isdoc.md) | ISDOC bulk import (preview → confirm) and export (1f-b) |
+| [email.md](email.md) | SMTP sending, MiniJinja templates, send log (2a) |
 
 Each part ends with a "Clarifications (as implemented)" section — the authoritative record of behaviour beyond the
 original contract. Keep every file under 400 lines; add a new part rather than growing one past the cap.
