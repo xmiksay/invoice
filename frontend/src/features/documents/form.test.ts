@@ -171,6 +171,15 @@ describe("doc types", () => {
     expect(toInput({ ...draft, taxPointDate: "2026-10-08" })).toMatchObject({ docType: "proforma", taxPointDate: null, correctionReason: null });
   });
 
+  it("debit notes and DDPP corrections require a reason too, imported corrections do not", () => {
+    for (const docType of ["debit_note", "advance_credit_note"] as const) {
+      const draft = { ...toDraft(document({ docType, correctionReason: null })), lines: [] };
+      expect(validateDocument(draft)).toEqual({ correctionReason: "required" });
+      expect(toInput({ ...draft, correctionReason: "x" })).toMatchObject({ docType, correctionReason: "x" });
+      expect(validateDocument({ ...draft, imported: true, number: "EXT-1" })).toEqual({});
+    }
+  });
+
   it("a credit note requires its correction reason", () => {
     const draft = { ...toDraft(document({ docType: "credit_note", sign: -1, correctionReason: null })), lines: [] };
     expect(validateDocument(draft)).toEqual({ correctionReason: "required" });

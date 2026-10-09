@@ -29,7 +29,7 @@
   "rateSource": {
     "cnb": "ČNB",
     "manual": "ručně",
-    "original": "z původní faktury"
+    "original": "z původního dokladu"
   },
   "fields": {
     "docType": "Typ dokladu",
@@ -68,11 +68,15 @@
       "invoice": "Faktury",
       "proforma": "Zálohové faktury",
       "credit_note": "Dobropisy",
-      "advance_tax_doc": "Daňové doklady k platbě"
+      "advance_tax_doc": "Daňové doklady k platbě",
+      "debit_note": "Vrubopisy",
+      "advance_credit_note": "Opravné doklady k platbě",
+      "simplified": "Zjednodušené daňové doklady"
     },
     "new": {
       "invoice": "Nová faktura",
-      "proforma": "Nová zálohová faktura"
+      "proforma": "Nová zálohová faktura",
+      "simplified": "Nový zjednodušený doklad"
     },
     "searchPlaceholder": "Hledat podle čísla, odběratele nebo VS",
     "status": "Stav",
@@ -86,7 +90,10 @@
       "invoice": "Zatím žádné faktury.",
       "proforma": "Zatím žádné zálohové faktury.",
       "credit_note": "Zatím žádné dobropisy. Vystavíte je z detailu faktury.",
-      "advance_tax_doc": "Zatím žádné daňové doklady k platbě. Vznikají automaticky při úhradě zálohové faktury."
+      "advance_tax_doc": "Zatím žádné daňové doklady k platbě. Vznikají automaticky při úhradě zálohové faktury.",
+      "debit_note": "Zatím žádné vrubopisy. Vystavíte je z detailu faktury nebo zjednodušeného dokladu.",
+      "advance_credit_note": "Zatím žádné opravné doklady k platbě. Vystavíte je z detailu daňového dokladu k platbě.",
+      "simplified": "Zatím žádné zjednodušené daňové doklady."
     },
     "noResults": "Žádné doklady neodpovídají filtru.",
     "tabs": "Typ dokladu",
@@ -94,7 +101,10 @@
       "invoice": "Faktury",
       "proforma": "Zálohové faktury",
       "credit_note": "Dobropisy",
-      "advance_tax_doc": "Daňové doklady k platbě"
+      "advance_tax_doc": "Daňové doklady k platbě",
+      "debit_note": "Vrubopisy",
+      "advance_credit_note": "Opravy dokladů k platbě",
+      "simplified": "Zjednodušené doklady"
     },
     "noPdf": "bez PDF",
     "anyCategory": "Všechny kategorie",
@@ -107,12 +117,16 @@
     "newTitle": {
       "invoice": "Nová faktura",
       "proforma": "Nová zálohová faktura",
-      "credit_note": "Nový dobropis"
+      "credit_note": "Nový dobropis",
+      "simplified": "Nový zjednodušený daňový doklad"
     },
     "editTitle": {
       "invoice": "Upravit koncept faktury",
       "proforma": "Upravit koncept zálohové faktury",
-      "credit_note": "Upravit koncept dobropisu"
+      "credit_note": "Upravit koncept dobropisu",
+      "debit_note": "Upravit koncept vrubopisu",
+      "advance_credit_note": "Upravit koncept opravného dokladu k platbě",
+      "simplified": "Upravit koncept zjednodušeného dokladu"
     },
     "saveDraft": "Uložit koncept",
     "newContact": "Nový kontakt",
@@ -128,8 +142,14 @@
     "indicativeRateLoading": "Načítám orientační kurz ČNB…",
     "indicativeRateUnknown": "ČNB kurz pro {currency} nevyhlašuje — zadejte ruční kurz.",
     "indicativeRateUnavailable": "Kurz ČNB teď nelze načíst; zafixuje se při vystavení, nebo zadejte ruční kurz.",
-    "creditNoteHint": "Povinné před vystavením. Částky zadávejte kladně — dobropis je odečte.",
-    "originalRate": "z původní faktury, nelze měnit"
+    "originalRate": "z původního dokladu, nelze měnit",
+    "correctionHint": {
+      "credit_note": "Povinné před vystavením. Částky zadávejte kladně — dobropis je odečte.",
+      "debit_note": "Povinné před vystavením. Zadejte položky, o které se původní doklad navyšuje.",
+      "advance_credit_note": "Povinné před vystavením. Částky zadávejte kladně — opravný doklad je odečte od daňového dokladu k platbě."
+    },
+    "customerOptional": "Odběratel (nepovinný)",
+    "simplifiedLimit": "Celková částka přesahuje {limit}. Zjednodušený daňový doklad lze vystavit jen do této částky — zvažte běžnou fakturu."
   },
   "line": {
     "title": "Položky",
@@ -196,8 +216,24 @@
     "settle": "Vystavit vyúčtovací fakturu",
     "settled": "Vyúčtováno",
     "creditNote": "Vystavit dobropis",
-    "creditNotePrompt": "Důvod opravy (dobropisu) k faktuře {number}:",
-    "ddppNote": "Vystaven automaticky k přijaté platbě zálohové faktury. Nelze upravit ani stornovat — zruší se smazáním platby."
+    "creditNotePrompt": "Důvod opravy (dobropisu) k dokladu {number}:",
+    "ddppNote": "Vystaven automaticky k přijaté platbě zálohové faktury. Nelze upravit ani stornovat — zruší se smazáním platby.",
+    "debitNote": "Vystavit vrubopis",
+    "debitNotePrompt": "Důvod opravy (vrubopisu) k dokladu {number}:",
+    "ddppCorrection": "Vystavit opravný doklad",
+    "ddppCorrectionPrompt": "Důvod opravy daňového dokladu k platbě {number}:",
+    "ddppCorrectionSettled": "Daňový doklad k platbě je už odečten ve vystavené vyúčtovací faktuře, opravu už nelze provést.",
+    "ddppCorrectionInUse": "Daňový doklad k platbě odečítá koncept vyúčtovací faktury. Nejprve z něj odeberte řádek odpočtu zálohy.",
+    "correctionInvalidState": "K tomuto dokladu nelze vystavit opravný doklad.",
+    "ddppCancelSettled": "Daňový doklad k platbě nelze stornovat: je už odečten ve vystavené vyúčtovací faktuře.",
+    "ddppCancelInUse": "Daňový doklad k platbě nelze stornovat: odečítá jej koncept vyúčtovací faktury, nebo k němu existuje opravný doklad (koncept či vystavený). Nejprve odeberte řádek odpočtu zálohy, resp. smažte nebo stornujte opravný doklad.",
+    "correctionBlock": {
+      "advance_settled": "Daňový doklad k platbě je už odečten ve vystavené vyúčtovací faktuře.",
+      "advance_in_use": "Daňový doklad k platbě odečítá koncept vyúčtovací faktury.",
+      "fully_corrected": "Daňový doklad k platbě je už plně opraven."
+    },
+    "ddppCorrectionCancelSettled": "Opravný doklad nelze stornovat: daňový doklad k platbě je už odečten ve vystavené vyúčtovací faktuře.",
+    "ddppCorrectionCancelInUse": "Opravný doklad nelze stornovat: daňový doklad k platbě odečítá koncept vyúčtovací faktury. Nejprve z něj odeberte řádek odpočtu zálohy."
   },
   "payments": {
     "title": "Platby",
@@ -222,7 +258,10 @@
     "proforma": "Zálohová faktura",
     "credit_note": "Dobropis",
     "advance_tax_doc": "Daňový doklad k přijaté platbě",
-    "received": "Přijatá faktura"
+    "received": "Přijatá faktura",
+    "debit_note": "Vrubopis",
+    "advance_credit_note": "Opravný daňový doklad k přijaté platbě",
+    "simplified": "Zjednodušený daňový doklad"
   },
   "related": {
     "title": "Související doklady",
@@ -230,7 +269,8 @@
     "child": "Navazující",
     "pick": {
       "proforma": "Navazuje na zálohovou fakturu",
-      "invoice": "Opravuje fakturu"
+      "advance_tax_doc": "Opravuje daňový doklad k platbě",
+      "invoiceOrSimplified": "Původní doklad (faktura / zjednodušený)"
     },
     "pickHint": "Jen informativní propojení, částky se nepřepočítávají.",
     "none": "Bez vazby",
@@ -256,7 +296,10 @@
       "invoice": "Import faktury",
       "proforma": "Import zálohové faktury",
       "credit_note": "Import dobropisu",
-      "advance_tax_doc": "Import daňového dokladu k platbě"
+      "advance_tax_doc": "Import daňového dokladu k platbě",
+      "debit_note": "Import vrubopisu",
+      "advance_credit_note": "Import opravného dokladu k platbě",
+      "simplified": "Import zjednodušeného daňového dokladu"
     }
   }
 }

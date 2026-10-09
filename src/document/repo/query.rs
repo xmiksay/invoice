@@ -27,6 +27,8 @@ pub struct Full {
     pub related: Vec<document::Model>,
     /// The document `related_document_id` points at.
     pub parent: Option<document::Model>,
+    /// Issued DDPP: why it cannot be corrected now.
+    pub correction_block: Option<&'static str>,
 }
 
 pub async fn find<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<document::Model, AppError> {
@@ -74,7 +76,9 @@ pub async fn load<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<Full, AppError
         Some(pid) => Entity::find_by_id(pid).one(db).await?,
         None => None,
     };
+    let correction_block = super::ddpp_correction::block(db, &doc).await?;
     Ok(Full {
+        correction_block,
         doc,
         lines,
         recap,

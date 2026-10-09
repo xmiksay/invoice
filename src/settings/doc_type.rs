@@ -1,4 +1,4 @@
-//! Number series keys. The first four are also the document types
+//! Number series keys. The seven issued keys are also the document types
 //! (`documents.doc_type`); the `received*` keys only name the series of the
 //! received documents of each type.
 
@@ -10,12 +10,18 @@ use utoipa::ToSchema;
 pub enum DocType {
     Invoice,
     CreditNote,
+    DebitNote,
     Proforma,
     AdvanceTaxDoc,
+    AdvanceCreditNote,
+    Simplified,
     Received,
     ReceivedCreditNote,
+    ReceivedDebitNote,
     ReceivedProforma,
     ReceivedAdvanceTaxDoc,
+    ReceivedAdvanceCreditNote,
+    ReceivedSimplified,
 }
 
 /// `documents.direction`.
@@ -24,15 +30,21 @@ pub const RECEIVED: &str = "received";
 
 impl DocType {
     /// Every series, in display order.
-    pub const ALL: [DocType; 8] = [
+    pub const ALL: [DocType; 14] = [
         DocType::Invoice,
         DocType::CreditNote,
+        DocType::DebitNote,
         DocType::Proforma,
         DocType::AdvanceTaxDoc,
+        DocType::AdvanceCreditNote,
+        DocType::Simplified,
         DocType::Received,
         DocType::ReceivedCreditNote,
+        DocType::ReceivedDebitNote,
         DocType::ReceivedProforma,
         DocType::ReceivedAdvanceTaxDoc,
+        DocType::ReceivedAdvanceCreditNote,
+        DocType::ReceivedSimplified,
     ];
 
     /// Wire and database value.
@@ -40,12 +52,18 @@ impl DocType {
         match self {
             DocType::Invoice => "invoice",
             DocType::CreditNote => "credit_note",
+            DocType::DebitNote => "debit_note",
             DocType::Proforma => "proforma",
             DocType::AdvanceTaxDoc => "advance_tax_doc",
+            DocType::AdvanceCreditNote => "advance_credit_note",
+            DocType::Simplified => "simplified",
             DocType::Received => "received",
             DocType::ReceivedCreditNote => "received_credit_note",
+            DocType::ReceivedDebitNote => "received_debit_note",
             DocType::ReceivedProforma => "received_proforma",
             DocType::ReceivedAdvanceTaxDoc => "received_advance_tax_doc",
+            DocType::ReceivedAdvanceCreditNote => "received_advance_credit_note",
+            DocType::ReceivedSimplified => "received_simplified",
         }
     }
 
@@ -53,7 +71,7 @@ impl DocType {
         DocType::ALL.into_iter().find(|d| d.as_str() == s)
     }
 
-    /// A document type (`invoice` … `advance_tax_doc`), never a series-only key.
+    /// A document type (`invoice` … `simplified`), never a series-only key.
     pub fn parse_document(s: &str) -> Option<DocType> {
         DocType::parse(s).filter(|d| d.is_document_type())
     }
@@ -61,8 +79,31 @@ impl DocType {
     pub fn is_document_type(self) -> bool {
         matches!(
             self,
-            DocType::Invoice | DocType::CreditNote | DocType::Proforma | DocType::AdvanceTaxDoc
+            DocType::Invoice
+                | DocType::CreditNote
+                | DocType::DebitNote
+                | DocType::Proforma
+                | DocType::AdvanceTaxDoc
+                | DocType::AdvanceCreditNote
+                | DocType::Simplified
         )
+    }
+
+    /// A correction bound to the document it corrects (native: its rate,
+    /// currency, contact and VAT mode; `correctionReason` required at issue).
+    pub fn is_correction(self) -> bool {
+        matches!(
+            self,
+            DocType::CreditNote | DocType::DebitNote | DocType::AdvanceCreditNote
+        )
+    }
+
+    /// `-1` for the types stored positive that reduce the original.
+    pub fn sign(self) -> i8 {
+        match self {
+            DocType::CreditNote | DocType::AdvanceCreditNote => -1,
+            _ => 1,
+        }
     }
 
     /// The series numbering documents of this type in `direction`.
@@ -70,8 +111,11 @@ impl DocType {
         match (direction, self) {
             (RECEIVED, DocType::Invoice) => DocType::Received,
             (RECEIVED, DocType::CreditNote) => DocType::ReceivedCreditNote,
+            (RECEIVED, DocType::DebitNote) => DocType::ReceivedDebitNote,
             (RECEIVED, DocType::Proforma) => DocType::ReceivedProforma,
             (RECEIVED, DocType::AdvanceTaxDoc) => DocType::ReceivedAdvanceTaxDoc,
+            (RECEIVED, DocType::AdvanceCreditNote) => DocType::ReceivedAdvanceCreditNote,
+            (RECEIVED, DocType::Simplified) => DocType::ReceivedSimplified,
             _ => self,
         }
     }
@@ -81,8 +125,11 @@ impl DocType {
         match self {
             DocType::Received => (RECEIVED, "invoice"),
             DocType::ReceivedCreditNote => (RECEIVED, "credit_note"),
+            DocType::ReceivedDebitNote => (RECEIVED, "debit_note"),
             DocType::ReceivedProforma => (RECEIVED, "proforma"),
             DocType::ReceivedAdvanceTaxDoc => (RECEIVED, "advance_tax_doc"),
+            DocType::ReceivedAdvanceCreditNote => (RECEIVED, "advance_credit_note"),
+            DocType::ReceivedSimplified => (RECEIVED, "simplified"),
             other => (ISSUED, other.as_str()),
         }
     }
@@ -117,6 +164,32 @@ mod tests {
         assert_eq!(
             DocType::Proforma.series(RECEIVED),
             DocType::ReceivedProforma
+        );
+        assert_eq!(
+            DocType::AdvanceCreditNote.series(RECEIVED),
+            DocType::ReceivedAdvanceCreditNote
+        );
+        assert_eq!(
+            DocType::ALL.iter().filter(|d| d.is_document_type()).count(),
+            7
+        );
+    }
+
+    #[test]
+    fn sign_and_corrections() {
+        let neg: Vec<_> = DocType::ALL.into_iter().filter(|d| d.sign() < 0).collect();
+        assert_eq!(neg, [DocType::CreditNote, DocType::AdvanceCreditNote]);
+        let corr: Vec<_> = DocType::ALL
+            .into_iter()
+            .filter(|d| d.is_correction())
+            .collect();
+        assert_eq!(
+            corr,
+            [
+                DocType::CreditNote,
+                DocType::DebitNote,
+                DocType::AdvanceCreditNote
+            ]
         );
     }
 }

@@ -76,7 +76,7 @@ function open(id: string) {
             <td>
               {{ d.customerName ?? "—" }}
               <ListDocMeta :doc="d" :categories="categories" />
-              <div class="mt-1 sm:hidden"><StatusBadges :status="d.status" :payment-state="d.paymentState" :overdue="d.overdue" :sign="d.sign" direction="received" /></div>
+              <div class="mt-1 sm:hidden"><StatusBadges :status="d.status" :payment-state="d.paymentState" :overdue="d.overdue" :sign="d.sign" :doc-type="d.docType" direction="received" /></div>
             </td>
             <td class="hidden font-mono whitespace-nowrap sm:table-cell">{{ d.supplierNumber }}</td>
             <td class="hidden whitespace-nowrap md:table-cell" :class="{ 'text-red-600 dark:text-red-400': d.overdue }">
@@ -84,7 +84,7 @@ function open(id: string) {
             </td>
             <td class="whitespace-nowrap text-right tabular-nums">{{ formatMoney(signed(d.payable, d.sign), d.currency, locale) }}</td>
             <td class="hidden sm:table-cell">
-              <StatusBadges :status="d.status" :payment-state="d.paymentState" :overdue="d.overdue" :sign="d.sign" direction="received" />
+              <StatusBadges :status="d.status" :payment-state="d.paymentState" :overdue="d.overdue" :sign="d.sign" :doc-type="d.docType" direction="received" />
             </td>
           </tr>
           <tr v-if="!store.loading && store.items.length === 0">

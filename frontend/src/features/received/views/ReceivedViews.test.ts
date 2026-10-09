@@ -92,6 +92,14 @@ describe("ReceivedListView", () => {
     expect(w.find('[data-test="new-document"]').attributes("href")).toBe("/received/new?docType=credit_note");
     expect(w.find('[data-test="tab-proforma"]').attributes("href")).toBe("/received?type=proforma");
   });
+
+  it("records any of the seven types, e.g. a debit note", async () => {
+    mockFetchRoutes({ "GET /api/documents": { items: [], total: 0 }, "GET /api/settings/categories": [] });
+    const { w } = await mountAt("/received?type=debit_note");
+    expect(w.findAll('[data-test^="tab-"]')).toHaveLength(7);
+    expect(w.find("h1").text()).toBe("Received debit notes");
+    expect(w.find('[data-test="new-document"]').attributes("href")).toBe("/received/new?docType=debit_note");
+  });
 });
 
 describe("ReceivedDetailView", () => {

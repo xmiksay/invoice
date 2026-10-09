@@ -24,9 +24,3 @@ export const editLocation = (id: string, direction: Direction = "issued"): Route
   name: ROUTES[direction].edit,
   params: { id },
 });
-
-/** The doc type a document may link to via `relatedDocumentId`: DDPP / final invoice → proforma, credit note → invoice. */
-export function relatedTargetType(docType: string): "proforma" | "invoice" | null {
-  if (docType === "invoice" || docType === "advance_tax_doc") return "proforma";
-  return docType === "credit_note" ? "invoice" : null;
-}

@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import type { FieldErrors } from "@/api/types";
 import FormField from "@/components/form/FormField.vue";
 import { reasonKey } from "@/lib/formErrors";
+import { docSign } from "@/features/documents/docTypes";
 import { formatMoney } from "@/features/documents/format";
 import { draftTotal, type ReceivedDraft } from "../form";
 import { newRecapRow, updateRow, vatAllowed, type RecapRowDraft } from "../recap";
@@ -20,7 +21,7 @@ const props = defineProps<{
 const { t, locale } = useI18n();
 const vatEnabled = computed(() => vatAllowed(model.value.vatMode));
 const total = computed(() => draftTotal(model.value));
-const isCreditNote = computed(() => model.value.docType === "credit_note");
+const isCreditNote = computed(() => docSign(model.value.docType) === -1);
 const rowError = (i: number, field: string) => props.errors[`vatRecap.${i}.${field}`];
 
 function edit(i: number, patch: Partial<Pick<RecapRowDraft, "rate" | "base" | "vat">>) {

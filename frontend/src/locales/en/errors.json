@@ -10,13 +10,14 @@
   "documentLocked": "An issued document can no longer be changed.",
   "invalidState": "This action is not possible in the document's current state.",
   "cnbUnavailable": "The ČNB exchange rate service is unavailable. Enter the rate manually.",
-  "advanceSettled": "The payment cannot be deleted: its tax document is already deducted by an issued final invoice.",
-  "advanceInUse": "The payment cannot be deleted: its advance is deducted by a draft final invoice. Remove the advance line from that draft first.",
+  "advanceSettled": "The payment cannot be deleted: its advance payment tax document is already deducted by an issued final invoice.",
+  "advanceInUse": "The payment cannot be deleted: its advance is deducted by a draft final invoice, or its advance payment tax document has a correction. Remove the advance line from that draft, or delete / cancel the correction first.",
   "catalogItemInUse": "The item cannot be deleted: it is the only item of a group. Edit or delete the group first.",
   "pdfUnavailable": "The PDF service is unavailable. Try again later.",
   "pdfRenderFailed": "Rendering the PDF failed. Check the design template.",
   "pdfMissing": "No PDF uploaded.",
   "tooLarge": "The file is too large (20 MB at most).",
   "categoryInUse": "The category cannot be deleted because documents use it. Deactivate it instead.",
-  "numberTaken": "The allocated number is already used by an imported document. Set the number series counter in Settings."
+  "numberTaken": "The allocated number is already used by an imported document. Set the number series counter in Settings.",
+  "exceedsOriginal": "Cannot cancel: the credit notes would exceed the original document plus its debit notes for some VAT rate."
 }

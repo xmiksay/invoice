@@ -168,6 +168,7 @@ impl Sample {
             footer_note: None,
             correction_reason: None,
             parent_number: None,
+            parent_doc_type: None,
             supplier: Some(&self.supplier),
             customer: Some(&self.customer),
             bank: self.bank.as_ref(),

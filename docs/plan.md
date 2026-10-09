@@ -17,7 +17,7 @@ no OAuth, no stock/task/cost-center links). Module layout follows the infra
 | Frontend | Vue 3 + TS + Vite + Tailwind + Pinia + vue-i18n (cs/en), embedded via rust-embed. |
 | Scope | Czech OSVČ / s.r.o., one own company per instance, CZK + foreign currencies. |
 | Own company & settings | In DB, edited in the UI: company profile, VAT payer flag, bank accounts per currency, VAT rates (seeded 21/12/0, user-editable), number series. |
-| Document types | Invoice (tax document), credit note (references original), proforma; for VAT payers a tax document for a received advance payment (DDPP) after the proforma is paid, and "issue final invoice from proforma" deducting the advance and its VAT. |
+| Document types | Invoice (tax document), credit note and debit note (reference the original), simplified tax document, proforma; for VAT payers a tax document for a received advance payment (DDPP) after the proforma is paid (and its correction), and "issue final invoice from proforma" deducting the advance and its VAT. |
 | VAT | Rate per line, VAT computed from the per-rate recap (§37 ZDPH) rounded to 0.01. Modes: standard, reverse charge, exempt. Optional rounding of the payable total to whole CZK (rounding line). Foreign-currency invoices also show VAT in CZK. |
 | Exchange rate | ČNB daily rate at the tax point date (received invoices: date of receipt), stored on the invoice, manually overridable; if ČNB is unreachable the user must enter it. |
 | Numbering | Configurable pattern per document type, e.g. `{YYYY}{NNNN}`, yearly reset, number assigned at issue (drafts have none). Counter is manually settable in Settings. Imported invoices keep their own number and do **not** move the counter. |
@@ -31,13 +31,14 @@ no OAuth, no stock/task/cost-center links). Module layout follows the infra
 
 ## Phases
 
-Each phase is its own branch + PR into `master`. Phase 1 is split into six PRs:
+Each phase is its own branch + PR into `master`. Phase 1 is split into seven PRs:
 - 1a settings + contacts + ARES (done)
 - 1b document core: `documents` table, invoice lines (item / text / subtotal with collapse, % discount), VAT recap + rounding, ČNB rates, issue (numbering, snapshots), cancel, payments, counter guard
 - 1c proforma → DDPP (auto on payment) → final invoice settlement, credit notes, catalog (items + groups)
 - 1d PDF via mdcast + design dir + QR + archive on issue
 - 1e received documents (all four types, VAT recap only) + original PDF upload + manual import of issued documents + categories + custom fields
-- 1f bulk ISDOC import (`.isdoc`/`.isdocx`, zip-in-zip, preview → confirm)
+- 1f-a debit notes, DDPP corrections, simplified tax documents (all seven ISDOC document types, both directions)
+- 1f-b bulk ISDOC import (`.isdoc`/`.isdocx`, zip-in-zip, preview → confirm) + ISDOC export (moved from phase 2)
 
 ### Phase 1 — core
 Settings, contacts + ARES, all document types incl. DDPP and proforma settlement,
@@ -76,13 +77,19 @@ Received & import decisions (1e/1f):
 - Received metadata: supplier number, received date (ČNB rate date), VAT deductible flag, category, note, custom fields. Original PDF optional, can be uploaded/replaced later.
 - Categories: one list with kind expense/income. Custom fields defined in Settings (text/number/date/bool/select, for issued/received/both), stored in `custom_fields jsonb`.
 - Manual import of issued documents: any of the four types, full line editor with its own number, issued without number allocation or PDF render; the original PDF can be uploaded. Imported documents never get our rendered PDF.
-- ISDOC (1f): direction by the supplier IČO vs. company IČO; lines stored, recap/totals taken verbatim from the ISDOC; preview → confirm; duplicates skipped; "mark as paid" option (payment of the full amount on the due date, default on).
+- ISDOC (1f-b): direction by the supplier IČO vs. company IČO; lines stored, recap/totals taken verbatim from the ISDOC; preview → confirm; duplicates skipped; "mark as paid" option (payment of the full amount on the due date, default on). Per-document outcome: confirm imports only the OK rows, each in its own transaction, and reports per file. Foreign-currency rate from the ISDOC (`CurrRate`/`RefCurrRate`), else ČNB. Batch options for received documents: category (optional), VAT deductible (default yes), received date = tax point date; edited per document afterwards.
+
+Document type decisions (1f-a, details in [api/doc-types.md](api/doc-types.md)):
+- Debit note (`V…`): created empty from an issued invoice / simplified document, reason required, original's rate, payable with QR; issued debit notes raise the credit-note cap.
+- DDPP correction (`OP…`): created from an issued DDPP like a credit note (lines copied, cap = DDPP base per rate); the final invoice deducts the DDPP net of its corrections; refused once the DDPP is deducted.
+- Simplified tax document (`ZD…`): its own type and series; customer optional; > 10 000 CZK only warns in the UI; credit and debit notes allowed, no advances.
+- Received counterparts `PV…`, `POP…`, `PZD…`; manual import accepts all seven types.
 
 ### Phase 2 — interchange
-ISDOC export, CSV/XLSX bulk import (fixed documented template, sample downloadable
+CSV/XLSX bulk import (fixed documented template, sample downloadable
 in the UI, one row = one invoice with VAT recap, no lines), CSV export for the
 accountant, e-mail sending via SMTP (manual button, prefilled cs/en template,
-PDF + ISDOC attached, send log in DB, status → `sent`).
+PDF + ISDOC attached (ISDOC export itself lands in 1f-b), send log in DB, status → `sent`).
 
 ### Phase 3 — accounting & MCP
 Pohoda XML (Stormware) and Money S3 XML export of issued + received invoices per

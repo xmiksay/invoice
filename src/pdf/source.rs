@@ -118,6 +118,7 @@ impl Source {
             footer_note: d.footer_note.as_deref(),
             correction_reason: d.correction_reason.as_deref(),
             parent_number: d.parent.as_ref().and_then(|p| p.number.as_deref()),
+            parent_doc_type: d.parent.as_ref().map(|p| p.doc_type.as_str()),
             supplier: self.supplier.as_ref(),
             customer: self.customer.as_ref(),
             bank: self.bank.as_ref(),

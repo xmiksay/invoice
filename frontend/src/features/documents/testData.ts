@@ -121,6 +121,7 @@ export const document = (overrides: Partial<Document> = {}): Document => ({
   parent: null,
   relatedDocuments: [],
   settled: null,
+  correctionBlock: null,
   sign: 1,
   pdf: null,
   original: null,

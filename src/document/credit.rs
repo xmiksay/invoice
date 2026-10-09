@@ -121,4 +121,22 @@ mod tests {
         assert!(exceeds_original(&original, [(d("0"), d("1"))]));
         assert!(!exceeds_original(&original, []));
     }
+
+    #[test]
+    fn debit_notes_raise_the_cap() {
+        use crate::document::correction::sum_bases;
+        // Original 1000 @ 21 %, debit notes +200 @ 21 % and +50 @ 12 %.
+        let cap = sum_bases([
+            (d("21"), d("1000")),
+            (d("21"), d("200")),
+            (d("12"), d("50")),
+        ])
+        .expect("fits");
+        assert!(!exceeds_original(
+            &cap,
+            [(d("21"), d("1200")), (d("12"), d("50"))]
+        ));
+        assert!(exceeds_original(&cap, [(d("21"), d("1200.01"))]));
+        assert!(exceeds_original(&cap, [(d("0"), d("1"))]));
+    }
 }

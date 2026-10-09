@@ -163,7 +163,7 @@ describe("LineEditor", () => {
     const advance = toLineDraft({ kind: "advance", position: 1, advanceDocumentId: "dd1", description: "Odpočet", base: "-1.00", recap: [] });
     const w = mountEditor({ lines: [advance], vatMode: "reverse_charge" });
     await w.setProps({ errors: { 0: { advanceDocumentId: "invalid" } } });
-    expect(w.find('[data-test="line-0"] [data-test="field-error"]').text()).toBe("Deducting a tax document for a payment is only possible in the Standard VAT mode.");
+    expect(w.find('[data-test="line-0"] [data-test="field-error"]').text()).toBe("Deducting an advance payment tax document is only possible in the Standard VAT mode.");
     await w.setProps({ vatMode: "standard" });
     expect(w.find('[data-test="line-0"] [data-test="field-error"]').text()).toBe("Invalid value.");
     // The non-payer form deducts the settled proforma itself: no VAT-mode explanation.

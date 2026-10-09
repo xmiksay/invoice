@@ -141,8 +141,14 @@ pub fn title(doc_type: &str, vat_mode: VatMode, locale: Locale) -> &'static str 
         "proforma" => "Proforma invoice",
         "credit_note" if cs => "Opravný daňový doklad",
         "credit_note" => "Credit note",
+        "debit_note" if cs => "Opravný daňový doklad – vrubopis",
+        "debit_note" => "Debit note",
         "advance_tax_doc" if cs => "Daňový doklad k přijaté platbě",
         "advance_tax_doc" => "Tax document for a received payment",
+        "advance_credit_note" if cs => "Opravný daňový doklad k přijaté platbě",
+        "advance_credit_note" => "Advance payment correction",
+        "simplified" if cs => "Zjednodušený daňový doklad",
+        "simplified" => "Simplified tax document",
         _ if vat_mode == VatMode::NonPayer && cs => "Faktura",
         _ if vat_mode == VatMode::NonPayer => "Invoice",
         _ if cs => "Faktura – daňový doklad",
@@ -209,28 +215,6 @@ pub fn country(code: &str, locale: Locale) -> String {
         .unwrap_or_else(|| code.to_string())
 }
 
-/// Credit note: the corrected invoice + the reason (two lines).
-pub fn credit_reference(invoice: &str, reason: Option<&str>, locale: Locale) -> String {
-    let head = match locale {
-        Locale::Cs => format!("Opravný daňový doklad k faktuře {invoice}"),
-        Locale::En => format!("Credit note for invoice {invoice}"),
-    };
-    match reason {
-        Some(r) => match locale {
-            Locale::Cs => format!("{head}\nDůvod opravy: {r}"),
-            Locale::En => format!("{head}\nReason: {r}"),
-        },
-        None => head,
-    }
-}
-
-pub fn ddpp_reference(proforma: &str, locale: Locale) -> String {
-    match locale {
-        Locale::Cs => format!("K zálohové faktuře {proforma}"),
-        Locale::En => format!("For proforma invoice {proforma}"),
-    }
-}
-
 /// `Kurz ČNB 24,400 CZK/EUR ze dne 7. 10. 2026`; without a ČNB date
 /// (manual rate) just `Kurz 24,400 CZK/EUR`.
 pub fn rate_note(rate: &str, currency: &str, cnb_date: Option<&str>, locale: Locale) -> String {
@@ -272,6 +256,18 @@ mod tests {
             title("invoice", VatMode::Exempt, Locale::En),
             "Invoice – tax document"
         );
+        assert_eq!(
+            title("debit_note", VatMode::Standard, cs),
+            "Opravný daňový doklad – vrubopis"
+        );
+        assert_eq!(
+            title("advance_credit_note", VatMode::Standard, Locale::En),
+            "Advance payment correction"
+        );
+        assert_eq!(
+            title("simplified", VatMode::NonPayer, cs),
+            "Zjednodušený daňový doklad"
+        );
     }
 
     #[test]
@@ -291,19 +287,7 @@ mod tests {
     }
 
     #[test]
-    fn references_and_rate_notes() {
-        assert_eq!(
-            credit_reference("20260001", Some("Sleva"), Locale::Cs),
-            "Opravný daňový doklad k faktuře 20260001\nDůvod opravy: Sleva"
-        );
-        assert_eq!(
-            credit_reference("20260001", None, Locale::En),
-            "Credit note for invoice 20260001"
-        );
-        assert_eq!(
-            ddpp_reference("Z20260003", Locale::Cs),
-            "K zálohové faktuře Z20260003"
-        );
+    fn rate_notes() {
         assert_eq!(
             rate_note("24,400", "EUR", Some("7. 10. 2026"), Locale::Cs),
             "Kurz ČNB 24,400 CZK/EUR ze dne 7. 10. 2026"

@@ -140,6 +140,10 @@ pub struct Document {
     pub parent: Option<RelatedDocument>,
     /// Proforma only: a non-cancelled invoice settles it.
     pub settled: Option<bool>,
+    /// Issued DDPP only: why `credit-note` is refused now — `advance_settled`
+    /// (an issued invoice deducts it) > `advance_in_use` (a draft one does) >
+    /// `fully_corrected` (nothing left); `null` otherwise.
+    pub correction_block: Option<String>,
     /// `-1` for credit notes (amounts are stored positive), else `1`.
     pub sign: i8,
     /// The archived PDF (issued documents; a DDPP may lack it until its first download).
@@ -202,9 +206,9 @@ pub struct RelatedDocument {
     pub currency: String,
 }
 
-/// `-1` for credit notes.
+/// `-1` for credit notes and DDPP corrections (stored positive).
 pub fn sign(doc_type: &str) -> i8 {
-    if doc_type == "credit_note" { -1 } else { 1 }
+    crate::settings::doc_type::DocType::parse_document(doc_type).map_or(1, |t| t.sign())
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

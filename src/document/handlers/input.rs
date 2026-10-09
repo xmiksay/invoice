@@ -17,6 +17,7 @@ use super::meta::{self, Meta, MetaCtx};
 use crate::contact::entity::contact;
 use crate::document::advance::{self, AdvanceCtx, AdvanceSource};
 use crate::document::compute::{self, Evaluated, Params};
+use crate::document::correction::ExactBasis;
 use crate::document::custom_fields::Values;
 use crate::document::defaults;
 use crate::document::entity::document;
@@ -31,8 +32,9 @@ use crate::validation::{self as v, Check};
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DocumentInput {
-    /// `invoice` | `proforma` on create (default `invoice`); on update it must
-    /// equal the draft's type (omitted = unchanged), `credit_note` included.
+    /// `invoice` | `proforma` | `simplified` on create (default `invoice`;
+    /// imported: any of the seven); on update it must equal the draft's type
+    /// (omitted = unchanged), corrections included.
     pub doc_type: Option<String>,
     /// Only `issued`.
     pub direction: Option<String>,
@@ -56,7 +58,7 @@ pub struct DocumentInput {
     pub footer_note: Option<String>,
     pub internal_note: Option<String>,
     pub round_total: Option<bool>,
-    /// Credit notes only (ignored otherwise); at most 500 characters.
+    /// Corrections only (ignored otherwise); at most 500 characters.
     pub correction_reason: Option<String>,
     pub lines: Vec<LineInput>,
     /// Manual import (create only, default `false`; immutable).
@@ -143,17 +145,28 @@ pub struct Context {
     /// The document named by `relatedDocumentId`, if it exists.
     pub related: Option<document::Model>,
     pub meta: MetaCtx,
+    /// `PUT` of a native DDPP correction: the basis of its exact VAT.
+    pub exact: Option<ExactBasis>,
 }
 
 /// Resolve advance lines, then compute; errors of both are reported together.
+/// `exact`: a native DDPP correction's exact-VAT basis (save / compute; issue
+/// passes `None` and re-applies it under the DDPP lock).
 pub fn evaluate(
     lines: &mut [LineData],
     params: Params,
     adv: &AdvanceCtx,
+    exact: Option<&ExactBasis>,
 ) -> Result<Evaluated, AppError> {
     let mut e = advance::resolve(lines, adv);
     match compute::evaluate(lines, params) {
-        Ok(ev) if e.is_empty() => Ok(ev),
+        Ok(mut ev) if e.is_empty() => {
+            if let Some(b) = exact {
+                b.apply(&mut ev.totals, params)
+                    .map_err(|o| AppError::field(o.field(), "invalid"))?;
+            }
+            Ok(ev)
+        }
         Ok(_) => Err(AppError::Validation(e)),
         Err(more) => {
             e.merge(more);
@@ -235,10 +248,10 @@ impl DocumentInput {
             .check("exchangeRate", exchange_rate(self.exchange_rate.as_deref()))
             .flatten()
             .filter(|_| currency != "CZK");
-        // A native credit note is bound to its invoice; an imported one is not.
-        let credit_note = existing.filter(|_| doc_type == DocType::CreditNote && !imported);
-        let rate = credit_note.map_or(rate, |x| x.exchange_rate);
-        let correction_reason = if doc_type == DocType::CreditNote {
+        // A native correction is bound to its original; an imported one is not.
+        let correction = existing.filter(|_| doc_type.is_correction() && !imported);
+        let rate = correction.map_or(rate, |x| x.exchange_rate);
+        let correction_reason = if doc_type.is_correction() {
             e.check(
                 "correctionReason",
                 v::opt_text(self.correction_reason.as_deref(), 500),
@@ -268,7 +281,7 @@ impl DocumentInput {
                 }),
             ),
         };
-        if let (Some(x), Some(mode)) = (credit_note, vat_mode) {
+        if let (Some(x), Some(mode)) = (correction, vat_mode) {
             x.check_bound(&currency, self.contact_id, mode, &mut e);
         }
         let payment_method = match self.payment_method.as_deref() {
@@ -348,7 +361,7 @@ impl DocumentInput {
             sources: &ctx.advances,
         };
         let mut lines = std::mem::take(&mut data.lines);
-        let evaluated = evaluate(&mut lines, params, &adv)?;
+        let evaluated = evaluate(&mut lines, params, &adv, ctx.exact.as_ref())?;
         data.lines = lines;
         Ok((data, evaluated))
     }

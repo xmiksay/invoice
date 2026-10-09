@@ -3,26 +3,38 @@
     "invoice": "Přijatá faktura",
     "proforma": "Přijatá zálohová faktura",
     "credit_note": "Přijatý dobropis",
-    "advance_tax_doc": "Přijatý daňový doklad k platbě"
+    "advance_tax_doc": "Přijatý daňový doklad k platbě",
+    "debit_note": "Přijatý vrubopis",
+    "advance_credit_note": "Přijatý opravný doklad k platbě",
+    "simplified": "Přijatý zjednodušený daňový doklad"
   },
   "newTitle": {
     "invoice": "Zaevidovat fakturu",
     "proforma": "Zaevidovat zálohovou fakturu",
     "credit_note": "Zaevidovat dobropis",
-    "advance_tax_doc": "Zaevidovat daňový doklad k platbě"
+    "advance_tax_doc": "Zaevidovat daňový doklad k platbě",
+    "debit_note": "Zaevidovat vrubopis",
+    "advance_credit_note": "Zaevidovat opravný doklad k platbě",
+    "simplified": "Zaevidovat zjednodušený doklad"
   },
   "editTitle": {
     "invoice": "Upravit přijatou fakturu",
     "proforma": "Upravit přijatou zálohovou fakturu",
     "credit_note": "Upravit přijatý dobropis",
-    "advance_tax_doc": "Upravit přijatý daňový doklad k platbě"
+    "advance_tax_doc": "Upravit přijatý daňový doklad k platbě",
+    "debit_note": "Upravit přijatý vrubopis",
+    "advance_credit_note": "Upravit přijatý opravný doklad k platbě",
+    "simplified": "Upravit přijatý zjednodušený doklad"
   },
   "list": {
     "title": {
       "invoice": "Přijaté faktury",
       "proforma": "Přijaté zálohové faktury",
       "credit_note": "Přijaté dobropisy",
-      "advance_tax_doc": "Přijaté daňové doklady k platbě"
+      "advance_tax_doc": "Přijaté daňové doklady k platbě",
+      "debit_note": "Přijaté vrubopisy",
+      "advance_credit_note": "Přijaté opravné doklady k platbě",
+      "simplified": "Přijaté zjednodušené daňové doklady"
     },
     "empty": "Zatím žádné přijaté doklady tohoto typu.",
     "searchPlaceholder": "Hledat podle čísla, čísla dodavatele, dodavatele nebo VS"

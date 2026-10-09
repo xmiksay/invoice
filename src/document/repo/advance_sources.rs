@@ -7,8 +7,9 @@ use anyhow::Context as _;
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use uuid::Uuid;
 
-use super::view;
+use super::{ddpp_correction, view};
 use crate::document::advance::{self, AdvanceSource};
+use crate::document::correction::net_recap;
 use crate::document::entity::{document, document_line, vat_recap};
 use crate::document::line::{AdvanceRow, LineData, Status};
 use crate::error::{AppError, FieldErrors};
@@ -45,6 +46,36 @@ async fn referencing<C: ConnectionTrait>(
         .collect())
 }
 
+/// The stored recap per document (rate desc); a DDPP's net of its issued
+/// corrections — what it deducts.
+async fn deducted_recaps<'a, C: ConnectionTrait>(
+    db: &C,
+    docs: impl Iterator<Item = &'a document::Model>,
+) -> Result<HashMap<Uuid, Vec<AdvanceRow>>, AppError> {
+    let (mut ids, mut ddpps) = (Vec::new(), Vec::new());
+    for d in docs {
+        ids.push(d.id);
+        if d.doc_type == "advance_tax_doc" {
+            ddpps.push(d.id);
+        }
+    }
+    let mut out: HashMap<Uuid, Vec<AdvanceRow>> = HashMap::new();
+    for r in vat_recap::Entity::find()
+        .filter(vat_recap::Column::DocumentId.is_in(ids))
+        .order_by_desc(vat_recap::Column::VatRate)
+        .all(db)
+        .await?
+    {
+        out.entry(r.document_id).or_default().push(r.into());
+    }
+    for (ddpp, corrections) in ddpp_correction::credited(db, &ddpps, None).await? {
+        if let Some(recap) = out.get_mut(&ddpp) {
+            *recap = net_recap(recap, &corrections).context("DDPP net overflow")?;
+        }
+    }
+    Ok(out)
+}
+
 /// The documents named by `ids`, with their recap and current references.
 pub async fn load<C: ConnectionTrait>(
     db: &C,
@@ -59,11 +90,7 @@ pub async fn load<C: ConnectionTrait>(
         .filter(document::Column::Direction.eq(crate::settings::doc_type::ISSUED))
         .all(db)
         .await?;
-    let recaps = vat_recap::Entity::find()
-        .filter(vat_recap::Column::DocumentId.is_in(ids.to_vec()))
-        .order_by_desc(vat_recap::Column::VatRate)
-        .all(db)
-        .await?;
+    let mut recaps = deducted_recaps(db, docs.iter()).await?;
     let refs = referencing(db, ids).await?;
     let mut out = HashMap::with_capacity(docs.len());
     for d in docs {
@@ -72,21 +99,12 @@ pub async fn load<C: ConnectionTrait>(
             .as_ref()
             .and_then(|s| s.get("vatPayer"))
             .and_then(serde_json::Value::as_bool);
+        let recap = recaps.remove(&d.id).unwrap_or_default();
         let source = AdvanceSource {
             id: d.id,
             status: view::status(&d)?,
             issues_ddpp: advance::issues_ddpp(vat_payer, &d.vat_mode),
-            recap: recaps
-                .iter()
-                .filter(|r| r.document_id == d.id)
-                .map(|r| AdvanceRow {
-                    vat_rate: r.vat_rate.normalize(),
-                    base: r.base,
-                    vat: r.vat,
-                    base_czk: r.base_czk,
-                    vat_czk: r.vat_czk,
-                })
-                .collect(),
+            recap,
             referenced_by: refs
                 .iter()
                 .filter(|(a, _)| *a == d.id)
@@ -128,6 +146,8 @@ pub async fn lock_and_recheck<C: ConnectionTrait>(
         .map(|d| (d.id, d))
         .collect();
     let refs = referencing(txn, &ids).await?;
+    // DDPP corrections issue under the DDPP lock: re-read the net amounts.
+    let fresh = deducted_recaps(txn, locked.values()).await?;
     let mut e = FieldErrors::new();
     for (i, line) in lines.iter().enumerate() {
         let LineData::Advance(a) = line else { continue };
@@ -144,6 +164,10 @@ pub async fn lock_and_recheck<C: ConnectionTrait>(
             e.add(&field, "duplicate");
         } else if doc.doc_type == "proforma" && a.recap.first().map(|r| r.base) != Some(doc.paid) {
             return Err(AppError::Conflict("proforma payments changed".into()));
+        } else if doc.doc_type == "advance_tax_doc"
+            && fresh.get(&a.document_id).unwrap_or(&Vec::new()) != &a.recap
+        {
+            return Err(AppError::Conflict("DDPP corrected meanwhile".into()));
         }
     }
     e.into_result()

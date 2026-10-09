@@ -47,9 +47,12 @@ export const documentsApi = {
   setMetadata: (id: string, input: MetadataInput) => request<Document>(`${item(id)}/metadata`, { method: "PUT", body: input }),
   /** Draft final invoice from an issued proforma. */
   settle: (id: string) => request<Document>(`${item(id)}/settle`, { method: "POST" }),
-  /** Credit-note draft for an issued invoice. */
+  /** Credit-note draft for an issued invoice / simplified document; on an issued DDPP a DDPP correction. */
   creditNote: (id: string, correctionReason: string | null) =>
     request<Document>(`${item(id)}/credit-note`, { method: "POST", body: correctionReason ? { correctionReason } : {} }),
+  /** Debit-note draft (no lines) for an issued invoice / simplified document. */
+  debitNote: (id: string, correctionReason: string | null) =>
+    request<Document>(`${item(id)}/debit-note`, { method: "POST", body: correctionReason ? { correctionReason } : {} }),
   /** Draft: rendered live with the watermark; issued/cancelled: the archived file; received/imported: the original. */
   pdf: (id: string, download = false) => requestBlob(`${item(id)}/pdf${download ? "?download=1" : ""}`),
   /** Received / imported: upload (or replace) the original PDF, multipart part `file`. */

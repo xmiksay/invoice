@@ -48,14 +48,20 @@
   },
   "numberSeries": {
     "docTypes": {
-      "invoice": "Invoice",
-      "credit_note": "Credit note",
-      "proforma": "Proforma invoice",
-      "advance_tax_doc": "Tax document for advance payment",
+      "invoice": "Invoices",
+      "simplified": "Simplified tax documents",
+      "proforma": "Proforma invoices",
+      "credit_note": "Credit notes",
+      "debit_note": "Debit notes",
+      "advance_tax_doc": "Advance payment tax documents",
+      "advance_credit_note": "Advance payment corrections",
       "received": "Received invoices",
+      "received_simplified": "Received simplified tax documents",
+      "received_proforma": "Received proforma invoices",
       "received_credit_note": "Received credit notes",
-      "received_proforma": "Received proformas",
-      "received_advance_tax_doc": "Received advance tax documents"
+      "received_debit_note": "Received debit notes",
+      "received_advance_tax_doc": "Received advance payment tax documents",
+      "received_advance_credit_note": "Received advance payment corrections"
     },
     "pattern": "Pattern",
     "preview": "Next number preview",
@@ -71,6 +77,10 @@
       "yyyy": "four-digit year (2026)",
       "yy": "two-digit year (26)",
       "n": "sequence number padded with zeros (0001)"
+    },
+    "groups": {
+      "issued": "Issued documents",
+      "received": "Received documents"
     }
   },
   "categories": {

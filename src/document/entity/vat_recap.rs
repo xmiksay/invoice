@@ -26,3 +26,15 @@ pub struct Model {
 pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl From<Model> for crate::document::line::AdvanceRow {
+    fn from(r: Model) -> Self {
+        Self {
+            vat_rate: r.vat_rate.normalize(),
+            base: r.base,
+            vat: r.vat,
+            base_czk: r.base_czk,
+            vat_czk: r.vat_czk,
+        }
+    }
+}

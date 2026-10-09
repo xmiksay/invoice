@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { docSign } from "../docTypes";
 import { formatMoney, signed } from "../format";
 import { detailLocation } from "../routes";
 import type { Direction, RelatedDocument } from "../types";
@@ -16,7 +17,7 @@ const rows = computed(() => [
 ]);
 // Native related documents share the currency (credit note / DDPP / final invoice copy it); received ones need not.
 const money = (d: RelatedDocument) =>
-  formatMoney(signed(d.payable, d.docType === "credit_note" ? -1 : 1), d.currency ?? props.currency, locale.value);
+  formatMoney(signed(d.payable, docSign(d.docType)), d.currency ?? props.currency, locale.value);
 const typeLabel = (d: RelatedDocument) => t(props.direction === "received" ? `received.docTypes.${d.docType}` : `documents.docTypes.${d.docType}`);
 </script>
 

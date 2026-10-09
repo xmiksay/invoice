@@ -48,14 +48,20 @@
   },
   "numberSeries": {
     "docTypes": {
-      "invoice": "Faktura",
-      "credit_note": "Dobropis",
-      "proforma": "Zálohová faktura",
-      "advance_tax_doc": "Daňový doklad k přijaté platbě",
+      "invoice": "Faktury",
+      "simplified": "Zjednodušené daňové doklady",
+      "proforma": "Zálohové faktury",
+      "credit_note": "Dobropisy",
+      "debit_note": "Vrubopisy",
+      "advance_tax_doc": "Daňové doklady k přijaté platbě",
+      "advance_credit_note": "Opravné daňové doklady k přijaté platbě",
       "received": "Přijaté faktury",
-      "received_credit_note": "Přijaté dobropisy",
+      "received_simplified": "Přijaté zjednodušené daňové doklady",
       "received_proforma": "Přijaté zálohové faktury",
-      "received_advance_tax_doc": "Přijaté daňové doklady k platbě"
+      "received_credit_note": "Přijaté dobropisy",
+      "received_debit_note": "Přijaté vrubopisy",
+      "received_advance_tax_doc": "Přijaté daňové doklady k platbě",
+      "received_advance_credit_note": "Přijaté opravné daňové doklady k platbě"
     },
     "pattern": "Vzor",
     "preview": "Náhled dalšího čísla",
@@ -71,6 +77,10 @@
       "yyyy": "rok čtyřmístně (2026)",
       "yy": "rok dvoumístně (26)",
       "n": "pořadové číslo doplněné nulami (0001)"
+    },
+    "groups": {
+      "issued": "Vydané doklady",
+      "received": "Přijaté doklady"
     }
   },
   "categories": {

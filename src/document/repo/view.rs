@@ -137,6 +137,7 @@ pub fn document(full: Full, today: NaiveDate) -> Result<Document, AppError> {
             _ => None,
         },
         settled,
+        correction_block: full.correction_block.map(str::to_string),
         original: match (
             d.original_sha256.clone(),
             d.original_size,

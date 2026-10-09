@@ -40,12 +40,24 @@ async fn series_are_seeded_with_preview() {
         vec![
             (json!("invoice"), json!("{YYYY}{NNNN}"), json!([])),
             (json!("credit_note"), json!("D{YYYY}{NNNN}"), json!([])),
+            (json!("debit_note"), json!("V{YYYY}{NNNN}"), json!([])),
             (json!("proforma"), json!("Z{YYYY}{NNNN}"), json!([])),
             (json!("advance_tax_doc"), json!("DP{YYYY}{NNNN}"), json!([])),
+            (
+                json!("advance_credit_note"),
+                json!("OP{YYYY}{NNNN}"),
+                json!([])
+            ),
+            (json!("simplified"), json!("ZD{YYYY}{NNNN}"), json!([])),
             (json!("received"), json!("P{YYYY}{NNNN}"), json!([])),
             (
                 json!("received_credit_note"),
                 json!("PD{YYYY}{NNNN}"),
+                json!([])
+            ),
+            (
+                json!("received_debit_note"),
+                json!("PV{YYYY}{NNNN}"),
                 json!([])
             ),
             (
@@ -56,6 +68,16 @@ async fn series_are_seeded_with_preview() {
             (
                 json!("received_advance_tax_doc"),
                 json!("PDP{YYYY}{NNNN}"),
+                json!([])
+            ),
+            (
+                json!("received_advance_credit_note"),
+                json!("POP{YYYY}{NNNN}"),
+                json!([])
+            ),
+            (
+                json!("received_simplified"),
+                json!("PZD{YYYY}{NNNN}"),
                 json!([])
             ),
         ]

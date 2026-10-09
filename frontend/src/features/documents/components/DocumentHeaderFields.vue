@@ -6,6 +6,7 @@ import FormField from "@/components/form/FormField.vue";
 import { reasonKey } from "@/lib/formErrors";
 import { LOCALES } from "@/i18n";
 import type { BankAccount } from "@/features/settings/types";
+import { isCorrection } from "../docTypes";
 import { changeCurrency, type DocumentDraft } from "../form";
 import { formatNumber } from "../format";
 import { PAYMENT_METHODS, VAT_MODES, type ExchangeRate } from "../types";
@@ -25,8 +26,8 @@ const { t, locale } = useI18n();
 
 const isCzk = computed(() => model.value.currency === "CZK");
 const isProforma = computed(() => model.value.docType === "proforma");
-/** A native credit note keeps its invoice's currency and rate; an imported one is entered as printed. */
-const isCreditNote = computed(() => model.value.docType === "credit_note" && !model.value.imported);
+/** A native correction keeps its original's currency, VAT mode and rate; an imported one is entered as printed. */
+const lockedCorrection = computed(() => isCorrection(model.value.docType) && !model.value.imported);
 const accounts = computed(() => props.bankAccounts.filter((a) => a.currency === model.value.currency));
 const accountLabel = (a: BankAccount) => [a.label, a.accountNumber ?? a.iban].filter(Boolean).join(" — ");
 
@@ -50,9 +51,9 @@ const cls = (field: string) => ({ "input-error": props.errors[field] });
     </FormField>
 
     <FormField :label="t('documents.fields.currency')" for="doc-currency" :error="errors.currency">
-      <input id="doc-currency" :value="model.currency" maxlength="3" class="input uppercase" :class="cls('currency')" autocomplete="off" :disabled="isCreditNote" @change="onCurrency" />
+      <input id="doc-currency" :value="model.currency" maxlength="3" class="input uppercase" :class="cls('currency')" autocomplete="off" :disabled="lockedCorrection" @change="onCurrency" />
     </FormField>
-    <div v-if="!isCzk && isCreditNote" class="space-y-1 sm:col-span-2" data-test="original-rate">
+    <div v-if="!isCzk && lockedCorrection" class="space-y-1 sm:col-span-2" data-test="original-rate">
       <span class="text-sm font-medium">{{ t("documents.fields.exchangeRate") }}</span>
       <p class="py-2 text-sm">
         {{ model.exchangeRate ? formatNumber(model.exchangeRate, locale, 6) : "—" }}
@@ -81,7 +82,7 @@ const cls = (field: string) => ({ "input-error": props.errors[field] });
     </div>
 
     <FormField :label="t('documents.fields.vatMode')" for="doc-vatMode" :error="errors.vatMode">
-      <select id="doc-vatMode" v-model="model.vatMode" class="input" :disabled="isCreditNote">
+      <select id="doc-vatMode" v-model="model.vatMode" class="input" :disabled="lockedCorrection">
         <option v-for="m in VAT_MODES" :key="m" :value="m">{{ t(`documents.vatMode.${m}`) }}</option>
       </select>
     </FormField>

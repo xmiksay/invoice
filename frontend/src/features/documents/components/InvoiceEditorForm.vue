@@ -9,6 +9,7 @@ import { reasonKey } from "@/lib/formErrors";
 import type { Contact } from "@/features/contacts/types";
 import MetadataFields from "@/features/metadata/components/MetadataFields.vue";
 import type { Category } from "@/features/settings/types";
+import { docSign, isCorrection } from "../docTypes";
 import { applyContact, defaultVatRate, toComputeRequest, toInput, validateDocument, type DocumentDraft, type DraftContext } from "../form";
 import { formatMoney } from "../format";
 import { enforceVatMode, splitLineErrors } from "../lines";
@@ -20,6 +21,7 @@ import ContactPicker from "./ContactPicker.vue";
 import DocumentHeaderFields from "./DocumentHeaderFields.vue";
 import LineEditor from "./LineEditor.vue";
 import RelatedDocumentPicker from "./RelatedDocumentPicker.vue";
+import SimplifiedLimitNote from "./SimplifiedLimitNote.vue";
 import TotalsPanel from "./TotalsPanel.vue";
 
 const props = defineProps<{
@@ -37,12 +39,12 @@ const errorText = useErrorText();
 const store = useDocumentStore();
 const draft = ref<DocumentDraft>(props.initial);
 const { fieldErrors, error, submitting, submit } = useFormSubmit();
-const isCreditNote = computed(() => draft.value.docType === "credit_note");
-/** A native credit note keeps its invoice's customer, currency and rate. */
-const lockedCreditNote = computed(() => isCreditNote.value && !draft.value.imported);
+const correction = computed(() => isCorrection(draft.value.docType));
+/** A native correction keeps its original's customer, currency and rate. */
+const lockedCorrection = computed(() => correction.value && !draft.value.imported);
 const indicative = useIndicativeRate(() => ({
-  // A native credit note keeps its invoice's rate, so there is nothing to look up.
-  currency: lockedCreditNote.value ? "" : draft.value.currency,
+  // A native correction keeps its original's rate, so there is nothing to look up.
+  currency: lockedCorrection.value ? "" : draft.value.currency,
   date: draft.value.taxPointDate || draft.value.issueDate,
 }));
 const compute = useCompute(() => toComputeRequest(draft.value, indicative.rate.value?.rate ?? null, props.docId));
@@ -127,11 +129,18 @@ async function onSubmit() {
     </section>
 
     <section class="card">
-      <ContactPicker :contact-id="draft.contactId" :error="headerErrors.contactId" :locked="lockedCreditNote" @pick="onPick" @clear="draft.contactId = null" />
+      <ContactPicker
+        :contact-id="draft.contactId"
+        :error="headerErrors.contactId"
+        :locked="lockedCorrection"
+        :label="draft.docType === 'simplified' ? t('documents.editor.customerOptional') : undefined"
+        @pick="onPick"
+        @clear="draft.contactId = null"
+      />
     </section>
 
-    <section v-if="isCreditNote" class="card">
-      <FormField :label="t('documents.fields.correctionReason')" for="doc-correctionReason" :error="headerErrors.correctionReason" :hint="t('documents.editor.creditNoteHint')">
+    <section v-if="correction" class="card">
+      <FormField :label="t('documents.fields.correctionReason')" for="doc-correctionReason" :error="headerErrors.correctionReason" :hint="t(`documents.editor.correctionHint.${draft.docType}`)">
         <textarea id="doc-correctionReason" v-model="draft.correctionReason" rows="2" maxlength="500" class="input" :class="{ 'input-error': headerErrors.correctionReason }" />
       </FormField>
     </section>
@@ -168,11 +177,13 @@ async function onSubmit() {
     <TotalsPanel
       :totals="compute.result.value?.totals ?? null"
       :currency="draft.currency"
-      :sign="isCreditNote ? -1 : 1"
+      :sign="docSign(draft.docType)"
       :exchange-rate="draft.exchangeRate || indicative.rate.value?.rate || null"
       :pending="compute.pending.value"
       :error="computeError"
     />
+
+    <SimplifiedLimitNote :doc-type="draft.docType" :currency="draft.currency" :totals="compute.result.value?.totals" />
 
     <section class="card grid gap-4 sm:grid-cols-2">
       <FormField :label="t('documents.fields.headerNote')" for="doc-headerNote" :error="headerErrors.headerNote">

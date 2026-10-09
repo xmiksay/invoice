@@ -3,26 +3,38 @@
     "invoice": "Received invoice",
     "proforma": "Received proforma",
     "credit_note": "Received credit note",
-    "advance_tax_doc": "Received advance tax document"
+    "advance_tax_doc": "Received advance payment tax document",
+    "debit_note": "Received debit note",
+    "advance_credit_note": "Received advance payment correction",
+    "simplified": "Received simplified tax document"
   },
   "newTitle": {
     "invoice": "Record an invoice",
     "proforma": "Record a proforma",
     "credit_note": "Record a credit note",
-    "advance_tax_doc": "Record an advance tax document"
+    "advance_tax_doc": "Record an advance payment tax document",
+    "debit_note": "Record a debit note",
+    "advance_credit_note": "Record an advance payment correction",
+    "simplified": "Record a simplified document"
   },
   "editTitle": {
     "invoice": "Edit received invoice",
     "proforma": "Edit received proforma",
     "credit_note": "Edit received credit note",
-    "advance_tax_doc": "Edit received advance tax document"
+    "advance_tax_doc": "Edit received advance payment tax document",
+    "debit_note": "Edit received debit note",
+    "advance_credit_note": "Edit received advance payment correction",
+    "simplified": "Edit received simplified document"
   },
   "list": {
     "title": {
       "invoice": "Received invoices",
       "proforma": "Received proformas",
       "credit_note": "Received credit notes",
-      "advance_tax_doc": "Received advance tax documents"
+      "advance_tax_doc": "Received advance payment tax documents",
+      "debit_note": "Received debit notes",
+      "advance_credit_note": "Received advance payment corrections",
+      "simplified": "Received simplified tax documents"
     },
     "empty": "No received documents of this type yet.",
     "searchPlaceholder": "Search by number, supplier number, supplier or VS"

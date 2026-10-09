@@ -11,7 +11,7 @@ use crate::app::AppState;
 use crate::contact::handlers::dto::ListQuery as Paging;
 use crate::document::line::Status;
 use crate::document::repo::{
-    advance_sources, context, query, received as received_repo, view, write,
+    advance_sources, context, ddpp_correction, query, received as received_repo, view, write,
 };
 use crate::error::{AppError, ErrorBody};
 use crate::extract::{ApiJson, ApiPath, ApiQuery, from_value};
@@ -180,12 +180,14 @@ pub async fn compute(
         },
         None => None,
     };
+    let exact = ddpp_correction::basis_for(&state.db, existing.as_ref()).await?;
     let ctx = ComputeCtx {
         vat_payer: company.vat_payer,
         default_rate: context::default_vat_rate(&state.db).await?,
         default_locale: company.default_locale,
         existing,
         advances: advance_sources::load(&state.db, &input.advance_ids()).await?,
+        exact,
     };
     let (lines, evaluated) = input.validate(&ctx)?;
     Ok(Json(Computed {

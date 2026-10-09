@@ -41,17 +41,28 @@ export interface VatRate {
 }
 export type VatRateInput = Omit<VatRate, "id">;
 
-/** Number-series keys; the `received*` keys are the series of received documents (1e). */
-export const DOC_TYPES = [
+/** Number-series keys of issued documents, in display order. */
+export const ISSUED_SERIES = [
   "invoice",
-  "credit_note",
+  "simplified",
   "proforma",
+  "credit_note",
+  "debit_note",
   "advance_tax_doc",
-  "received",
-  "received_credit_note",
-  "received_proforma",
-  "received_advance_tax_doc",
+  "advance_credit_note",
 ] as const;
+/** The series of received documents (1e, 1f-a); `received` is the received invoices'. */
+export const RECEIVED_SERIES = [
+  "received",
+  "received_simplified",
+  "received_proforma",
+  "received_credit_note",
+  "received_debit_note",
+  "received_advance_tax_doc",
+  "received_advance_credit_note",
+] as const;
+/** All fourteen number-series keys. */
+export const DOC_TYPES = [...ISSUED_SERIES, ...RECEIVED_SERIES] as const;
 export type DocType = (typeof DOC_TYPES)[number];
 
 export interface NumberCounter {

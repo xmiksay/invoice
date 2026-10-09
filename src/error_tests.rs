@@ -81,6 +81,11 @@ fn maps_variants_to_status_and_code() {
             "category_in_use",
         ),
         (AppError::NumberTaken, StatusCode::CONFLICT, "number_taken"),
+        (
+            AppError::ExceedsOriginal,
+            StatusCode::CONFLICT,
+            "exceeds_original",
+        ),
         (AppError::PdfMissing, StatusCode::NOT_FOUND, "pdf_missing"),
         (
             AppError::TooLarge,
