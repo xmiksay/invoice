@@ -148,3 +148,16 @@ fn fixed_columns_are_unique() {
     assert_eq!(all.len(), n);
     assert!(all.iter().all(|c| !matches!(rate_column(c), Some(Ok(_)))));
 }
+
+#[test]
+fn formula_guard_round_trips() {
+    for s in [
+        "=1+1", "+420", "-5", "@x", "\tx", "\rx", "'=x", "''+x", "'", "'abc", "abc", "", "a=b",
+    ] {
+        assert_eq!(unguard_text(&guard_text(s)), s, "{s:?}");
+    }
+    assert_eq!(guard_text("=1+1"), "'=1+1");
+    assert_eq!(guard_text("'abc"), "'abc");
+    assert_eq!(guard_text("Firma"), "Firma");
+    assert_eq!(unguard_text("'abc"), "'abc");
+}

@@ -5,7 +5,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::columns::Columns;
-use super::format::{parse_date, parse_decimal};
+use super::format::{parse_date, parse_decimal, unguard_text};
 use super::read::Cell;
 use crate::import::model::Code;
 
@@ -50,7 +50,7 @@ pub struct Row<'a> {
 pub fn text_of(cell: &Cell) -> Option<String> {
     match cell {
         Cell::Empty => None,
-        Cell::Text(t) => Some(t.trim().to_string()).filter(|t| !t.is_empty()),
+        Cell::Text(t) => Some(unguard_text(t.trim()).to_string()).filter(|t| !t.is_empty()),
         Cell::Number(n) => Some(n.normalize().to_string()),
         Cell::Date(d) => Some(d.to_string()),
     }
@@ -157,5 +157,13 @@ mod tests {
             Some("12345679".into())
         );
         assert_eq!(text_of(&Cell::Text("  ".into())), None);
+        let t = |s: &str| text_of(&Cell::Text(s.into()));
+        assert_eq!(t("'=SUM(A1)"), Some("=SUM(A1)".into()));
+        assert_eq!(t("''-x"), Some("'-x".into()));
+        assert_eq!(
+            t("'abc"),
+            Some("'abc".into()),
+            "only before a formula start"
+        );
     }
 }

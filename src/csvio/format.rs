@@ -195,6 +195,34 @@ pub fn parse_bool(s: &str) -> Option<bool> {
     }
 }
 
+/// Leading characters a spreadsheet may evaluate as a formula.
+const FORMULA_START: [char; 6] = ['=', '+', '-', '@', '\t', '\r'];
+
+/// Starts like a formula, possibly behind guards already (so a text that
+/// itself begins with `'=` survives the round trip).
+fn needs_guard(s: &str) -> bool {
+    s.trim_start_matches('\'').starts_with(FORMULA_START)
+}
+
+/// A free-text cell as written: one `'` before anything a spreadsheet would
+/// run as a formula (CSV injection). Amounts and dates are never guarded.
+pub fn guard_text(s: &str) -> String {
+    if needs_guard(s) {
+        format!("'{s}")
+    } else {
+        s.to_string()
+    }
+}
+
+/// The inverse of [`guard_text`] on import: one leading `'` is dropped when
+/// a formula start follows.
+pub fn unguard_text(s: &str) -> &str {
+    match s.strip_prefix('\'') {
+        Some(rest) if needs_guard(rest) => rest,
+        _ => s,
+    }
+}
+
 /// An amount as written: 2 dp, decimal comma, no thousands separators.
 pub fn format_amount(x: Decimal) -> String {
     // A negated zero would print as `-0.00`.

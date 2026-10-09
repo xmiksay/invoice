@@ -260,3 +260,44 @@ Mapping
   2026. Categories are `Služby` (issued) and `Software` (received). The parties are IČO 12345679 / 87654326.
   `Content-Type: text/csv; charset=utf-8`. The sample imports back without errors for any company whose IČO
   differs from the sample parties.
+
+### Export (2c, as implemented)
+Additive details settled during the Phase 2c backend. No field of the contract changed shape.
+
+- **Statuses:** only `issued` documents are exported (the status filter of the list still applies, so
+  `status=draft` / `status=cancelled` give a header-only file).
+- **List export `direction`:** absent → 422 `direction: required`; anything but `issued` / `received` → `invalid`
+  (`both` is accountant-only). Other filters behave exactly as in `GET /api/documents`.
+- **Accountant query:** `from` / `to` absent or not `YYYY-MM-DD` → that field `invalid`; `from > to` or more than
+  366 days apart → both `from` and `to` `invalid`; `direction` other than `issued` / `received` / `both` →
+  `direction: invalid`. Errors of several fields are reported together.
+- **Order:** direction, then the tax date as the accountant period uses it (DUZP, received: else the received
+  date), else the issue date, then `number_year`, `number_seq` (allocated numbers in series order), then the number
+  text (imported numbers), then id.
+- **One snapshot:** the id list, the rate columns of the header and every row are read in one read-only
+  `REPEATABLE READ` transaction that lives in the streamed body (committed after the last chunk), so documents
+  edited, cancelled or re-dated meanwhile are exported as they were when the export started, and no recap rate is
+  ever missing from the header.
+- **Rows** are loaded and written 500 documents at a time; the header goes out first. A document whose row cannot
+  be built (an undecodable counterparty snapshot, an unknown stored value, a foreign recap row with neither a
+  stored CZK amount nor an exchange rate) is **skipped and logged** with its id; the rest of the file is written.
+  A database failure after the header aborts the body (logged) — the client sees a truncated download.
+- **Formula guard (CSV injection):** a free-text cell (`number`, `supplier_number`, `related_number`, the
+  counterparty cells, `variable_symbol`, `category`, `note`) that starts with `=`, `+`, `-`, `@`, TAB or CR —
+  also behind leading `'`s — is written with one `'` in front. Amount, date, rate and code cells are never
+  guarded. The import (2b, CSV and XLSX text cells) drops one leading `'` when such a character follows (after
+  further `'`s), so guarded cells import back unchanged; a hand-written `'=x` imports as `=x`.
+- **Values:**
+  - `total` = stored `total` + `rounding` (= `payable` without advance deductions); `total_czk` of a CZK document =
+    that `total`.
+  - Foreign recap rows without a stored `baseCzk` / `vatCzk` (none are written today) fall back to
+    `round2(amount × rate)`; without a rate either the document is skipped (above).
+  - `paid_date`: payments ordered by date (then creation); the first one at which their running sum reaches
+    `payable`. A document settled without any payment (payable 0, e.g. fully covered by advances) → empty.
+  - `related_number` is the document `relatedDocumentId` points at, whatever its type (a final invoice → its
+    proforma; a DDPP → its proforma).
+  - The counterparty address cells come from the snapshot; `counterparty_country` is written for every party.
+- **Headers:** both exports and `GET /api/import/csv/sample` send `Cache-Control: no-store` (shared download
+  helper, as the ISDOC export).
+- **Round trip:** besides the received internal number (allocated anew), an empty `received_date` comes back as
+  the tax date and an empty `due_date` as the issue date (the import defaults).

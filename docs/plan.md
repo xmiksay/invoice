@@ -147,6 +147,8 @@ counterparty + IČO/DIČ, currency, rate, base/VAT per rate in CZK, total, paid,
   list (current filter) and an "accountant" export by tax-date period for both directions in one file; drafts and
   cancelled never exported, proformas only through a list filter that includes them. Contract: the Export section
   of [`docs/api/csv.md`](api/csv.md).
+- As implemented: `src/csvio/export*.rs` on the 2b writer (`write::head` + `write::body` chunks), streamed 500
+  documents at a time; details in the csv.md Clarifications (Export).
 
 ### Phase 3 — accounting & MCP
 Pohoda XML (Stormware) and Money S3 XML export of issued + received invoices per

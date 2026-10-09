@@ -9,7 +9,7 @@ use crate::error::{AppError, unique_violation};
 use crate::settings::entity::category::{self, ActiveModel, Column, Entity};
 use crate::settings::handlers::categories::CategoryData;
 
-pub async fn list(db: &DatabaseConnection) -> Result<Vec<category::Model>, AppError> {
+pub async fn list<C: ConnectionTrait>(db: &C) -> Result<Vec<category::Model>, AppError> {
     Ok(Entity::find()
         .order_by_asc(Column::Kind)
         .order_by_asc(Column::Position)

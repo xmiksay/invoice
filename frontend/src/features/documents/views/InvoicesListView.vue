@@ -3,6 +3,8 @@ import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { useAction } from "@/composables/useAction";
+import AccountantExportButton from "@/features/csvExport/components/AccountantExportButton.vue";
+import CsvExportButton from "@/features/csvExport/components/CsvExportButton.vue";
 import IsdocExportButton from "@/features/isdoc/components/IsdocExportButton.vue";
 import { useCategoriesStore } from "@/features/settings/stores";
 import DocTypeTabs from "../components/DocTypeTabs.vue";
@@ -51,6 +53,8 @@ function open(id: string) {
       <h1 class="text-2xl font-semibold">{{ t(`documents.list.title.${docType}`) }}</h1>
       <div class="flex flex-wrap gap-2">
         <IsdocExportButton :query="store.query" />
+        <CsvExportButton :query="store.query" />
+        <AccountantExportButton />
         <RouterLink :to="{ name: 'isdoc-import' }" class="btn" data-test="import-isdoc">{{ t("isdoc.import.action") }}</RouterLink>
         <RouterLink :to="{ name: 'csv-import' }" class="btn" data-test="import-csv">{{ t("csvImport.import.action") }}</RouterLink>
         <RouterLink :to="importLink" class="btn" data-test="import-document">{{ t("documents.import.action") }}</RouterLink>

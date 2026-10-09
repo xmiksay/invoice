@@ -179,6 +179,18 @@ pub(crate) fn filtered(q: &ListQuery, term: Option<&str>, today: NaiveDate) -> S
     Entity::find().filter(cond)
 }
 
+/// Every document the list filter `q` matches, unpaged (`limit` / `offset`
+/// ignored): the base of the bulk exports (ISDOC, CSV).
+pub fn export_select(q: &ListQuery, today: NaiveDate) -> Select<Entity> {
+    let (term, _, _) = crate::contact::handlers::dto::ListQuery {
+        q: q.q.clone(),
+        limit: None,
+        offset: None,
+    }
+    .normalized();
+    filtered(q, term.as_deref(), today)
+}
+
 /// One page of matching documents and the total match count, ordered
 /// `issueDate desc, number desc nulls first, createdAt desc`.
 pub async fn list(

@@ -1,0 +1,23 @@
+{
+  "preparing": "Připravuji export…",
+  "tooMany": "Odpovídá víc než 10 000 dokladů. Zužte filtr nebo období.",
+  "list": {
+    "action": "Exportovat CSV",
+    "hint": "Všechny doklady aktuální záložky a filtru kromě konceptů a stornovaných. Soubor lze znovu naimportovat."
+  },
+  "accountant": {
+    "action": "Export pro účetní",
+    "title": "Export pro účetní",
+    "intro": "Vydané a přijaté daňové doklady (bez zálohových faktur), jejichž DUZP spadá do období, v jednom souboru CSV. Koncepty a stornované doklady se neexportují.",
+    "from": "Od",
+    "to": "Do",
+    "periodHint": "Podle DUZP (u přijatých DUZP, jinak data přijetí); nejvýše 366 dní.",
+    "direction": "Doklady",
+    "directions": {
+      "both": "Vydané i přijaté",
+      "issued": "Jen vydané",
+      "received": "Jen přijaté"
+    },
+    "download": "Stáhnout CSV"
+  }
+}

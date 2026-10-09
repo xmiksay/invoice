@@ -1,13 +1,13 @@
 //! Rows → CSV as the export writes it: `;`, UTF-8 with BOM, CRLF, RFC 4180
-//! quoting, decimal comma, `dd.mm.yyyy`. Pure. The sample file uses it now;
-//! the accountant export (2c) will too.
+//! quoting, decimal comma, `dd.mm.yyyy`. Pure. Used by the sample file and
+//! the export (2c).
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::format::{
     AFTER_RATES, BEFORE_RATES, base_column, format_amount, format_bool, format_date, format_rate,
-    vat_column,
+    guard_text, vat_column,
 };
 use crate::document::line::VatMode;
 use crate::import::model::Party;
@@ -75,13 +75,14 @@ impl OutRow {
         let k = Decimal::from(self.doc_type.sign());
         let amount = |x: Decimal| format_amount(x * k);
         let party = self.counterparty.as_ref();
-        let pf = |g: fn(&Party) -> String| opt(party, g);
+        let pf = |g: fn(&Party) -> String| guard_text(&opt(party, g));
+        let text = |x: &Option<String>| guard_text(x.as_deref().unwrap_or_default());
         let mut c = vec![
             self.direction.to_string(),
             self.doc_type.as_str().to_string(),
-            self.number.clone().unwrap_or_default(),
-            self.supplier_number.clone().unwrap_or_default(),
-            self.related_number.clone().unwrap_or_default(),
+            text(&self.number),
+            text(&self.supplier_number),
+            text(&self.related_number),
             format_date(self.issue_date),
             opt(self.tax_date, format_date),
             opt(self.due_date, format_date),
@@ -109,26 +110,44 @@ impl OutRow {
             amount(self.total),
             opt(self.total_czk, amount),
             opt(self.paid_date, format_date),
-            self.variable_symbol.clone().unwrap_or_default(),
+            text(&self.variable_symbol),
             opt(self.vat_deductible, |b| format_bool(b).to_string()),
-            self.category.clone().unwrap_or_default(),
-            self.note.clone().unwrap_or_default(),
+            text(&self.category),
+            text(&self.note),
         ]);
         c
     }
 }
 
-/// The whole file: BOM, header, rows.
-pub fn write(rates: &[Decimal], rows: &[OutRow]) -> anyhow::Result<Vec<u8>> {
+fn records(
+    start: Vec<u8>,
+    records: impl IntoIterator<Item = Vec<String>>,
+) -> anyhow::Result<Vec<u8>> {
     let mut w = csv::WriterBuilder::new()
         .delimiter(b';')
         .terminator(csv::Terminator::CRLF)
-        .from_writer(b"\xEF\xBB\xBF".to_vec());
-    w.write_record(header(rates))?;
-    for r in rows {
-        w.write_record(r.cells(rates))?;
+        .from_writer(start);
+    for r in records {
+        w.write_record(r)?;
     }
     w.into_inner().map_err(|e| anyhow::anyhow!("{e}"))
+}
+
+/// The start of the file: BOM and header.
+pub fn head(rates: &[Decimal]) -> anyhow::Result<Vec<u8>> {
+    records(b"\xEF\xBB\xBF".to_vec(), [header(rates)])
+}
+
+/// Rows only, to follow [`head`] (the export streams them in chunks).
+pub fn body(rates: &[Decimal], rows: &[OutRow]) -> anyhow::Result<Vec<u8>> {
+    records(Vec::new(), rows.iter().map(|r| r.cells(rates)))
+}
+
+/// The whole file: BOM, header, rows.
+pub fn write(rates: &[Decimal], rows: &[OutRow]) -> anyhow::Result<Vec<u8>> {
+    let mut out = head(rates)?;
+    out.extend(body(rates, rows)?);
+    Ok(out)
 }
 
 fn date(y: i32, m: u32, d: u32) -> NaiveDate {
@@ -287,5 +306,27 @@ mod tests {
         let bytes = write(&[d("21")], &[r]).expect("write");
         let text = String::from_utf8(bytes).expect("utf-8");
         assert!(text.contains(";\"a; \"\"b\"\"\nc\"\r\n"), "{text}");
+    }
+
+    #[test]
+    fn formula_cells_are_guarded() {
+        let mut r = sample_rows().remove(2);
+        r.note = Some("=HYPERLINK(\"x\")".into());
+        r.category = Some("@cat".into());
+        r.counterparty = r.counterparty.map(|p| Party {
+            name: "+420 Firma".into(),
+            city: "'-x".into(),
+            ..p
+        });
+        let bytes = write(&[d("21")], &[r]).expect("write");
+        let text = String::from_utf8(bytes).expect("utf-8");
+        let row = text.split("\r\n").nth(1).expect("row");
+        assert!(row.contains(";'+420 Firma;"), "{row}");
+        assert!(row.contains(";''-x;"), "{row}");
+        assert!(row.contains(";'@cat;\"'=HYPERLINK(\"\"x\"\")\""), "{row}");
+        assert!(
+            row.contains(";-1000,00;-210,00;"),
+            "amounts stay numbers: {row}"
+        );
     }
 }
