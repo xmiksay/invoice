@@ -161,6 +161,10 @@ Order (3 grill): 3a MCP → 3b Pohoda XML → 3c Money S3 XML, one PR each.
   MCP — results carry `pdfUrl` for a REST download with the same token. Contract: [`docs/api/mcp.md`](api/mcp.md).
 - 3b / 3c (both programs are used): summary per VAT rate in CZK (no lines), like the CSV export; accounting codes
   (předkontace, členění DPH) configurable per document type in Settings, empty by default for the accountant to fill.
+- 3b grill: Pohoda / Money are formats of the 2c accountant export (same period, direction and document set: no
+  proformas; summary per VAT rate in CZK, no lines); DDPPs and their corrections are exported as advance tax
+  documents; accounting codes per direction × document type in Settings → Accounting, empty by default.
+  Contract: [`docs/api/accounting.md`](api/accounting.md).
 
 ## Out of scope (for now)
 Deployment manifests, VAT return / control statement XML (EPO), automatic payment

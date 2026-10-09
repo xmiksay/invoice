@@ -30,6 +30,7 @@ Later phases add more codes (`document_locked`, `invalid_state`, `cnb_unavailabl
 | [email.md](email.md) | SMTP sending, MiniJinja templates, send log (2a) |
 | [csv.md](csv.md) | CSV / XLSX interchange format, import (2b) and export (2c) |
 | [mcp.md](mcp.md) | MCP endpoint: read tools, drafts, issue, payments (3a) |
+| [accounting.md](accounting.md) | accounting settings, Pohoda XML (3b) and Money S3 XML (3c) exports |
 
 Each part ends with a "Clarifications (as implemented)" section — the authoritative record of behaviour beyond the
 original contract. Keep every file under 400 lines; add a new part rather than growing one past the cap.
