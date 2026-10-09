@@ -192,7 +192,8 @@ pub async fn ensure_not_deducted<C: ConnectionTrait>(db: &C, id: Uuid) -> Result
 }
 
 /// Cancel the DDPP of `payment_id` (if any) before the payment is deleted;
-/// refused while an invoice deducts it (see [`ensure_not_deducted`]).
+/// refused while an invoice deducts it (see [`ensure_not_deducted`]) or a
+/// non-cancelled correction exists (`advance_in_use`).
 pub async fn cancel_for_payment(
     txn: &DatabaseTransaction,
     payment_id: Uuid,
@@ -209,6 +210,7 @@ pub async fn cancel_for_payment(
         return Ok(());
     }
     ensure_not_deducted(txn, doc.id).await?;
+    super::ddpp_correction::ensure_uncorrected(txn, doc.id).await?;
     let reason = match doc.locale.as_str() {
         "en" => "Payment deleted",
         _ => "Platba smazána",

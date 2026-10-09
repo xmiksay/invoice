@@ -66,7 +66,7 @@ function remove() {
           {{ t(`received.docTypes.${doc.docType}`) }}
           <span class="font-mono">{{ doc.number }}</span>
         </h1>
-        <StatusBadges :status="doc.status" :payment-state="doc.paymentState" :overdue="doc.overdue" :sign="doc.sign" direction="received" />
+        <StatusBadges :status="doc.status" :payment-state="doc.paymentState" :overdue="doc.overdue" :sign="doc.sign" :doc-type="doc.docType" direction="received" />
       </div>
 
       <div class="flex flex-wrap gap-2">

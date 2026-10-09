@@ -44,6 +44,7 @@ use utoipa::{Modify, OpenApi};
         crate::document::handlers::original::delete,
         crate::document::handlers::actions::settle,
         crate::document::handlers::actions::credit_note,
+        crate::document::handlers::actions::debit_note,
         crate::document::handlers::payments::list,
         crate::document::handlers::payments::create,
         crate::document::handlers::payments::delete,

@@ -14,6 +14,7 @@ import MetadataCard from "@/features/metadata/components/MetadataCard.vue";
 import PartiesCard from "../components/PartiesCard.vue";
 import PaymentsPanel from "../components/PaymentsPanel.vue";
 import RelatedDocumentsPanel from "../components/RelatedDocumentsPanel.vue";
+import SimplifiedLimitNote from "../components/SimplifiedLimitNote.vue";
 import StatusBadges from "../components/StatusBadges.vue";
 import TotalsPanel from "../components/TotalsPanel.vue";
 import { detailLocation, listLocation } from "../routes";
@@ -74,12 +75,14 @@ const hasPayments = computed(() => !isDraft.value && doc.value?.docType !== "adv
           {{ t(`documents.docTypes.${doc.docType}`) }}
           <span class="font-mono">{{ doc.number ?? t("documents.draftNumber") }}</span>
         </h1>
-        <StatusBadges :status="doc.status" :payment-state="doc.paymentState" :overdue="doc.overdue" :sent-at="doc.sentAt" :sign="doc.sign" :imported="doc.imported" />
+        <StatusBadges :status="doc.status" :payment-state="doc.paymentState" :overdue="doc.overdue" :sent-at="doc.sentAt" :sign="doc.sign" :doc-type="doc.docType" :imported="doc.imported" />
         <span v-if="doc.settled" class="badge !bg-green-100 !text-green-800 dark:!bg-green-900/50 dark:!text-green-300" data-test="settled-badge">
           {{ t("documents.detail.settled") }}
         </span>
       </div>
       <p v-if="doc.docType === 'advance_tax_doc' && !doc.imported" class="text-sm text-gray-600 dark:text-gray-400" data-test="ddpp-note">{{ t("documents.detail.ddppNote") }}</p>
+
+      <SimplifiedLimitNote :doc-type="doc.docType" :currency="doc.currency" :totals="doc.totals" />
 
       <DocumentActions :doc="doc" />
       <!-- An imported document is never rendered with our design: its PDF is the uploaded original. -->

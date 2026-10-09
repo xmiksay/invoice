@@ -51,7 +51,7 @@ describe("detail per document type", () => {
     const created = w.find('[data-test="ddpp-created"]');
     expect(created.text()).toContain("DP20260001");
     expect(created.find("a").attributes("href")).toBe("/invoices/dd1");
-    expect(w.find('[data-test="payment-ddpp"]').text()).toBe("Tax document DP20260001");
+    expect(w.find('[data-test="payment-ddpp"]').text()).toBe("Advance payment tax document DP20260001");
     expect(w.find('[data-test="related-child"]').text()).toContain("DP20260001");
   });
 
@@ -80,9 +80,9 @@ describe("detail per document type", () => {
     const { w } = await mountDetail("pf1");
     await w.find('[data-test="delete-payment"]').trigger("click");
     await flushPromises();
-    expect(confirm).toHaveBeenCalledWith("Delete this payment? Its tax document DP20260001 will be cancelled too.");
+    expect(confirm).toHaveBeenCalledWith("Delete this payment? Its advance payment tax document DP20260001 will be cancelled too.");
     expect(w.find('[data-test="payment-error"]').text()).toBe(
-      "The payment cannot be deleted: its tax document is already deducted by an issued final invoice.",
+      "The payment cannot be deleted: its advance payment tax document is already deducted by an issued final invoice.",
     );
   });
 
@@ -97,7 +97,7 @@ describe("detail per document type", () => {
     const { w } = await mountDetail("pf1");
     await w.find('[data-test="delete-payment"]').trigger("click");
     await flushPromises();
-    expect(w.find('[data-test="payment-error"]').text()).toContain("Remove the advance line from that draft first.");
+    expect(w.find('[data-test="payment-error"]').text()).toContain("Remove the advance line from that draft");
     expect(w.find('[data-test="blocking-draft"]').attributes("href")).toBe("/invoices/inv9");
   });
 
@@ -187,7 +187,7 @@ describe("detail per document type", () => {
       "GET /api/settings/custom-fields": [],
     });
     const { w } = await mountDetail("dd1");
-    expect(w.find("h1").text()).toContain("Tax document for a received payment");
+    expect(w.find("h1").text()).toContain("Advance payment tax document");
     for (const action of ["cancel", "credit-note", "settle", "edit", "issue", "delete"]) expect(w.find(`[data-test="${action}"]`).exists()).toBe(false);
     await w.find('[data-test="mark-sent"]').trigger("click");
     await flushPromises();

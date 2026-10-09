@@ -3,12 +3,13 @@ import { collectErrors, nullIfEmpty, textRule } from "@/lib/formErrors";
 import type { Contact } from "@/features/contacts/types";
 import { toMetadataDraft, toMetadataInput, validateMetadata, type MetadataDraft } from "@/features/metadata/metadata";
 import type { BankAccount, Company, CustomField, VatRate } from "@/features/settings/types";
+import { isCorrection } from "./docTypes";
 import { toLineDraft, toWireLine, type LineDraft } from "./lines";
 import type { ComputeRequest, Document, DocumentInput, EditableDocType, PaymentMethod, VatMode } from "./types";
 
 /** Editor form state; nullable wire strings are "" here. */
 export interface DocumentDraft {
-  /** Fixed for the life of a draft: a proforma has no tax point, a credit note keeps its invoice's rate. */
+  /** Fixed for the life of a draft: a proforma has no tax point, a correction keeps its original's rate. */
   docType: EditableDocType;
   contactId: string | null;
   issueDate: string;
@@ -29,7 +30,8 @@ export interface DocumentDraft {
   correctionReason: string;
   /**
    * Native: read-only, the proforma a final invoice settles (its non-payer advance line references it).
-   * Imported: picked by the user (DDPP / final invoice → proforma, credit note → invoice).
+   * Imported: picked by the user (DDPP / final invoice → proforma, credit / debit note → invoice or simplified,
+   * DDPP correction → DDPP).
    */
   relatedDocumentId: string | null;
   /** Manual import of an existing document; fixed for the life of the draft. */
@@ -77,7 +79,7 @@ export function defaultVatRate(rates: VatRate[], vatMode: VatMode): string {
 }
 
 /** Mirrors the server's create defaults so the form shows them before the first save. */
-/** Natively only invoices and proformas start empty; an import may be any type. */
+/** Natively only invoices, proformas and simplified documents start empty; an import may be any type. */
 export function newDocumentDraft(ctx: DraftContext, docType: EditableDocType = "invoice", imported = false): DocumentDraft {
   const { company, bankAccounts, today } = ctx;
   return {
@@ -183,7 +185,8 @@ export function validateDocument(d: DocumentDraft, fieldDefs: CustomField[] = []
     orderRef: textRule(d.orderRef, { max: 100 }),
     headerNote: textRule(d.headerNote, { max: 2000 }),
     footerNote: textRule(d.footerNote, { max: 2000 }),
-    correctionReason: d.docType === "credit_note" && textRule(d.correctionReason, { required: true, max: 500 }),
+    // An imported correction is entered as printed: no reason required.
+    correctionReason: isCorrection(d.docType) && textRule(d.correctionReason, { required: !d.imported, max: 500 }),
     number: d.imported && textRule(d.number, { required: true, max: 40 }),
   });
   Object.assign(errors, validateMetadata(d.meta, fieldDefs));
@@ -216,7 +219,7 @@ export function toInput(d: DocumentDraft, fieldDefs: CustomField[] = []): Docume
     headerNote: nullIfEmpty(d.headerNote),
     footerNote: nullIfEmpty(d.footerNote),
     roundTotal: d.roundTotal,
-    correctionReason: d.docType === "credit_note" ? nullIfEmpty(d.correctionReason) : null,
+    correctionReason: isCorrection(d.docType) ? nullIfEmpty(d.correctionReason) : null,
     imported: d.imported,
     number: d.imported ? d.number.trim() : null,
     // Natively the link is made by settle / credit note; only an import sets it itself.

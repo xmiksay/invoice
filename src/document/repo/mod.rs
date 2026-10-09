@@ -6,6 +6,7 @@ pub mod advance_sources;
 pub mod context;
 pub mod credit;
 pub mod ddpp;
+pub mod ddpp_correction;
 pub mod issue;
 pub mod lifecycle;
 pub mod lines;

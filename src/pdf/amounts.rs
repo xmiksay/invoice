@@ -257,11 +257,7 @@ pub fn build(i: &Input, l: &Labels, show_vat: bool) -> anyhow::Result<Amounts> {
     let f = Fmt {
         locale: i.locale,
         currency: i.currency,
-        sign: if i.doc_type == "credit_note" {
-            Decimal::NEGATIVE_ONE
-        } else {
-            Decimal::ONE
-        },
+        sign: Decimal::from(crate::document::handlers::dto::sign(i.doc_type)),
     };
     let has_discount = i
         .lines

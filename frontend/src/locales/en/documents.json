@@ -29,7 +29,7 @@
   "rateSource": {
     "cnb": "ČNB",
     "manual": "manual",
-    "original": "from the original invoice"
+    "original": "from the original document"
   },
   "fields": {
     "docType": "Document type",
@@ -68,11 +68,15 @@
       "invoice": "Invoices",
       "proforma": "Proforma invoices",
       "credit_note": "Credit notes",
-      "advance_tax_doc": "Tax documents for payments"
+      "advance_tax_doc": "Advance payment tax documents",
+      "debit_note": "Debit notes",
+      "advance_credit_note": "Advance payment corrections",
+      "simplified": "Simplified tax documents"
     },
     "new": {
       "invoice": "New invoice",
-      "proforma": "New proforma invoice"
+      "proforma": "New proforma invoice",
+      "simplified": "New simplified document"
     },
     "searchPlaceholder": "Search by number, customer or variable symbol",
     "status": "Status",
@@ -86,7 +90,10 @@
       "invoice": "No invoices yet.",
       "proforma": "No proforma invoices yet.",
       "credit_note": "No credit notes yet. Issue one from an invoice's detail.",
-      "advance_tax_doc": "No tax documents for payments yet. They are issued automatically when a proforma invoice is paid."
+      "advance_tax_doc": "No advance payment tax documents yet. They are issued automatically when a proforma invoice is paid.",
+      "debit_note": "No debit notes yet. Issue one from an invoice's or simplified document's detail.",
+      "advance_credit_note": "No advance payment corrections yet. Issue one from an advance payment tax document's detail.",
+      "simplified": "No simplified tax documents yet."
     },
     "noResults": "No documents match the filter.",
     "tabs": "Document type",
@@ -94,7 +101,10 @@
       "invoice": "Invoices",
       "proforma": "Proforma invoices",
       "credit_note": "Credit notes",
-      "advance_tax_doc": "Tax documents for payments"
+      "advance_tax_doc": "Advance payment tax documents",
+      "debit_note": "Debit notes",
+      "advance_credit_note": "Advance payment corrections",
+      "simplified": "Simplified documents"
     },
     "noPdf": "no PDF",
     "anyCategory": "All categories",
@@ -107,12 +117,16 @@
     "newTitle": {
       "invoice": "New invoice",
       "proforma": "New proforma invoice",
-      "credit_note": "New credit note"
+      "credit_note": "New credit note",
+      "simplified": "New simplified tax document"
     },
     "editTitle": {
       "invoice": "Edit invoice draft",
       "proforma": "Edit proforma invoice draft",
-      "credit_note": "Edit credit note draft"
+      "credit_note": "Edit credit note draft",
+      "debit_note": "Edit debit note draft",
+      "advance_credit_note": "Edit advance payment correction draft",
+      "simplified": "Edit simplified document draft"
     },
     "saveDraft": "Save draft",
     "newContact": "New contact",
@@ -128,8 +142,14 @@
     "indicativeRateLoading": "Loading the indicative ČNB rate…",
     "indicativeRateUnknown": "ČNB does not publish a rate for {currency} — enter a manual rate.",
     "indicativeRateUnavailable": "The ČNB rate cannot be loaded right now; it is fixed at issue, or enter a manual rate.",
-    "creditNoteHint": "Required before issue. Enter amounts as positive — the credit note subtracts them.",
-    "originalRate": "from the original invoice, fixed"
+    "originalRate": "from the original document, fixed",
+    "correctionHint": {
+      "credit_note": "Required before issue. Enter amounts as positive — the credit note subtracts them.",
+      "debit_note": "Required before issue. Enter the items the original document is increased by.",
+      "advance_credit_note": "Required before issue. Enter amounts as positive — the correction subtracts them from the advance payment tax document."
+    },
+    "customerOptional": "Customer (optional)",
+    "simplifiedLimit": "The total exceeds {limit}. A simplified tax document may only be issued up to this amount — consider a regular invoice."
   },
   "line": {
     "title": "Lines",
@@ -163,7 +183,7 @@
     "atLeastOneItem": "The document needs at least one item.",
     "advancePending": "Advance deduction (described by the server)",
     "advanceRecap": "{rate} %: base {base}, VAT {vat}",
-    "advanceNeedsStandard": "Deducting a tax document for a payment is only possible in the Standard VAT mode."
+    "advanceNeedsStandard": "Deducting an advance payment tax document is only possible in the Standard VAT mode."
   },
   "totals": {
     "title": "Summary",
@@ -188,7 +208,7 @@
     "issue": "Issue",
     "markSent": "Mark as sent",
     "markSentAgain": "Mark as sent again",
-    "cancel": "Cancel invoice",
+    "cancel": "Cancel document",
     "confirmIssue": "Issue the document? It can no longer be edited afterwards.",
     "confirmDelete": "Really delete this draft?",
     "cancelPrompt": "Reason for cancelling document {number} (optional):",
@@ -196,8 +216,24 @@
     "settle": "Issue final invoice",
     "settled": "Settled",
     "creditNote": "Issue credit note",
-    "creditNotePrompt": "Reason for the credit note to invoice {number}:",
-    "ddppNote": "Issued automatically for a payment received on a proforma invoice. It cannot be edited or cancelled — deleting the payment cancels it."
+    "creditNotePrompt": "Reason for the credit note to document {number}:",
+    "ddppNote": "Issued automatically for a payment received on a proforma invoice. It cannot be edited or cancelled — deleting the payment cancels it.",
+    "debitNote": "Issue debit note",
+    "debitNotePrompt": "Reason for the debit note to document {number}:",
+    "ddppCorrection": "Issue correction",
+    "ddppCorrectionPrompt": "Reason for correcting advance payment tax document {number}:",
+    "ddppCorrectionSettled": "The advance payment tax document is already deducted by an issued final invoice; it can no longer be corrected.",
+    "ddppCorrectionInUse": "The advance payment tax document is deducted by a draft final invoice. Remove the advance line from that draft first.",
+    "correctionInvalidState": "This document cannot be corrected.",
+    "ddppCancelSettled": "The advance payment tax document cannot be cancelled: it is already deducted by an issued final invoice.",
+    "ddppCancelInUse": "The advance payment tax document cannot be cancelled: a draft final invoice deducts it, or it has a correction (draft or issued). Remove the advance line from that draft, or delete / cancel the correction first.",
+    "correctionBlock": {
+      "advance_settled": "The advance payment tax document is already deducted by an issued final invoice.",
+      "advance_in_use": "The advance payment tax document is deducted by a draft final invoice.",
+      "fully_corrected": "The advance payment tax document is already fully corrected."
+    },
+    "ddppCorrectionCancelSettled": "The correction cannot be cancelled: its advance payment tax document is already deducted by an issued final invoice.",
+    "ddppCorrectionCancelInUse": "The correction cannot be cancelled: its advance payment tax document is deducted by a draft final invoice. Remove the advance line from that draft first."
   },
   "payments": {
     "title": "Payments",
@@ -209,9 +245,9 @@
     "confirmDelete": "Really delete this payment?",
     "addAnother": "Add another payment",
     "refundsTitle": "Refunds",
-    "confirmDeleteWithDdpp": "Delete this payment? Its tax document {number} will be cancelled too.",
-    "ddpp": "Tax document {number}",
-    "ddppCreated": "Tax document for the payment issued:",
+    "confirmDeleteWithDdpp": "Delete this payment? Its advance payment tax document {number} will be cancelled too.",
+    "ddpp": "Advance payment tax document {number}",
+    "ddppCreated": "Advance payment tax document issued:",
     "rate": "Payment exchange rate (CZK per unit)",
     "rateHint": "Optional. Empty = ČNB rate for the payment date.",
     "indicativeRate": "ČNB rate for {date}: {rate}",
@@ -221,8 +257,11 @@
     "invoice": "Invoice",
     "proforma": "Proforma invoice",
     "credit_note": "Credit note",
-    "advance_tax_doc": "Tax document for a received payment",
-    "received": "Received invoice"
+    "advance_tax_doc": "Advance payment tax document",
+    "received": "Received invoice",
+    "debit_note": "Debit note",
+    "advance_credit_note": "Advance payment correction",
+    "simplified": "Simplified tax document"
   },
   "related": {
     "title": "Related documents",
@@ -230,7 +269,8 @@
     "child": "Follow-up",
     "pick": {
       "proforma": "Follows the proforma",
-      "invoice": "Corrects the invoice"
+      "advance_tax_doc": "Corrects the advance payment tax document",
+      "invoiceOrSimplified": "Original document (invoice / simplified)"
     },
     "pickHint": "Informational link only; amounts are not recalculated.",
     "none": "No link",
@@ -256,7 +296,10 @@
       "invoice": "Import an invoice",
       "proforma": "Import a proforma",
       "credit_note": "Import a credit note",
-      "advance_tax_doc": "Import an advance tax document"
+      "advance_tax_doc": "Import an advance payment tax document",
+      "debit_note": "Import a debit note",
+      "advance_credit_note": "Import an advance payment correction",
+      "simplified": "Import a simplified tax document"
     }
   }
 }

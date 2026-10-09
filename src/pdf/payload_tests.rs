@@ -15,7 +15,8 @@ fn standard_invoice() {
     assert_eq!(p.supplier.lines, ["Hlavní 1", "110 00 Praha"]);
     assert_eq!(p.supplier.ids, ["IČO: 44444443"]);
     assert_eq!(p.supplier.contact, ["a@example.com"]);
-    assert_eq!(p.customer.lines.last().map(String::as_str), Some("Německo"));
+    let customer = p.customer.as_ref().expect("customer");
+    assert_eq!(customer.lines.last().map(String::as_str), Some("Německo"));
     let dates: Vec<&str> = p.dates.iter().map(|r| r.label.as_str()).collect();
     assert_eq!(
         dates,
@@ -138,10 +139,54 @@ fn legal_notes_and_missing_customer() {
     let mut i = f.input();
     i.vat_mode = VatMode::Exempt;
     i.customer = None;
+    // Issued without a customer snapshot → no block; a draft without a
+    // contact → an empty party.
+    assert_eq!(build(&i).expect("payload").customer, None);
+    i.status = Status::Draft;
     let p = build(&i).expect("payload");
     assert_eq!(p.legal_note.as_deref(), Some("Plnění osvobozené od DPH."));
-    assert_eq!(p.customer.title, "Odběratel");
-    assert!(p.customer.name.is_empty() && p.customer.lines.is_empty());
+    let customer = p.customer.expect("empty party");
+    assert_eq!(customer.title, "Odběratel");
+    assert!(customer.name.is_empty() && customer.lines.is_empty());
+    // A simplified document without a customer prints no customer block,
+    // nor do its corrections.
+    i.doc_type = "simplified";
+    assert_eq!(build(&i).expect("payload").customer, None);
+    i.doc_type = "credit_note";
+    i.parent_doc_type = Some("simplified");
+    assert_eq!(build(&i).expect("payload").customer, None);
+    i.status = Status::Issued;
+    assert_eq!(build(&i).expect("payload").customer, None);
+    i.status = Status::Draft;
+    i.parent_doc_type = Some("invoice");
+    assert!(
+        build(&i).expect("payload").customer.is_some(),
+        "draft keeps the empty party"
+    );
+}
+
+#[test]
+fn correction_references_and_titles() {
+    let f = standard();
+    let mut i = f.input();
+    i.doc_type = "debit_note";
+    i.parent_number = Some("ZD20260001");
+    i.parent_doc_type = Some("simplified");
+    i.correction_reason = Some("Doúčtování");
+    let p = build(&i).expect("payload");
+    assert_eq!(p.title, "Opravný daňový doklad – vrubopis");
+    assert_eq!(
+        p.reference.as_deref(),
+        Some(
+            "Opravný daňový doklad – vrubopis k zjednodušenému daňovému dokladu ZD20260001\nDůvod opravy: Doúčtování"
+        )
+    );
+    assert!(p.qr.is_some(), "a debit note is payable");
+    i.doc_type = "advance_credit_note";
+    i.parent_doc_type = Some("advance_tax_doc");
+    let p = build(&i).expect("payload");
+    assert_eq!(p.qr, None, "a refund has no QR");
+    assert!(p.totals.iter().any(|t| t.value.starts_with('-')), "negated");
 }
 
 #[test]

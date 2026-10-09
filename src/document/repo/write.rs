@@ -12,7 +12,6 @@ use crate::document::entity::document::{ActiveModel, Entity};
 use crate::document::handlers::input::DocumentData;
 use crate::document::line::Status;
 use crate::error::{AppError, number_violation};
-use crate::settings::doc_type::DocType;
 
 /// Header fields an edit sets, shared by create and update.
 fn apply(row: &mut ActiveModel, d: &DocumentData) {
@@ -23,10 +22,11 @@ fn apply(row: &mut ActiveModel, d: &DocumentData) {
     row.currency = Set(d.currency.clone());
     row.exchange_rate = Set(d.exchange_rate);
     row.exchange_rate_date = Set(None);
-    // A credit note's rate is copied from its invoice, never entered.
-    let source = match d.doc_type {
-        DocType::CreditNote if !d.imported => "original",
-        _ => "manual",
+    // A native correction's rate is copied from its original, never entered.
+    let source = if d.doc_type.is_correction() && !d.imported {
+        "original"
+    } else {
+        "manual"
     };
     row.exchange_rate_source = Set(d.exchange_rate.map(|_| source.to_string()));
     row.correction_reason = Set(d.correction_reason.clone());

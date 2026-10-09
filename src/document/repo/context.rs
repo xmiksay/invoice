@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use anyhow::Context as _;
 
-use super::{advance_sources, meta};
+use super::{advance_sources, ddpp_correction, meta};
 use crate::contact::entity::contact;
 use crate::document::defaults;
 use crate::document::entity::document;
@@ -57,10 +57,11 @@ pub async fn load(
         company: company::get(db).await?,
         contact,
         default_vat_rate: default_vat_rate(db).await?,
-        existing,
         advances: advance_sources::load(db, &input.advance_ids()).await?,
         related,
         meta: meta::load(db, ISSUED, input.category_id, doc).await?,
+        exact: ddpp_correction::basis_for(db, existing.as_ref()).await?,
+        existing,
     })
 }
 

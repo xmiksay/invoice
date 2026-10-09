@@ -39,6 +39,7 @@ fn ctx(apply_defaults: bool, contact: Option<contact::Model>) -> Context {
         advances: HashMap::new(),
         related: None,
         meta: Default::default(),
+        exact: None,
     }
 }
 
@@ -165,6 +166,7 @@ fn compute_input_defaults() {
         default_locale: "cs".into(),
         existing: None,
         advances: HashMap::new(),
+        exact: None,
     };
     let (lines, ev) = input.clone().validate(&cctx).expect("valid");
     assert_eq!(lines.len(), 1);
@@ -268,4 +270,41 @@ fn credit_note_keeps_the_original_rate_and_currency() {
     expected.add("vatMode", "invalid");
     expected.add("correctionReason", "too_long");
     assert_eq!(fields(usd.validate(&c).expect_err("e")), expected);
+}
+
+#[test]
+fn ddpp_correction_save_applies_the_exact_vat() {
+    use crate::document::correction::ExactBasis;
+    use crate::document::line::AdvanceRow;
+    let mut c = ctx(true, None);
+    c.existing = Some(existing(DocType::AdvanceCreditNote));
+    let d = |s: &str| s.parse::<Decimal>().expect("d");
+    c.exact = Some(ExactBasis {
+        ddpp: vec![AdvanceRow {
+            vat_rate: d("21"),
+            base: d("564.98"),
+            vat: d("118.64"),
+            base_czk: None,
+            vat_czk: None,
+        }],
+        credited: vec![],
+    });
+    let input = DocumentInput {
+        currency: Some("EUR".into()),
+        lines: vec![LineInput {
+            kind: "item".into(),
+            description: "Záloha".into(),
+            quantity: Some("1".into()),
+            unit_price: Some("564.98".into()),
+            vat_rate: Some("21".into()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let (_, ev) = input.validate(&c).expect("valid");
+    assert_eq!(
+        ev.totals.vat,
+        d("118.64"),
+        "not round2(564.98 × 21 %) = 118.65"
+    );
 }

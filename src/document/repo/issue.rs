@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use anyhow::Context as _;
 
-use super::{advance_sources, context, credit, lines, meta, query, view, write};
+use super::{advance_sources, context, credit, ddpp_correction, lines, meta, query, view, write};
 use crate::cnb::{self, CnbClient};
 use crate::contact::entity::contact;
 use crate::document::advance::{self, AdvanceCtx};
@@ -76,10 +76,12 @@ struct Prepared {
     doc_type: DocType,
     seen_updated_at: DateTime<FixedOffset>,
     lines: Vec<LineData>,
-    customer: contact::Model,
+    /// `None` only for a simplified document without a contact.
+    customer: Option<contact::Model>,
     bank: Option<bank_account::Model>,
     company: company::Model,
     rate: Rate,
+    params: Params,
     evaluated: Evaluated,
 }
 
@@ -99,7 +101,8 @@ pub async fn issue(
     let doc_type = context::existing(&doc)?.doc_type;
     let mut lines = query::load_lines(db, id).await?;
     let (customer, bank) = check(db, &doc, doc_type, &lines).await?;
-    let rate = if doc_type == DocType::CreditNote && !doc.imported {
+    // A native correction keeps the rate of the document it corrects.
+    let rate = if doc_type.is_correction() && !doc.imported {
         Rate {
             rate: doc.exchange_rate,
             date: None,
@@ -128,7 +131,7 @@ pub async fn issue(
         locale: &doc.locale,
         sources: &sources,
     };
-    let evaluated = input::evaluate(&mut lines, params, &adv)?;
+    let evaluated = input::evaluate(&mut lines, params, &adv, None)?;
     let prepared = Prepared {
         doc_type,
         lines,
@@ -137,6 +140,7 @@ pub async fn issue(
         bank,
         company: company_repo::get(db).await?,
         rate,
+        params,
         evaluated,
     };
     let txn = db.begin().await?;
@@ -164,13 +168,13 @@ async fn check(
     doc: &document::Model,
     doc_type: DocType,
     lines: &[LineData],
-) -> Result<(contact::Model, Option<bank_account::Model>), AppError> {
+) -> Result<(Option<contact::Model>, Option<bank_account::Model>), AppError> {
     let mut e = FieldErrors::new();
     let customer = match doc.contact_id {
         Some(cid) => contact::Entity::find_by_id(cid).one(db).await?,
         None => None,
     };
-    if customer.is_none() {
+    if customer.is_none() && !customer_optional(db, doc, doc_type).await? {
         e.add("contactId", "required");
     }
     if !lines.iter().any(|l| matches!(l, LineData::Item(_))) {
@@ -188,7 +192,8 @@ async fn check(
         (DocType::Proforma, None) | (_, Some(_)) => {}
         (_, None) => e.add("taxPointDate", "required"),
     }
-    if doc_type == DocType::CreditNote && doc.correction_reason.is_none() {
+    // Imported corrections document what was issued elsewhere: no reason.
+    if doc_type.is_correction() && !doc.imported && doc.correction_reason.is_none() {
         e.add("correctionReason", "required");
     }
     let bank = match doc.bank_account_id {
@@ -203,8 +208,24 @@ async fn check(
         _ => {}
     }
     e.into_result()?;
-    let customer = customer.ok_or(AppError::field("contactId", "required"))?;
     Ok((customer, bank))
+}
+
+/// A simplified document may name no customer, and so may a native credit /
+/// debit note of one issued without a customer (it is bound to that null).
+async fn customer_optional(
+    db: &DatabaseConnection,
+    doc: &document::Model,
+    doc_type: DocType,
+) -> Result<bool, AppError> {
+    Ok(match (doc_type, doc.related_document_id) {
+        (DocType::Simplified, _) => true,
+        (DocType::CreditNote | DocType::DebitNote, Some(orig)) if !doc.imported => {
+            let orig = query::find(db, orig).await?;
+            orig.doc_type == DocType::Simplified.as_str() && orig.customer_snapshot.is_none()
+        }
+        _ => false,
+    })
 }
 
 /// The last 10 digits of the number.
@@ -265,14 +286,27 @@ async fn issue_in(
     if doc.updated_at != p.seen_updated_at {
         return Err(AppError::Conflict("document changed while issuing".into()));
     }
-    let totals = p.evaluated.totals;
+    let mut totals = p.evaluated.totals;
     advance_sources::lock_and_recheck(txn, id, &p.lines).await?;
-    // An imported credit note documents amounts as they were: no cap.
-    if p.doc_type == DocType::CreditNote && !doc.imported {
-        let invoice = doc
+    // An imported correction documents amounts as they were: no cap.
+    if p.doc_type.is_correction() && !doc.imported {
+        let original = doc
             .related_document_id
-            .context("credit note without an invoice")?;
-        credit::check_cap(txn, id, invoice, &totals).await?;
+            .context("correction without its original")?;
+        match p.doc_type {
+            DocType::CreditNote => credit::check_cap(txn, id, original, &totals).await?,
+            // No cap, but the original must still be correctable.
+            DocType::DebitNote => {
+                credit::locked_original(txn, original).await?;
+            }
+            DocType::AdvanceCreditNote => {
+                ddpp_correction::check_issue(txn, id, original, &mut totals, p.params).await?
+            }
+            _ => {}
+        }
+    } else if p.doc_type == DocType::AdvanceCreditNote {
+        // An imported correction linked to a DDPP counts in its net too.
+        ddpp_correction::check_linked(txn, &doc).await?;
     }
     // An imported document keeps its own number and never moves the counter.
     let (number, seq) = match (&doc.number, doc.imported) {
@@ -298,7 +332,11 @@ async fn issue_in(
     row.exchange_rate_date = Set(p.rate.date);
     row.exchange_rate_source = Set(p.rate.source.map(str::to_string));
     row.supplier_snapshot = Set(Some(json(&supplier(&p.company))?));
-    row.customer_snapshot = Set(Some(json(&customer(&p.customer))?));
+    row.customer_snapshot = Set(p
+        .customer
+        .as_ref()
+        .map(|c| json(&customer(c)))
+        .transpose()?);
     row.bank_snapshot = Set(p
         .bank
         .as_ref()

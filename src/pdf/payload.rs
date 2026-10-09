@@ -39,8 +39,9 @@ pub struct Input<'a> {
     pub header_note: Option<&'a str>,
     pub footer_note: Option<&'a str>,
     pub correction_reason: Option<&'a str>,
-    /// Credit note → the invoice, DDPP → the proforma.
+    /// Correction → its original, DDPP → the proforma.
     pub parent_number: Option<&'a str>,
+    pub parent_doc_type: Option<&'a str>,
     pub supplier: Option<&'a PartySnapshot>,
     pub customer: Option<&'a PartySnapshot>,
     pub bank: Option<&'a BankSnapshot>,
@@ -145,7 +146,8 @@ pub struct Payload {
     pub title: String,
     pub number: Option<String>,
     pub supplier: Party,
-    pub customer: Party,
+    /// `null` only for a simplified document without a customer.
+    pub customer: Option<Party>,
     pub dates: Vec<Row>,
     pub payment: Vec<Row>,
     pub header_note: Option<String>,
@@ -264,17 +266,25 @@ fn payment(i: &Input, l: &Labels) -> Vec<Row> {
     out
 }
 
+/// No customer block when there is no customer and none can be expected:
+/// an issued document without a customer snapshot (a simplified document or
+/// one of its corrections), or any draft of / correcting a simplified one.
+/// Other drafts keep the empty party.
+fn has_customer_block(i: &Input) -> bool {
+    i.customer.is_some()
+        || (i.status == Status::Draft
+            && i.doc_type != "simplified"
+            && i.parent_doc_type != Some("simplified"))
+}
+
 fn reference(i: &Input) -> Option<String> {
-    let parent = i.parent_number?;
-    match i.doc_type {
-        "credit_note" => Some(labels::credit_reference(
-            parent,
-            i.correction_reason,
-            i.locale,
-        )),
-        "advance_tax_doc" => Some(labels::ddpp_reference(parent, i.locale)),
-        _ => None,
-    }
+    super::reference::reference(
+        i.doc_type,
+        i.parent_doc_type,
+        i.parent_number?,
+        i.correction_reason,
+        i.locale,
+    )
 }
 
 fn qr(i: &Input, title: &str, l: &Labels) -> Option<(Qr, String)> {
@@ -334,7 +344,7 @@ pub fn build(i: &Input) -> anyhow::Result<Payload> {
         title: title.into(),
         number: i.number.map(str::to_string),
         supplier: party(l.supplier, i.supplier, l, i.locale),
-        customer: party(l.customer, i.customer, l, i.locale),
+        customer: has_customer_block(i).then(|| party(l.customer, i.customer, l, i.locale)),
         dates: dates(i, l),
         payment: payment(i, l),
         header_note: i.header_note.and_then(non_empty),

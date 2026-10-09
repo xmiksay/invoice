@@ -102,6 +102,31 @@ describe("InvoicesListView", () => {
     expect(w.find('[data-test="new-document"]').exists()).toBe(false);
   });
 
+  it("has a tab per doc type; simplified starts natively, corrections only via import", async () => {
+    mockFetchRoutes({ "GET /api/documents": { items: [], total: 0 } });
+    const w = await mountList();
+    expect(w.findAll('[data-test^="tab-"]').map((t) => t.text())).toEqual([
+      "Invoices",
+      "Simplified documents",
+      "Proforma invoices",
+      "Credit notes",
+      "Debit notes",
+      "Advance payment tax documents",
+      "Advance payment corrections",
+    ]);
+
+    await w.find('[data-test="tab-simplified"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="new-document"]').attributes("href")).toBe("/invoices/new?docType=simplified");
+
+    for (const type of ["debit_note", "advance_credit_note"]) {
+      await w.find(`[data-test="tab-${type}"]`).trigger("click");
+      await flushPromises();
+      expect(w.find('[data-test="new-document"]').exists()).toBe(false);
+      expect(w.find('[data-test="import-document"]').attributes("href")).toBe(`/invoices/new?docType=${type}&imported=1`);
+    }
+  });
+
   it("credit notes show negated amounts and a badge", async () => {
     const fetch = mockFetchRoutes({
       "GET /api/documents": { items: [summary({ docType: "credit_note", sign: -1, currency: "CZK", payable: "1210.00", overdue: false })], total: 1 },

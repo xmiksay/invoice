@@ -7,8 +7,9 @@ defineProps<{
   paymentState: PaymentState | null;
   overdue: boolean;
   sentAt?: string | null;
-  /** -1 marks a credit note. */
+  /** -1 marks a credit note / DDPP correction (`docType` picks the badge label, default credit note). */
   sign?: 1 | -1;
+  docType?: string;
   /** A received document's `issued` reads "Recorded". */
   direction?: Direction;
   imported?: boolean;
@@ -32,7 +33,7 @@ const PAYMENT_CLASS: Record<PaymentState, string> = {
 <template>
   <span class="inline-flex flex-wrap gap-1">
     <span v-if="sign === -1" class="badge !bg-rose-100 !text-rose-800 dark:!bg-rose-900/50 dark:!text-rose-300" data-test="credit-note-badge">
-      {{ t("documents.docTypes.credit_note") }}
+      {{ t(`documents.docTypes.${docType === "advance_credit_note" ? docType : "credit_note"}`) }}
     </span>
     <span class="badge" :class="STATUS_CLASS[status]" data-test="status-badge">
       {{ direction === "received" && status === "issued" ? t("documents.status.recorded") : t(`documents.status.${status}`) }}

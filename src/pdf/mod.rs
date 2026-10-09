@@ -10,6 +10,7 @@ pub mod handlers;
 pub mod labels;
 pub mod payload;
 pub mod preview;
+pub mod reference;
 pub mod source;
 pub mod spayd;
 pub mod storage;

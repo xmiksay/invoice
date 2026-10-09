@@ -4,16 +4,20 @@ import { useI18n } from "vue-i18n";
 import { useAction } from "@/composables/useAction";
 import NumberSeriesCard from "../components/NumberSeriesCard.vue";
 import { useNumberSeriesStore } from "../stores";
-import { DOC_TYPES } from "../types";
+import { ISSUED_SERIES, RECEIVED_SERIES, type NumberSeries } from "../types";
 
 const { t } = useI18n();
 const store = useNumberSeriesStore();
 const { error, run } = useAction();
 const currentYear = new Date().getFullYear();
 
-const ordered = computed(() =>
-  [...store.series].sort((a, b) => DOC_TYPES.indexOf(a.docType) - DOC_TYPES.indexOf(b.docType)),
-);
+/** Series of one direction in display order; keys the server does not return are skipped. */
+const pick = (keys: readonly string[]) =>
+  keys.map((k) => store.series.find((s) => s.docType === k)).filter((s): s is NumberSeries => !!s);
+const groups = computed(() => [
+  { key: "issued", series: pick(ISSUED_SERIES) },
+  { key: "received", series: pick(RECEIVED_SERIES) },
+]);
 
 const tokens = [
   { token: "{YYYY}", key: "yyyy" },
@@ -39,6 +43,9 @@ onMounted(() => void run(store.load));
 
     <p v-if="error" role="alert" class="alert-error">{{ error }}</p>
 
-    <NumberSeriesCard v-for="s in ordered" :key="s.docType" :series="s" :current-year="currentYear" />
+    <section v-for="g in groups" v-show="g.series.length" :key="g.key" class="space-y-4" :data-test="`series-group-${g.key}`">
+      <h2 class="text-lg font-semibold">{{ t(`settings.numberSeries.groups.${g.key}`) }}</h2>
+      <NumberSeriesCard v-for="s in g.series" :key="s.docType" :series="s" :current-year="currentYear" />
+    </section>
   </div>
 </template>

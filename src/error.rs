@@ -114,6 +114,10 @@ pub enum AppError {
     #[error("document number already taken")]
     NumberTaken,
 
+    /// Cancelling a debit note would leave its original over-credited.
+    #[error("the credit notes would exceed the original")]
+    ExceedsOriginal,
+
     #[error("the document has no PDF")]
     PdfMissing,
 
@@ -167,6 +171,7 @@ impl AppError {
             Self::CatalogItemInUse => (StatusCode::CONFLICT, "catalog_item_in_use"),
             Self::CategoryInUse => (StatusCode::CONFLICT, "category_in_use"),
             Self::NumberTaken => (StatusCode::CONFLICT, "number_taken"),
+            Self::ExceedsOriginal => (StatusCode::CONFLICT, "exceeds_original"),
             Self::PdfMissing => (StatusCode::NOT_FOUND, "pdf_missing"),
             Self::TooLarge => (StatusCode::PAYLOAD_TOO_LARGE, "too_large"),
             Self::PdfUnavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "pdf_unavailable"),

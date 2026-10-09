@@ -1,7 +1,7 @@
 import type { DocLocale } from "@/api/types";
 import type { DocType } from "@/features/settings/types";
 
-/** Wire types for `/api/documents` (Phases 1b–1e). Decimals are strings, dates `YYYY-MM-DD`. */
+/** Wire types for `/api/documents` (Phases 1b–1f). Decimals are strings, dates `YYYY-MM-DD`. */
 
 export type Direction = "issued" | "received";
 export const DOC_STATUSES = ["draft", "issued", "cancelled"] as const;
@@ -62,14 +62,25 @@ export type ComputedLine =
   | (AdvanceLine & AdvanceDisplay & { position: number });
 
 /**
- * Doc types the issued editor can create or edit. Natively DDPPs are server-made and credit notes
- * come from an invoice; an imported document (`imported: true`) may be any of the four.
+ * The seven ISDOC document types, in list-tab order; received documents use the same values
+ * (told apart by `direction`).
  */
-export type EditableDocType = "invoice" | "proforma" | "credit_note" | "advance_tax_doc";
-
-/** The four document types; received documents use the same values (told apart by `direction`). */
-export const DOCUMENT_TYPES = ["invoice", "proforma", "credit_note", "advance_tax_doc"] as const;
+export const DOCUMENT_TYPES = [
+  "invoice",
+  "simplified",
+  "proforma",
+  "credit_note",
+  "debit_note",
+  "advance_tax_doc",
+  "advance_credit_note",
+] as const;
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+
+/**
+ * Doc types the issued editor can edit: natively an invoice, proforma or simplified document starts
+ * empty, corrections come from their original and DDPPs from payments; an import may be any type.
+ */
+export type EditableDocType = DocumentType;
 
 /** `{ [customField.key]: value }` — text/number (decimal)/date/select strings, bool booleans; null = empty. */
 export type CustomFieldValues = Record<string, string | boolean | null>;
@@ -101,13 +112,13 @@ export interface DocumentInput {
   footerNote: string | null;
   internalNote: string | null;
   roundTotal: boolean;
-  /** Credit notes only; required at issue. */
+  /** Credit / debit notes and DDPP corrections; required at issue (not for imported ones). */
   correctionReason: string | null;
   /** Manual import of an existing document: keeps its own `number`, issue renders no PDF. Immutable. */
   imported: boolean;
   /** Required iff imported, else null. */
   number: string | null;
-  /** Imported only (DDPP / final invoice → proforma, credit note → invoice); natively set by settle / credit note. */
+  /** Imported only (DDPP / final invoice → proforma, credit / debit note → invoice or simplified, DDPP correction → DDPP); natively set by settle / corrections. */
   relatedDocumentId?: string | null;
   categoryId: string | null;
   customFields: CustomFieldValues;
@@ -204,7 +215,7 @@ export interface Document extends Omit<DocumentInput, "lines" | "dueDate" | "num
   cancelledAt: string | null;
   cancelReason: string | null;
   exchangeRateDate: string | null;
-  /** `original`: a credit note's rate copied from its invoice. */
+  /** `original`: a correction's rate copied from its original document. */
   exchangeRateSource: "cnb" | "manual" | "original" | null;
   supplier: PartySnapshot | null;
   customer: PartySnapshot | null;
@@ -212,7 +223,7 @@ export interface Document extends Omit<DocumentInput, "lines" | "dueDate" | "num
   lines: ComputedLine[];
   totals: Totals;
   paid: string;
-  /** credit_note → invoice, invoice → the proforma it settles, DDPP → proforma. */
+  /** credit / debit note → invoice or simplified, DDPP correction → DDPP, invoice → the proforma it settles, DDPP → proforma. */
   relatedDocumentId: string | null;
   /** DDPP only: the proforma payment it documents. */
   paymentId: string | null;
@@ -222,7 +233,9 @@ export interface Document extends Omit<DocumentInput, "lines" | "dueDate" | "num
   relatedDocuments: RelatedDocument[];
   /** Proforma only: a non-cancelled invoice settles it. */
   settled: boolean | null;
-  /** -1 for credit notes: amounts are stored positive, shown negated. */
+  /** Issued DDPP only: why a correction cannot be created now; null = allowed (and on every other document). */
+  correctionBlock: CorrectionBlock | null;
+  /** -1 for credit notes and DDPP corrections: amounts are stored positive, shown negated. */
   sign: Sign;
   /** The archived PDF (written at issue; a DDPP's possibly on first download). Drafts, received, imported: null. */
   pdf: PdfArchive | null;
@@ -247,6 +260,9 @@ export interface PdfArchive {
 }
 
 export type Sign = 1 | -1;
+
+export const CORRECTION_BLOCKS = ["advance_settled", "advance_in_use", "fully_corrected"] as const;
+export type CorrectionBlock = (typeof CORRECTION_BLOCKS)[number];
 
 export interface RelatedDocument {
   id: string;

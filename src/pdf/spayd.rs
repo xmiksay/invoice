@@ -13,8 +13,8 @@ use crate::document::line::Status;
 const MSG_MAX: usize = 60;
 
 /// Whether the document gets a QR code: an issued (not draft, not
-/// cancelled) invoice or proforma paid by bank transfer to an IBAN with
-/// something left to pay.
+/// cancelled) invoice, proforma, debit note or simplified document paid by
+/// bank transfer to an IBAN with something left to pay.
 pub fn applies(
     status: Status,
     doc_type: &str,
@@ -23,7 +23,10 @@ pub fn applies(
     payable: Decimal,
 ) -> bool {
     status == Status::Issued
-        && matches!(doc_type, "invoice" | "proforma")
+        && matches!(
+            doc_type,
+            "invoice" | "proforma" | "debit_note" | "simplified"
+        )
         && payment_method == "bank_transfer"
         && iban.is_some_and(|i| !i.trim().is_empty())
         && payable > Decimal::ZERO
@@ -190,6 +193,15 @@ mod tests {
         };
         assert!(ok(false, "invoice", "bank_transfer", Some("CZ65"), "1"));
         assert!(ok(false, "proforma", "bank_transfer", Some("CZ65"), "1"));
+        assert!(ok(false, "debit_note", "bank_transfer", Some("CZ65"), "1"));
+        assert!(ok(false, "simplified", "bank_transfer", Some("CZ65"), "1"));
+        assert!(!ok(
+            false,
+            "advance_credit_note",
+            "bank_transfer",
+            Some("CZ65"),
+            "1"
+        ));
         assert!(!ok(true, "invoice", "bank_transfer", Some("CZ65"), "1"));
         assert!(!applies(
             Status::Cancelled,

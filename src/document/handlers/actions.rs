@@ -50,7 +50,7 @@ pub async fn issue(
     responses(
         (status = 200, body = Document),
         (status = 404, body = ErrorBody),
-        (status = 409, description = "`invalid_state` (not issued, a DDPP, or a proforma with payments)", body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not issued, a native DDPP, or a proforma with payments); `exceeds_original` (a debit note whose credit notes would exceed the lowered cap); DDPP correction whose DDPP is deducted: `advance_settled` / `advance_in_use`; imported DDPP with a live correction: `advance_in_use`", body = ErrorBody),
     )
 )]
 pub async fn cancel(
@@ -168,12 +168,12 @@ pub async fn settle(
     path = "/api/documents/{id}/credit-note",
     tag = "documents",
     security(("bearer" = [])),
-    params(("id" = Uuid, Path, description = "The invoice")),
+    params(("id" = Uuid, Path, description = "The invoice / simplified document, or the DDPP")),
     request_body = CreditNoteInput,
     responses(
-        (status = 201, description = "Draft credit note", body = Document),
+        (status = 201, description = "Draft credit note (`credit_note`), or on a DDPP its correction (`advance_credit_note`)", body = Document),
         (status = 404, body = ErrorBody),
-        (status = 409, description = "`invalid_state` (not an issued invoice)", body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not an issued invoice / simplified document / DDPP); DDPP deducted by an invoice: `advance_settled` (issued) / `advance_in_use` (draft)", body = ErrorBody),
         (status = 422, description = "`correctionReason`: `too_long`", body = ErrorBody),
     )
 )]
@@ -182,9 +182,38 @@ pub async fn credit_note(
     ApiPath(id): ApiPath<Uuid>,
     body: Bytes,
 ) -> Result<(StatusCode, Json<Document>), AppError> {
-    let input: CreditNoteInput = optional_json(&body)?;
-    let reason = v::opt_text(input.correction_reason.as_deref(), 500)
-        .map_err(|r| AppError::field("correctionReason", r))?;
+    let reason = correction_reason(&body)?;
     let new_id = credit_repo::create(&state.db, id, reason, today()).await?;
     Ok((StatusCode::CREATED, Json(fetch(&state, new_id).await?)))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/documents/{id}/debit-note",
+    tag = "documents",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path, description = "The invoice / simplified document")),
+    request_body = CreditNoteInput,
+    responses(
+        (status = 201, description = "Draft debit note without lines", body = Document),
+        (status = 404, body = ErrorBody),
+        (status = 409, description = "`invalid_state` (not an issued invoice / simplified document)", body = ErrorBody),
+        (status = 422, description = "`correctionReason`: `too_long`", body = ErrorBody),
+    )
+)]
+pub async fn debit_note(
+    State(state): State<AppState>,
+    ApiPath(id): ApiPath<Uuid>,
+    body: Bytes,
+) -> Result<(StatusCode, Json<Document>), AppError> {
+    let reason = correction_reason(&body)?;
+    let new_id = credit_repo::create_debit(&state.db, id, reason, today()).await?;
+    Ok((StatusCode::CREATED, Json(fetch(&state, new_id).await?)))
+}
+
+/// The optional `{ correctionReason }` body of the correction endpoints.
+fn correction_reason(body: &Bytes) -> Result<Option<String>, AppError> {
+    let input: CreditNoteInput = optional_json(body)?;
+    v::opt_text(input.correction_reason.as_deref(), 500)
+        .map_err(|r| AppError::field("correctionReason", r))
 }

@@ -4,7 +4,7 @@ use chrono::{DateTime, FixedOffset};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, DatabaseTransaction, Set, TransactionTrait};
 use uuid::Uuid;
 
-use super::{query, view};
+use super::{credit, ddpp_correction, query, view};
 use crate::document::entity::document;
 use crate::document::line::Status;
 use crate::error::AppError;
@@ -29,11 +29,28 @@ async fn on_issued_in(
     allowed: fn(&document::Model) -> bool,
     f: impl FnOnce(&mut document::ActiveModel),
 ) -> Result<(), AppError> {
+    let doc = locked_issued(txn, id, allowed).await?;
+    apply(txn, doc, f).await
+}
+
+/// Lock the row; received documents are only recorded (no cancel / mark-sent).
+async fn locked_issued(
+    txn: &DatabaseTransaction,
+    id: Uuid,
+    allowed: fn(&document::Model) -> bool,
+) -> Result<document::Model, AppError> {
     let doc = query::lock(txn, id).await?;
-    // Received documents are only recorded: no cancel / mark-sent.
     if view::status(&doc)? != Status::Issued || doc.direction != ISSUED || !allowed(&doc) {
         return Err(AppError::InvalidState);
     }
+    Ok(doc)
+}
+
+async fn apply(
+    txn: &DatabaseTransaction,
+    doc: document::Model,
+    f: impl FnOnce(&mut document::ActiveModel),
+) -> Result<(), AppError> {
     let mut row: document::ActiveModel = doc.into();
     f(&mut row);
     row.updated_at = Set(chrono::Utc::now().into());
@@ -51,18 +68,34 @@ fn cancellable(doc: &document::Model) -> bool {
     }
 }
 
-/// Payments stay; the number stays used.
+/// Payments stay; the number stays used. Corrections keep their originals
+/// consistent: a debit note only while the credit notes stay within the
+/// lowered cap, a DDPP correction only while its DDPP is not deducted, an
+/// (imported) DDPP only without live corrections.
 pub async fn cancel(
     db: &DatabaseConnection,
     id: Uuid,
     reason: Option<String>,
 ) -> Result<(), AppError> {
-    on_issued(db, id, cancellable, move |row| {
-        row.status = Set(Status::Cancelled.as_str().into());
-        row.cancelled_at = Set(Some(chrono::Utc::now().into()));
-        row.cancel_reason = Set(reason);
-    })
-    .await
+    Ok(db
+        .transaction(|txn| {
+            Box::pin(async move {
+                let doc = locked_issued(txn, id, cancellable).await?;
+                match doc.doc_type.as_str() {
+                    "debit_note" => credit::check_debit_cancel(txn, &doc).await?,
+                    "advance_credit_note" => ddpp_correction::check_linked(txn, &doc).await?,
+                    "advance_tax_doc" => ddpp_correction::ensure_uncorrected(txn, doc.id).await?,
+                    _ => {}
+                }
+                apply(txn, doc, move |row| {
+                    row.status = Set(Status::Cancelled.as_str().into());
+                    row.cancelled_at = Set(Some(chrono::Utc::now().into()));
+                    row.cancel_reason = Set(reason);
+                })
+                .await
+            })
+        })
+        .await?)
 }
 
 /// Idempotent: a repeated call overwrites `sent_at`.

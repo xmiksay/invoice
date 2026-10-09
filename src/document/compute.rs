@@ -221,7 +221,6 @@ pub fn totals_with(
     groups.sort_by_key(|g| std::cmp::Reverse(g.rate));
     let sub = |a: Decimal, b: Decimal| a.checked_sub(b).map(round2).and_then(fits);
     let mut recap = Vec::with_capacity(groups.len());
-    let (mut base_sum, mut vat_sum) = (Decimal::ZERO, Decimal::ZERO);
     for g in groups {
         let item_base = fits(round2(g.items)).ok_or(Lines)?;
         let item_vat = if p.vat_mode.charges_vat() {
@@ -247,8 +246,6 @@ pub fn totals_with(
         let vat_czk = czk(item_vat)?
             .map(|c| sub(c, adv_vat_czk).ok_or(ExchangeRate))
             .transpose()?;
-        base_sum = add(base_sum, base)?;
-        vat_sum = add(vat_sum, vat)?;
         recap.push(RecapRow {
             vat_rate: g.rate.normalize(),
             base,
@@ -256,6 +253,20 @@ pub fn totals_with(
             base_czk,
             vat_czk,
         });
+    }
+    summarize(recap, p)
+}
+
+/// Document totals from a finished recap: Σ base, Σ vat, total, rounding,
+/// payable and its CZK amount.
+pub fn summarize(recap: Vec<RecapRow>, p: Params) -> Result<Totals, Overflow> {
+    use Overflow::{ExchangeRate, Lines};
+    let fx = if p.is_czk { None } else { p.exchange_rate };
+    let add = |a: Decimal, b: Decimal| a.checked_add(b).ok_or(Lines);
+    let (mut base_sum, mut vat_sum) = (Decimal::ZERO, Decimal::ZERO);
+    for r in &recap {
+        base_sum = add(base_sum, r.base)?;
+        vat_sum = add(vat_sum, r.vat)?;
     }
     let base = fits(round2(base_sum)).ok_or(Lines)?;
     let vat = fits(round2(vat_sum)).ok_or(Lines)?;
@@ -272,7 +283,15 @@ pub fn totals_with(
         total,
         rounding: round2(payable - total),
         payable,
-        total_czk: czk(payable)?,
+        total_czk: fx
+            .map(|r| {
+                payable
+                    .checked_mul(r)
+                    .map(round2)
+                    .and_then(fits)
+                    .ok_or(ExchangeRate)
+            })
+            .transpose()?,
     })
 }
 

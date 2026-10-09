@@ -6,6 +6,7 @@ import { ApiError } from "@/api/client";
 import ErrorDetail from "@/components/ErrorDetail.vue";
 import { useErrorText } from "@/composables/useAction";
 import { errorDetailOf, fieldErrorsOf } from "@/lib/formErrors";
+import { canCorrectDdpp, canCreditOrDebit } from "../docTypes";
 import { describeFieldErrors } from "../fieldMessages";
 import { editLocation, listLocation } from "../routes";
 import { useDocumentStore } from "../store";
@@ -28,16 +29,44 @@ const ISSUE_PDF_MESSAGES: Record<string, string> = {
   pdf_unavailable: "pdf.issueUnavailable",
   pdf_render_failed: "pdf.issueRenderFailed",
 };
-const issueErrorText = (err: unknown): string | null => {
-  const key = err instanceof ApiError ? ISSUE_PDF_MESSAGES[err.code] : undefined;
+// A DDPP correction is refused (create, issue, cancel) once the DDPP is deducted by an invoice.
+const DDPP_CORRECTION_MESSAGES: Record<string, string> = {
+  advance_settled: "documents.detail.ddppCorrectionSettled",
+  advance_in_use: "documents.detail.ddppCorrectionInUse",
+};
+// Cancelling an (imported) DDPP: deducted by an issued invoice, or held by a draft invoice or a live correction.
+const DDPP_CANCEL_MESSAGES: Record<string, string> = {
+  advance_settled: "documents.detail.ddppCancelSettled",
+  advance_in_use: "documents.detail.ddppCancelInUse",
+};
+// Cancelling a DDPP correction: its DDPP is deducted by an issued / draft final invoice.
+const CORRECTION_CANCEL_MESSAGES: Record<string, string> = {
+  advance_settled: "documents.detail.ddppCorrectionCancelSettled",
+  advance_in_use: "documents.detail.ddppCorrectionCancelInUse",
+};
+const CANCEL_MESSAGES: Partial<Record<string, Record<string, string>>> = {
+  advance_tax_doc: DDPP_CANCEL_MESSAGES,
+  advance_credit_note: CORRECTION_CANCEL_MESSAGES,
+};
+const CORRECTION_MESSAGES: Record<string, string> = { invalid_state: "documents.detail.correctionInvalidState" };
+const ddppRelated = computed(() => props.doc.docType === "advance_tax_doc" || props.doc.docType === "advance_credit_note");
+
+/** Message for the codes the action explains better than the generic error text. */
+const messages = (...maps: Record<string, string>[]) => (err: unknown): string | null => {
+  const code = err instanceof ApiError ? err.code : "";
+  const key = maps.map((m) => m[code]).find(Boolean);
   return key ? t(key) : null;
 };
+const ddppMessages = () => (ddppRelated.value ? DDPP_CORRECTION_MESSAGES : {});
 
 const issued = computed(() => props.doc.status === "issued");
 // A DDPP is created and cancelled by its proforma's payments; only its delivery is tracked here.
 const isDdpp = computed(() => props.doc.docType === "advance_tax_doc");
-// Also for imported invoices / proformas: the native flows create our own drafts from them.
-const canCreditNote = computed(() => issued.value && props.doc.docType === "invoice");
+// Also for imported originals: the native flows create our own drafts from them.
+const canCorrect = computed(() => canCreditOrDebit(props.doc));
+const canCorrectAdvance = computed(() => canCorrectDdpp(props.doc));
+/** Why the server would refuse a DDPP correction right now (the button stays visible, disabled). */
+const correctionBlockText = computed(() => (props.doc.correctionBlock ? t(`documents.detail.correctionBlock.${props.doc.correctionBlock}`) : null));
 const canSettle = computed(() => issued.value && props.doc.docType === "proforma" && !props.doc.settled);
 
 /** `message` overrides the generic error text for codes the action explains better. */
@@ -61,7 +90,7 @@ async function act(action: () => Promise<void>, message?: (err: unknown) => stri
 
 function issue() {
   if (!window.confirm(t(props.doc.imported ? "documents.import.confirmIssue" : "documents.detail.confirmIssue"))) return;
-  void act(store.issue, issueErrorText);
+  void act(store.issue, messages(ISSUE_PDF_MESSAGES, ddppMessages()));
 }
 
 function remove() {
@@ -76,17 +105,21 @@ function remove() {
 function cancel() {
   const reason = window.prompt(t("documents.detail.cancelPrompt", { number: props.doc.number ?? "" }));
   if (reason === null) return;
-  void act(() => store.cancel(reason.trim() || null));
+  void act(() => store.cancel(reason.trim() || null), messages(CANCEL_MESSAGES[props.doc.docType] ?? {}));
 }
 
-/** The new draft opens in the editor; it is required again there before issue. */
-function creditNote() {
-  const reason = window.prompt(t("documents.detail.creditNotePrompt", { number: props.doc.number ?? "" }));
+/**
+ * Credit note, debit note or (on a DDPP) its correction. The reason asked here is required again
+ * in the editor before issue; the new draft opens there.
+ */
+function correct(kind: "creditNote" | "debitNote" | "ddppCorrection") {
+  const reason = window.prompt(t(`documents.detail.${kind}Prompt`, { number: props.doc.number ?? "" }));
   if (reason === null) return;
+  const create = kind === "debitNote" ? store.debitNote : store.creditNote;
   void act(async () => {
-    const draft = await store.creditNote(reason.trim() || null);
+    const draft = await create(reason.trim() || null);
     await router.push(editLocation(draft.id));
-  });
+  }, messages(CORRECTION_MESSAGES, ddppMessages()));
 }
 
 function settle() {
@@ -112,9 +145,30 @@ function settle() {
         <button type="button" class="btn" :disabled="busy" data-test="mark-sent" @click="act(store.markSent)">
           {{ doc.sentAt ? t("documents.detail.markSentAgain") : t("documents.detail.markSent") }}
         </button>
-        <button v-if="canCreditNote" type="button" class="btn" :disabled="busy" data-test="credit-note" @click="creditNote">
-          {{ t("documents.detail.creditNote") }}
-        </button>
+        <template v-if="canCorrect">
+          <button type="button" class="btn" :disabled="busy" data-test="credit-note" @click="correct('creditNote')">
+            {{ t("documents.detail.creditNote") }}
+          </button>
+          <button type="button" class="btn" :disabled="busy" data-test="debit-note" @click="correct('debitNote')">
+            {{ t("documents.detail.debitNote") }}
+          </button>
+        </template>
+        <span v-if="canCorrectAdvance" class="inline-flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            class="btn"
+            :disabled="busy || !!correctionBlockText"
+            :title="correctionBlockText ?? undefined"
+            :aria-describedby="correctionBlockText ? 'ddpp-correction-block' : undefined"
+            data-test="ddpp-correction"
+            @click="correct('ddppCorrection')"
+          >
+            {{ t("documents.detail.ddppCorrection") }}
+          </button>
+          <span v-if="correctionBlockText" id="ddpp-correction-block" class="text-xs text-gray-600 dark:text-gray-400" data-test="ddpp-correction-block">
+            {{ correctionBlockText }}
+          </span>
+        </span>
         <button v-if="!isDdpp || doc.imported" type="button" class="btn btn-danger" :disabled="busy" data-test="cancel" @click="cancel">{{ t("documents.detail.cancel") }}</button>
       </template>
     </div>

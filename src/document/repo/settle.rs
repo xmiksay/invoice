@@ -74,10 +74,15 @@ pub async fn settle(
     let ids = advances(db, &p).await?;
     let sources = advance_sources::load(db, &ids).await?;
     let mut lines = query::load_lines(db, proforma_id).await?;
-    // A DDPP the user already put on another invoice stays there.
+    // A DDPP the user already put on another invoice stays there; a fully
+    // corrected one has nothing left to deduct.
     lines.extend(
         ids.iter()
-            .filter(|id| sources.get(id).is_some_and(|s| s.referenced_by.is_empty()))
+            .filter(|id| {
+                sources
+                    .get(id)
+                    .is_some_and(|s| s.referenced_by.is_empty() && !s.recap.is_empty())
+            })
             .map(|id| {
                 LineData::Advance(AdvanceData {
                     document_id: *id,
@@ -126,7 +131,7 @@ pub async fn settle(
         locale: &p.locale,
         sources: &sources,
     };
-    let totals = input::evaluate(&mut lines, data.params(), &adv)?.totals;
+    let totals = input::evaluate(&mut lines, data.params(), &adv, None)?.totals;
     data.lines = lines;
     Ok(db
         .transaction(|txn| {

@@ -9,6 +9,7 @@ import InvoiceFilters from "../components/InvoiceFilters.vue";
 import ListDocMeta from "../components/ListDocMeta.vue";
 import ListPager from "../components/ListPager.vue";
 import StatusBadges from "../components/StatusBadges.vue";
+import { isNativeNewType } from "../docTypes";
 import { formatDate, formatMoney, signed } from "../format";
 import { listDocTypeOf } from "../routes";
 import { useInvoiceListStore, type InvoiceFilters as Filters } from "../store";
@@ -26,10 +27,10 @@ watch(docType, (type) => void run(() => store.setDocType(type)), { immediate: tr
 if (!categoriesStore.loaded) categoriesStore.load().catch(() => {});
 const categories = computed(() => categoriesStore.items.filter((c) => c.kind === "income"));
 
-/** Credit notes come from an invoice, DDPPs from proforma payments: only these two are created natively. */
+/** Corrections come from their original, DDPPs from proforma payments: only invoice / proforma / simplified start here. */
 const newLink = computed(() =>
-  docType.value === "invoice" || docType.value === "proforma"
-    ? { to: { name: "invoice-new", query: docType.value === "proforma" ? { docType: "proforma" } : {} }, label: t(`documents.list.new.${docType.value}`) }
+  isNativeNewType(docType.value)
+    ? { to: { name: "invoice-new", query: docType.value === "invoice" ? {} : { docType: docType.value } }, label: t(`documents.list.new.${docType.value}`) }
     : null,
 );
 /** Any type can be entered as an imported document (issued elsewhere, own number, no rendered PDF). */
@@ -87,7 +88,7 @@ function open(id: string) {
             <td>
               {{ d.customerName ?? "—" }}
               <ListDocMeta :doc="d" :categories="categories" />
-              <div class="mt-1 sm:hidden"><StatusBadges :status="d.status" :payment-state="d.paymentState" :overdue="d.overdue" :sent-at="d.sentAt" :sign="d.sign" :imported="d.imported" /></div>
+              <div class="mt-1 sm:hidden"><StatusBadges :status="d.status" :payment-state="d.paymentState" :overdue="d.overdue" :sent-at="d.sentAt" :sign="d.sign" :doc-type="d.docType" :imported="d.imported" /></div>
             </td>
             <td class="hidden whitespace-nowrap sm:table-cell">{{ formatDate(d.issueDate, locale) }}</td>
             <td class="hidden whitespace-nowrap md:table-cell" :class="{ 'text-red-600 dark:text-red-400': d.overdue }">
@@ -95,7 +96,7 @@ function open(id: string) {
             </td>
             <td class="whitespace-nowrap text-right tabular-nums">{{ formatMoney(signed(d.payable, d.sign), d.currency, locale) }}</td>
             <td class="hidden sm:table-cell">
-              <StatusBadges :status="d.status" :payment-state="d.paymentState" :overdue="d.overdue" :sent-at="d.sentAt" :sign="d.sign" :imported="d.imported" />
+              <StatusBadges :status="d.status" :payment-state="d.paymentState" :overdue="d.overdue" :sent-at="d.sentAt" :sign="d.sign" :doc-type="d.docType" :imported="d.imported" />
             </td>
           </tr>
           <tr v-if="!store.loading && store.items.length === 0">

@@ -19,12 +19,12 @@ pub struct Existing {
     pub currency: String,
     pub locale: String,
     pub vat_mode: VatMode,
-    /// A credit note keeps the invoice's rate whatever the request says.
+    /// A correction keeps its original's rate whatever the request says.
     pub exchange_rate: Option<Decimal>,
 }
 
 impl Existing {
-    /// A credit note stays bound to its invoice's contact, currency and VAT
+    /// A correction stays bound to its original's contact, currency and VAT
     /// mode (copied at creation): anything else is `invalid`.
     pub fn check_bound(
         &self,
@@ -45,8 +45,9 @@ impl Existing {
     }
 }
 
-/// The document type a request may set: on create an invoice or proforma
-/// (an imported document: any of the four); on update only the draft's own type.
+/// The document type a request may set: on create an invoice, proforma or
+/// simplified document (an imported document: any of the seven); on update
+/// only the draft's own type.
 pub fn doc_type(
     requested: Option<&str>,
     existing: Option<&Existing>,
@@ -59,7 +60,7 @@ pub fn doc_type(
         (Some(x), Some(Ok(t))) if t == x.doc_type => Ok(t),
         (None, None) => Ok(DocType::Invoice),
         (None, Some(Ok(t))) if imported => Ok(t),
-        (None, Some(Ok(t @ (DocType::Invoice | DocType::Proforma)))) => Ok(t),
+        (None, Some(Ok(t @ (DocType::Invoice | DocType::Proforma | DocType::Simplified)))) => Ok(t),
         _ => Err("invalid"),
     }
 }

@@ -38,6 +38,23 @@ describe("RelatedDocumentPicker", () => {
     expect(w.emitted("update:modelValue")?.at(-1)).toEqual(["p1"]);
   });
 
+  it("a debit note links to an invoice or a simplified document: both listed, newest first, type shown", async () => {
+    const fetch = mockFetchRoutes({
+      "GET /api/documents": (_: unknown) => {
+        const url = String(fetch.mock.calls.at(-1)?.[0]);
+        return url.includes("docType=simplified")
+          ? { items: [{ ...item("s1", "ZD1"), docType: "simplified", issueDate: "2026-10-05" }], total: 1 }
+          : { items: [{ ...item("i1", "F1"), docType: "invoice", issueDate: "2026-10-01" }], total: 1 };
+      },
+    });
+    const w = mount(RelatedDocumentPicker, { props: { modelValue: null, direction: "issued", docType: "debit_note", contactId: null }, global: { plugins: [i18n] } });
+    await flushPromises();
+    expect(fetch.mock.calls.map(([url]) => new URL(String(url), "http://x").searchParams.get("docType"))).toEqual(["invoice", "simplified"]);
+    expect(w.find("label").text()).toBe("Original document (invoice / simplified)");
+    expect(w.findAll("option").map((o) => o.text())).toEqual(["No link", "Simplified tax document · ZD1 · Acme", "Invoice · F1 · Acme"]);
+    expect(w.find('[data-test="related-more"]').exists()).toBe(false);
+  });
+
   it("renders nothing for a proforma (no link target)", () => {
     const fetch = mockFetchRoutes({});
     const w = mount(RelatedDocumentPicker, { props: { modelValue: null, direction: "issued", docType: "proforma", contactId: null }, global: { plugins: [i18n] } });

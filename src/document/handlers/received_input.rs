@@ -28,7 +28,7 @@ pub const MAX_RECAP_ROWS: usize = 50;
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ReceivedInput {
-    /// `invoice` | `credit_note` | `proforma` | `advance_tax_doc`; fixed after create.
+    /// Any of the seven document types (default `invoice`); fixed after create.
     pub doc_type: Option<String>,
     /// `received`.
     pub direction: Option<String>,
@@ -185,6 +185,8 @@ impl ReceivedInput {
         };
         let received_date = self.received_date.or(tax_point_date).or(issue_date);
         let due_date = match (doc_type, self.due_date) {
+            // Only a received DDPP may have no due date (its correction is a
+            // refund like a credit note: due date required).
             (DocType::AdvanceTaxDoc, d) => d,
             (_, d) => e.check("dueDate", d.ok_or("required")),
         };

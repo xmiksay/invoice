@@ -1,24 +1,26 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { documentsApi } from "./api";
-import type {
-  Direction,
-  DocStatus,
-  Document,
-  DocumentInput,
-  DocumentSummary,
-  MetadataInput,
-  Payment,
-  PaymentInput,
-  PaymentState,
-  ReceivedDocumentInput,
+import {
+  DOCUMENT_TYPES,
+  type Direction,
+  type DocStatus,
+  type Document,
+  type DocumentType,
+  type DocumentInput,
+  type DocumentSummary,
+  type MetadataInput,
+  type Payment,
+  type PaymentInput,
+  type PaymentState,
+  type ReceivedDocumentInput,
 } from "./types";
 
 export const PAGE_SIZE = 50;
 
-/** Doc types the list has a tab for, in tab order. */
-export const LIST_DOC_TYPES = ["invoice", "proforma", "credit_note", "advance_tax_doc"] as const;
-export type ListDocType = (typeof LIST_DOC_TYPES)[number];
+/** Doc types the list has a tab for, in tab order: all of them. */
+export const LIST_DOC_TYPES = DOCUMENT_TYPES;
+export type ListDocType = DocumentType;
 
 export interface InvoiceFilters {
   status: DocStatus | "";
@@ -170,9 +172,14 @@ export const useDocumentStore = defineStore("documents/current", () => {
     return documentsApi.settle(id());
   }
 
-  /** Credit-note draft for the loaded invoice. */
+  /** Credit-note draft for the loaded invoice / simplified document, or a correction of the loaded DDPP. */
   async function creditNote(reason: string | null): Promise<Document> {
     return documentsApi.creditNote(id(), reason);
+  }
+
+  /** Debit-note draft (no lines) for the loaded invoice / simplified document. */
+  async function debitNote(reason: string | null): Promise<Document> {
+    return documentsApi.debitNote(id(), reason);
   }
 
   // Payments change `paid` / `paymentState` (and may issue or cancel a DDPP), so the document is reloaded too.
@@ -201,6 +208,7 @@ export const useDocumentStore = defineStore("documents/current", () => {
     removeOriginal,
     settle,
     creditNote,
+    debitNote,
     addPayment,
     removePayment,
   };

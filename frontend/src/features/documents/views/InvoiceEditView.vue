@@ -6,6 +6,7 @@ import { useAction } from "@/composables/useAction";
 import { useMetadataSettings } from "@/features/metadata/useMetadataSettings";
 import { useBankAccountsStore, useCompanyStore, useVatRatesStore } from "@/features/settings/stores";
 import InvoiceEditorForm from "../components/InvoiceEditorForm.vue";
+import { isNativeNewType } from "../docTypes";
 import { newDocumentDraft, toDraft, todayIso, type DocumentDraft, type DraftContext } from "../form";
 import { detailLocation, editLocation, listDocTypeOf, listLocation } from "../routes";
 import { useDocumentStore } from "../store";
@@ -24,10 +25,10 @@ const { error, run } = useAction();
 const id = computed(() => (typeof route.params.id === "string" ? route.params.id : undefined));
 /** `&imported=1`: enter an existing document (any type, own number, no rendered PDF). */
 const newImported = computed(() => route.query.imported === "1");
-/** `/invoices/new?docType=proforma` starts a proforma; natively everything else an invoice. */
+/** `/invoices/new?docType=proforma|simplified` starts that type; natively everything else an invoice. */
 const newDocType = computed<EditableDocType>(() => {
   const type = listDocTypeOf(route.query.docType);
-  return newImported.value || type === "proforma" ? type : "invoice";
+  return newImported.value || isNativeNewType(type) ? type : "invoice";
 });
 const initial = ref<DocumentDraft | null>(null);
 const ctx = ref<DraftContext | null>(null);

@@ -11,12 +11,13 @@
   "invalidState": "Tuto akci nelze v aktuálním stavu dokladu provést.",
   "cnbUnavailable": "Kurzovní lístek ČNB je nedostupný. Zadejte kurz ručně.",
   "advanceSettled": "Platbu nelze smazat: její daňový doklad už je odečten ve vystavené vyúčtovací faktuře.",
-  "advanceInUse": "Platbu nelze smazat: její zálohu odečítá koncept vyúčtovací faktury. Nejprve z něj odeberte řádek odpočtu zálohy.",
+  "advanceInUse": "Platbu nelze smazat: její zálohu odečítá koncept vyúčtovací faktury, nebo k jejímu daňovému dokladu existuje opravný doklad. Nejprve odeberte řádek odpočtu zálohy, resp. smažte nebo stornujte opravný doklad.",
   "catalogItemInUse": "Položku nelze smazat: je jedinou položkou skupiny. Nejprve upravte nebo smažte skupinu.",
   "pdfUnavailable": "Služba pro PDF je nedostupná. Zkuste to později.",
   "pdfRenderFailed": "Vykreslení PDF selhalo. Zkontrolujte šablonu designu.",
   "pdfMissing": "PDF nenahráno.",
   "tooLarge": "Soubor je příliš velký (nejvýše 20 MB).",
   "categoryInUse": "Kategorii nelze smazat, protože ji používají doklady. Místo smazání ji deaktivujte.",
-  "numberTaken": "Přidělené číslo už má importovaný doklad. Nastavte počítadlo číselné řady v Nastavení."
+  "numberTaken": "Přidělené číslo už má importovaný doklad. Nastavte počítadlo číselné řady v Nastavení.",
+  "exceedsOriginal": "Storno nelze provést: dobropisy by v některé sazbě DPH přesáhly původní doklad navýšený o vrubopisy."
 }

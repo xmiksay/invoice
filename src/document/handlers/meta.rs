@@ -104,12 +104,15 @@ impl MetadataInput {
 }
 
 /// The document types a document of `doc_type` may link to: a DDPP / final
-/// invoice → proforma, a credit note → invoice; a proforma links nowhere.
-pub fn related_type(doc_type: DocType) -> Option<DocType> {
+/// invoice → proforma, a credit / debit note → invoice or simplified
+/// document, a DDPP correction → DDPP; a proforma or simplified document
+/// links nowhere.
+pub fn related_types(doc_type: DocType) -> &'static [DocType] {
     match doc_type {
-        DocType::Invoice | DocType::AdvanceTaxDoc => Some(DocType::Proforma),
-        DocType::CreditNote => Some(DocType::Invoice),
-        _ => None,
+        DocType::Invoice | DocType::AdvanceTaxDoc => &[DocType::Proforma],
+        DocType::CreditNote | DocType::DebitNote => &[DocType::Invoice, DocType::Simplified],
+        DocType::AdvanceCreditNote => &[DocType::AdvanceTaxDoc],
+        _ => &[],
     }
 }
 
@@ -129,7 +132,9 @@ pub fn check_related(
             && Some(id) != self_id
             && t.direction == direction
             && t.status != "draft"
-            && related_type(doc_type).is_some_and(|r| r.as_str() == t.doc_type)
+            && related_types(doc_type)
+                .iter()
+                .any(|r| r.as_str() == t.doc_type)
     });
     if ok {
         Some(id)
@@ -200,13 +205,14 @@ mod tests {
     }
 
     #[test]
-    fn related_types() {
-        assert_eq!(related_type(DocType::Invoice), Some(DocType::Proforma));
-        assert_eq!(
-            related_type(DocType::AdvanceTaxDoc),
-            Some(DocType::Proforma)
-        );
-        assert_eq!(related_type(DocType::CreditNote), Some(DocType::Invoice));
-        assert_eq!(related_type(DocType::Proforma), None);
+    fn related_type_table() {
+        use DocType::*;
+        assert_eq!(related_types(Invoice), [Proforma]);
+        assert_eq!(related_types(AdvanceTaxDoc), [Proforma]);
+        assert_eq!(related_types(CreditNote), [Invoice, Simplified]);
+        assert_eq!(related_types(DebitNote), [Invoice, Simplified]);
+        assert_eq!(related_types(AdvanceCreditNote), [AdvanceTaxDoc]);
+        assert!(related_types(Proforma).is_empty());
+        assert!(related_types(Simplified).is_empty());
     }
 }

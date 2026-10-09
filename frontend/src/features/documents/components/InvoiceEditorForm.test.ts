@@ -155,4 +155,30 @@ describe("InvoiceEditorForm", () => {
     const put = fetch.mock.calls.find(([, init]) => init?.method === "PUT");
     expect(JSON.parse(String(put?.[1]?.body))).toMatchObject({ docType: "credit_note", correctionReason: "wrong price", exchangeRate: "24.3" });
   });
+
+  it("debit note: reason with its hint, customer locked, totals positive", async () => {
+    mockFetchRoutes({ "POST /api/documents/compute": { lines: [], totals: totals() }, "GET /api/contacts/c1": { id: "c1", name: "Acme" } });
+    const w = mountForm((d) => ({ ...d, docType: "debit_note", contactId: "c1" }));
+    await vi.advanceTimersByTimeAsync(300);
+    await flushPromises();
+    expect(w.find("#doc-correctionReason").exists()).toBe(true);
+    expect(w.text()).toContain("Enter the items the original document is increased by.");
+    expect(w.find("#doc-currency").attributes("disabled")).toBeDefined();
+    expect(w.text()).not.toContain("Change");
+    expect(w.find('[data-test="payable"]').text()).not.toMatch(/^-/);
+  });
+
+  it("simplified: customer optional, warning above 10 000 CZK, saves without a contact", async () => {
+    const fetch = mockFetchRoutes({ "POST /api/documents/compute": { lines: [], totals: totals("12100.00") }, "PUT /api/documents/d1": { id: "d1" } });
+    const w = mountForm((d) => ({ ...d, docType: "simplified" }));
+    await vi.advanceTimersByTimeAsync(300);
+    await flushPromises();
+    expect(w.find("#contact-picker-label").text()).toBe("Customer (optional)");
+    expect(w.find('[data-test="simplified-limit"]').exists()).toBe(true);
+
+    await w.find("form").trigger("submit");
+    await flushPromises();
+    const put = fetch.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(JSON.parse(String(put?.[1]?.body))).toMatchObject({ docType: "simplified", contactId: null, correctionReason: null });
+  });
 });

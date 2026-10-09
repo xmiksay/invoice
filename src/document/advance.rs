@@ -114,7 +114,8 @@ fn deducted(src: &AdvanceSource, ctx: &AdvanceCtx) -> Option<Vec<AdvanceRow>> {
     }
     if src.doc_type == DocType::AdvanceTaxDoc.as_str() {
         let same_contact = ctx.contact_id.is_some() && src.contact_id == ctx.contact_id;
-        let ok = same_contact && ctx.vat_mode == VatMode::Standard;
+        // A fully corrected DDPP has nothing left to deduct.
+        let ok = same_contact && ctx.vat_mode == VatMode::Standard && !src.recap.is_empty();
         return ok.then(|| src.recap.clone());
     }
     // Non-payer form: only the proforma this invoice settles, and only one
@@ -283,6 +284,15 @@ mod tests {
         let e = resolve(&mut [adv(10)], &ctx(&sources, None));
         assert_eq!(e, errors(&[("lines.0.advanceDocumentId", "invalid")]));
         let e = resolve(&mut [adv(11)], &ctx(&sources, Some(11)));
+        assert_eq!(e, errors(&[("lines.0.advanceDocumentId", "invalid")]));
+    }
+
+    #[test]
+    fn fully_corrected_ddpp_is_invalid() {
+        let mut done = ddpp(1, 7);
+        done.recap.clear();
+        let sources = HashMap::from([(Uuid::from_u128(1), done)]);
+        let e = resolve(&mut [adv(1)], &ctx(&sources, None));
         assert_eq!(e, errors(&[("lines.0.advanceDocumentId", "invalid")]));
     }
 

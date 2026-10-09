@@ -85,6 +85,11 @@ Use it when a received advance is refunded or reduced.
   issued) → 409 `advance_in_use`. Nothing changes.
 - An `advance_credit_note` is never itself corrected or deducted. Cancelling it is allowed while the DDPP is not
   deducted by a non-cancelled invoice; otherwise → 409 `advance_settled` / `advance_in_use` as above.
+- `Document.correctionBlock` (response only, on **every** document, `null` when it does not apply):
+  `"advance_settled" | "advance_in_use" | "fully_corrected" | null`. Set only on an issued, non-cancelled DDPP of
+  ours: an issued invoice deducts it → `advance_settled`, else a draft invoice does → `advance_in_use`, else its net
+  is zero on every rate → `fully_corrected`. The UI disables "Opravný doklad" and shows the reason.
+- `credit-note` on a fully corrected DDPP → 409 `invalid_state` (checked under the DDPP lock).
 - PDF `reference`: "Opravný daňový doklad k daňovému dokladu k přijaté platbě {number}" (en: "Correction of advance
   payment tax document {number}") + the reason line.
 
@@ -135,3 +140,72 @@ No new codes. New uses: 409 `exceeds_original` (cancelling a debit note), and `a
 - The simplified document editor/detail shows the 10 000 CZK warning. The customer picker is optional for it.
 - Settings → Number series lists all fourteen series (grouped issued / received).
 - Manual import type selector: all seven types.
+
+## Clarifications 1f-a (as implemented)
+Additive details settled during the Phase 1f-a backend; nothing above changed.
+
+Received documents
+- (a) A received `advance_credit_note` requires `dueDate`, like a received credit note; only a received
+  `advance_tax_doc` may have `dueDate: null`.
+- (b) A received `simplified` document still requires its supplier `contactId`; the contact is optional only for
+  issued (native and imported) `simplified` documents.
+
+Corrections
+- `credit-note` / `debit-note` work on an issued invoice or `simplified` document with `direction: "issued"`, imported
+  ones included; `credit-note` on an issued DDPP of ours (imported included) creates the `advance_credit_note`.
+  `POST /api/documents` with `docType` `credit_note` / `debit_note` / `advance_credit_note` and `imported` false →
+  `docType: invalid` (as before for credit notes).
+- Every native correction (credit note, debit note, DDPP correction) keeps the original's rate
+  (`exchangeRateSource: "original"`) and is bound to its `currency`, `contactId` and `vatMode` on `PUT`. Imported
+  ones are not bound, have no cap and need no `correctionReason` at issue — this now also holds for imported credit
+  notes (1e required the reason).
+- The debit-note cap re-check on cancel counts the issued credit notes only (drafts are checked at their own issue).
+  It applies to imported debit notes linked to the original too, since they raise its cap.
+- Issuing a native debit note locks its original and re-checks it is still correctable (cancelled meanwhile → 409
+  `invalid_state`). A native credit / debit note of a `simplified` document issued without a customer is bound to
+  that null contact and issues without one (`customer: null`).
+- An imported `advance_credit_note` linked to a DDPP counts in the DDPP's net, so issuing or cancelling it is
+  refused like a native one while the DDPP is deducted by a non-cancelled invoice (`advance_settled` /
+  `advance_in_use`); it still has no cap and needs no reason.
+- Exact VAT of a DDPP correction is applied whenever its totals are computed: at creation, on `PUT`, in `/compute`
+  with its `documentId`, and again at issue against the corrections read under the DDPP lock (the stored draft totals
+  are therefore already exact).
+  For a foreign currency both `baseCzk` and `vatCzk` of a fully corrected rate are the DDPP's remainder;
+  `totalCzk` stays `round2(payable × rate)`.
+- "Issued corrections" of a DDPP (cap, net deduction) are the `advance_credit_note` documents with
+  `relatedDocumentId` = the DDPP and `status: issued`, imported ones included. Net rows that are zero on all four
+  amounts are dropped from an advance line's `recap`; a DDPP with nothing left is skipped by `settle` and
+  `lines.N.advanceDocumentId: invalid` on save / issue. A correction issued between an invoice's validation and its
+  write → 409 `conflict` (retry), like a changed non-payer proforma.
+- Cancelling an imported DDPP that has a non-cancelled correction (draft or issued) → 409 `advance_in_use`.
+- A refund on a DDPP correction is a payment on it (same endpoints); `paymentState` as for credit notes.
+
+Simplified documents
+- `POST` default `docType` stays `invoice`; `simplified` takes the same defaults as an invoice (tax point = issue
+  date). At issue `contactId` may be null → `customer: null`. The PDF title is "Zjednodušený daňový doklad" /
+  "Simplified tax document" in every VAT mode.
+
+PDF
+- Payload: `docType` takes all seven values; `customer` may be `null` (no customer block, see "1f-a UI follow-ups"
+  below). The default template skips a `null` customer; a custom `invoice.typ` must do the same.
+- Titles: `debit_note` "Opravný daňový doklad – vrubopis" / "Debit note"; `advance_credit_note` "Opravný daňový
+  doklad k přijaté platbě" / "Advance payment correction".
+- `reference` (+ "Důvod opravy: …" / "Reason: …" line when set): credit note "Opravný daňový doklad k faktuře {n}" /
+  "Credit note for invoice {n}"; debit note "Opravný daňový doklad – vrubopis k faktuře {n}" / "Debit note for
+  invoice {n}"; with a simplified original "… k zjednodušenému daňovému dokladu {n}" / "… to simplified tax document
+  {n}"; DDPP correction as specified above. A DDPP correction prints its due date (no "payment date" row) and the
+  payable row negated, like a credit note.
+
+Number series
+- `GET /api/settings/number-series` order: `invoice`, `credit_note`, `debit_note`, `proforma`, `advance_tax_doc`,
+  `advance_credit_note`, `simplified`, then `received`, `received_credit_note`, `received_debit_note`,
+  `received_proforma`, `received_advance_tax_doc`, `received_advance_credit_note`, `received_simplified`.
+
+1f-a UI follow-ups
+- `Document.correctionBlock` is serialised on every document (`null` unless an issued, non-cancelled DDPP is
+  blocked); precedence `advance_settled` > `advance_in_use` > `fully_corrected`. Its net counts issued corrections,
+  imported ones included. `credit-note` on a fully corrected DDPP → 409 `invalid_state`: no correction could pass the
+  cap, so no draft is created.
+- PDF `customer` is `null` (no "Odběratel" block) whenever the document has no customer and none is expected: an
+  issued document without a customer snapshot (a `simplified` document or one of its credit / debit notes), or a
+  draft of a `simplified` document or of one of its corrections. Other drafts without a contact keep the empty party.

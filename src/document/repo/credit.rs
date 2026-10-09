@@ -1,16 +1,19 @@
-//! Credit notes: the draft created from an issued invoice, and the per-rate
-//! cap checked when it is issued.
+//! Credit and debit notes of an invoice / simplified document: the drafts
+//! created from it, the credit cap checked at issue (raised by issued debit
+//! notes) and the cap re-check when a debit note is cancelled.
 
 use anyhow::Context as _;
 use chrono::NaiveDate;
+use rust_decimal::Decimal;
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction, EntityTrait,
     QueryFilter, TransactionTrait,
 };
 use uuid::Uuid;
 
-use super::{context, query, view, write};
+use super::{context, ddpp_correction, query, view, write};
 use crate::document::compute::{self, Params, Totals};
+use crate::document::correction::sum_bases;
 use crate::document::credit::{copy_lines, exceeds_original};
 use crate::document::entity::{document, vat_recap};
 use crate::document::handlers::input::DocumentData;
@@ -18,53 +21,54 @@ use crate::document::line::{LineData, PaymentMethod, Status, VatMode};
 use crate::error::AppError;
 use crate::settings::doc_type::{DocType, ISSUED};
 
-/// Lock `id` and require an issued invoice (else `invalid_state`).
-async fn locked_invoice<C: ConnectionTrait>(
+/// An issued (not draft, not cancelled) invoice or simplified document of
+/// ours, imported ones included: what credit and debit notes correct.
+pub fn correctable(doc: &document::Model) -> Result<bool, AppError> {
+    Ok(
+        (doc.doc_type == DocType::Invoice.as_str() || doc.doc_type == DocType::Simplified.as_str())
+            && doc.direction == ISSUED
+            && view::status(doc)? == Status::Issued,
+    )
+}
+
+/// Lock `id` and require a correctable document (else `invalid_state`).
+pub async fn locked_original<C: ConnectionTrait>(
     txn: &C,
     id: Uuid,
 ) -> Result<document::Model, AppError> {
     let doc = query::lock(txn, id).await?;
-    if !creditable(&doc)? {
+    if !correctable(&doc)? {
         return Err(AppError::InvalidState);
     }
     Ok(doc)
 }
 
-/// An issued invoice of ours (received documents are never credited here).
-fn creditable(doc: &document::Model) -> Result<bool, AppError> {
-    Ok(doc.doc_type == DocType::Invoice.as_str()
-        && doc.direction == ISSUED
-        && view::status(doc)? == Status::Issued)
-}
-
-/// A draft credit note copying the invoice (advance lines dropped).
-pub async fn create(
+/// The header a correction copies from `orig`: contact, currency, locale,
+/// VAT mode, bank, payment method and the original's rate.
+pub async fn draft_from(
     db: &DatabaseConnection,
-    invoice_id: Uuid,
+    orig: &document::Model,
+    doc_type: DocType,
+    lines: Vec<LineData>,
     correction_reason: Option<String>,
     today: NaiveDate,
-) -> Result<Uuid, AppError> {
-    let inv = query::find(db, invoice_id).await?;
-    if !creditable(&inv)? {
-        return Err(AppError::InvalidState);
-    }
-    let due_date = context::due_date(db, inv.contact_id, today).await?;
-    let vat_mode = VatMode::parse(&inv.vat_mode)
-        .with_context(|| format!("document {invoice_id} has unknown vat mode"))?;
-    let data = DocumentData {
-        doc_type: DocType::CreditNote,
-        related_document_id: Some(inv.id),
+) -> Result<DocumentData, AppError> {
+    let vat_mode = VatMode::parse(&orig.vat_mode)
+        .with_context(|| format!("document {} has unknown vat mode", orig.id))?;
+    Ok(DocumentData {
+        doc_type,
+        related_document_id: Some(orig.id),
         correction_reason,
-        contact_id: inv.contact_id,
+        contact_id: orig.contact_id,
         issue_date: today,
         tax_point_date: Some(today),
-        due_date,
-        exchange_rate: inv.exchange_rate.filter(|_| inv.currency != "CZK"),
-        currency: inv.currency,
-        locale: inv.locale,
+        due_date: context::due_date(db, orig.contact_id, today).await?,
+        exchange_rate: orig.exchange_rate.filter(|_| orig.currency != "CZK"),
+        currency: orig.currency.clone(),
+        locale: orig.locale.clone(),
         vat_mode,
-        bank_account_id: inv.bank_account_id,
-        payment_method: PaymentMethod::parse(&inv.payment_method)
+        bank_account_id: orig.bank_account_id,
+        payment_method: PaymentMethod::parse(&orig.payment_method)
             .unwrap_or(PaymentMethod::BankTransfer),
         variable_symbol: None,
         constant_symbol: None,
@@ -73,65 +77,168 @@ pub async fn create(
         footer_note: None,
         internal_note: None,
         round_total: false,
-        lines: copy_lines(&query::load_lines(db, invoice_id).await?),
+        lines,
         imported: false,
         number: None,
         meta: Default::default(),
-    };
+    })
+}
+
+/// `POST …/credit-note`: a credit note of an invoice / simplified document
+/// (all lines copied, advance lines dropped), or the correction of a DDPP.
+pub async fn create(
+    db: &DatabaseConnection,
+    id: Uuid,
+    correction_reason: Option<String>,
+    today: NaiveDate,
+) -> Result<Uuid, AppError> {
+    let orig = query::find(db, id).await?;
+    if ddpp_correction::correctable(&orig)? {
+        return ddpp_correction::create(db, &orig, correction_reason, today).await;
+    }
+    let lines = copy_lines(&query::load_lines(db, id).await?);
+    create_note(
+        db,
+        orig,
+        DocType::CreditNote,
+        lines,
+        correction_reason,
+        today,
+    )
+    .await
+}
+
+/// `POST …/debit-note`: an empty debit-note draft (the user enters the
+/// additional charge).
+pub async fn create_debit(
+    db: &DatabaseConnection,
+    id: Uuid,
+    correction_reason: Option<String>,
+    today: NaiveDate,
+) -> Result<Uuid, AppError> {
+    let orig = query::find(db, id).await?;
+    create_note(
+        db,
+        orig,
+        DocType::DebitNote,
+        Vec::new(),
+        correction_reason,
+        today,
+    )
+    .await
+}
+
+async fn create_note(
+    db: &DatabaseConnection,
+    orig: document::Model,
+    doc_type: DocType,
+    lines: Vec<LineData>,
+    correction_reason: Option<String>,
+    today: NaiveDate,
+) -> Result<Uuid, AppError> {
+    if !correctable(&orig)? {
+        return Err(AppError::InvalidState);
+    }
+    let data = draft_from(db, &orig, doc_type, lines, correction_reason, today).await?;
     let totals = compute::evaluate(&data.lines, data.params())
         .map_err(AppError::Validation)?
         .totals;
+    let orig_id = orig.id;
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                locked_invoice(txn, invoice_id).await?;
+                locked_original(txn, orig_id).await?;
                 write::create_in(txn, data, totals).await
             })
         })
         .await?)
 }
 
-/// Every non-cancelled credit note of the invoice — the issued ones plus the
-/// one being issued (`own`) — may not exceed the invoice's item base per rate.
-/// Locks the invoice row, so concurrent credit-note issues queue.
-pub async fn check_cap(
-    txn: &DatabaseTransaction,
-    credit_note_id: Uuid,
-    invoice_id: Uuid,
-    own: &Totals,
-) -> Result<(), AppError> {
-    locked_invoice(txn, invoice_id).await?;
-    let original = item_bases(txn, invoice_id).await?;
-    let others: Vec<Uuid> = document::Entity::find()
-        .filter(document::Column::RelatedDocumentId.eq(invoice_id))
-        .filter(document::Column::DocType.eq(DocType::CreditNote.as_str()))
+/// Issued notes of `doc_type` correcting `original`, other than `except`.
+async fn issued_notes<C: ConnectionTrait>(
+    db: &C,
+    original: Uuid,
+    doc_type: DocType,
+    except: Uuid,
+) -> Result<Vec<(Decimal, Decimal)>, AppError> {
+    let ids: Vec<Uuid> = document::Entity::find()
+        .filter(document::Column::RelatedDocumentId.eq(original))
+        .filter(document::Column::DocType.eq(doc_type.as_str()))
         .filter(document::Column::Status.eq(Status::Issued.as_str()))
-        .filter(document::Column::Id.ne(credit_note_id))
-        .all(txn)
+        .filter(document::Column::Id.ne(except))
+        .all(db)
         .await?
         .into_iter()
         .map(|d| d.id)
         .collect();
-    let issued = vat_recap::Entity::find()
-        .filter(vat_recap::Column::DocumentId.is_in(others))
-        .all(txn)
-        .await?;
-    let credited = issued
-        .iter()
+    Ok(vat_recap::Entity::find()
+        .filter(vat_recap::Column::DocumentId.is_in(ids))
+        .all(db)
+        .await?
+        .into_iter()
         .map(|r| (r.vat_rate.normalize(), r.base))
+        .collect())
+}
+
+/// The credit cap per rate: the original's item bases plus the bases of its
+/// issued debit notes (other than `except`).
+async fn cap<C: ConnectionTrait>(
+    db: &C,
+    original: Uuid,
+    except: Uuid,
+) -> Result<Vec<(Decimal, Decimal)>, AppError> {
+    let debits = issued_notes(db, original, DocType::DebitNote, except).await?;
+    let mut rows = item_bases(db, original).await?;
+    rows.extend(debits);
+    Ok(sum_bases(rows).context("credit cap overflow")?)
+}
+
+/// Every issued credit note of the original plus the one being issued
+/// (`own`) may not exceed the cap per rate. Locks the original, so
+/// concurrent credit-note issues queue.
+pub async fn check_cap(
+    txn: &DatabaseTransaction,
+    credit_note_id: Uuid,
+    original_id: Uuid,
+    own: &Totals,
+) -> Result<(), AppError> {
+    locked_original(txn, original_id).await?;
+    let cap = cap(txn, original_id, credit_note_id).await?;
+    let credited = issued_notes(txn, original_id, DocType::CreditNote, credit_note_id).await?;
+    let credited = credited
+        .into_iter()
         .chain(own.recap.iter().map(|r| (r.vat_rate.normalize(), r.base)));
-    if exceeds_original(&original, credited) {
+    if exceeds_original(&cap, credited) {
         return Err(AppError::field("lines", "exceeds_original"));
     }
     Ok(())
 }
 
-/// The invoice's item base per rate (before any advance deduction).
+/// Cancelling an issued debit note lowers the cap: refused (409
+/// `exceeds_original`) when the issued credit notes would then exceed it.
+pub async fn check_debit_cancel(
+    txn: &DatabaseTransaction,
+    debit_note: &document::Model,
+) -> Result<(), AppError> {
+    // Imported debit notes linked to the original raise its cap too.
+    let Some(original_id) = debit_note.related_document_id else {
+        return Ok(());
+    };
+    query::lock(txn, original_id).await?;
+    let cap = cap(txn, original_id, debit_note.id).await?;
+    let credited = issued_notes(txn, original_id, DocType::CreditNote, Uuid::nil()).await?;
+    if exceeds_original(&cap, credited) {
+        return Err(AppError::ExceedsOriginal);
+    }
+    Ok(())
+}
+
+/// The original's item base per rate (before any advance deduction).
 async fn item_bases<C: ConnectionTrait>(
     db: &C,
-    invoice_id: Uuid,
-) -> Result<Vec<(rust_decimal::Decimal, rust_decimal::Decimal)>, AppError> {
-    let lines = query::load_lines(db, invoice_id).await?;
+    original: Uuid,
+) -> Result<Vec<(Decimal, Decimal)>, AppError> {
+    let lines = query::load_lines(db, original).await?;
     let items = lines.iter().filter_map(|l| match l {
         LineData::Item(i) => {
             compute::item_base(i.quantity, i.unit_price, i.discount_pct).map(|b| (i.vat_rate, b))
@@ -146,7 +253,7 @@ async fn item_bases<C: ConnectionTrait>(
         round_total: false,
     };
     let totals = compute::totals(items, params)
-        .map_err(|_| anyhow::anyhow!("stored invoice {invoice_id} totals overflow"))?;
+        .map_err(|_| anyhow::anyhow!("stored document {original} totals overflow"))?;
     Ok(totals
         .recap
         .into_iter()

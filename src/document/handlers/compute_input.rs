@@ -11,6 +11,7 @@ use super::input::{Existing, advance_ids, evaluate, exchange_rate, parse_vat_mod
 use super::line_input::{LineInput, Texts, validate_lines};
 use crate::document::advance::{AdvanceCtx, AdvanceSource};
 use crate::document::compute::{Evaluated, Params};
+use crate::document::correction::ExactBasis;
 use crate::document::line::{LineData, VatMode};
 use crate::error::{AppError, FieldErrors};
 use crate::settings::doc_type::DocType;
@@ -49,6 +50,8 @@ pub struct ComputeCtx {
     /// The draft named by `documentId`, if it exists.
     pub existing: Option<Existing>,
     pub advances: HashMap<Uuid, AdvanceSource>,
+    /// A native DDPP correction: the basis of its exact VAT.
+    pub exact: Option<ExactBasis>,
 }
 
 impl ComputeInput {
@@ -67,9 +70,9 @@ impl ComputeInput {
         let rate = e
             .check("exchangeRate", exchange_rate(self.exchange_rate.as_deref()))
             .flatten();
-        // Same as save / issue: a native credit note keeps its invoice's rate.
+        // Same as save / issue: a native correction keeps its original's rate.
         let rate = match &ctx.existing {
-            Some(x) if x.doc_type == DocType::CreditNote && !x.imported => x.exchange_rate,
+            Some(x) if x.doc_type.is_correction() && !x.imported => x.exchange_rate,
             _ => rate,
         };
         let doc_type = match self.doc_type.as_deref() {
@@ -107,7 +110,7 @@ impl ComputeInput {
             locale: &locale,
             sources: &ctx.advances,
         };
-        let evaluated = evaluate(&mut lines, params, &adv)?;
+        let evaluated = evaluate(&mut lines, params, &adv, ctx.exact.as_ref())?;
         Ok((lines, evaluated))
     }
 }

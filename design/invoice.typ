@@ -87,7 +87,7 @@
 #grid(
   columns: (1fr, 1fr),
   column-gutter: 10mm,
-  party(d.supplier), party(d.customer),
+  party(d.supplier), if d.customer != none { party(d.customer) },
 )
 #v(6mm)
 

@@ -1,8 +1,10 @@
-//! Documents: invoices, proformas, DDPPs, credit notes — lines, VAT recap,
+//! Documents: invoices, simplified tax documents, proformas, DDPPs, credit /
+//! debit notes, DDPP corrections — lines, VAT recap,
 //! issue, cancel, payments, advance settlement.
 
 pub mod advance;
 pub mod compute;
+pub mod correction;
 pub mod credit;
 pub mod custom_fields;
 pub mod ddpp;
@@ -47,6 +49,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/{id}/settle", post(actions::settle))
         .route("/{id}/credit-note", post(actions::credit_note))
+        .route("/{id}/debit-note", post(actions::debit_note))
         .route("/{id}/payments", get(payments::list).post(payments::create))
         .route("/{id}/payments/{payment_id}", delete(payments::delete))
 }
