@@ -67,6 +67,11 @@ const routes = [
     component: () => import("@/features/isdoc/views/IsdocImportView.vue"),
   },
   {
+    path: "/import/csv",
+    name: "csv-import",
+    component: () => import("@/features/csvImport/views/CsvImportView.vue"),
+  },
+  {
     path: "/contacts",
     name: "contacts",
     component: () => import("@/features/contacts/views/ContactsListView.vue"),

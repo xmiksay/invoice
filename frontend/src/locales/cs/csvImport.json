@@ -1,0 +1,65 @@
+{
+  "import": {
+    "action": "Importovat CSV / XLSX",
+    "title": "Import CSV / XLSX",
+    "dropHint": "Přetáhněte sem soubor .csv, .txt nebo .xlsx, nebo ho vyberte. Jeden řádek je jeden doklad, sloupce odpovídají vzoru.",
+    "pick": "Vybrat soubor",
+    "sample": "Stáhnout vzor",
+    "limits": "Jeden soubor, nejvýše 50 MB a 500 řádků. Vydané a přijaté doklady lze kombinovat (sloupec direction).",
+    "file": "Soubor: {name} ({size})",
+    "again": "Importovat další soubor"
+  },
+  "upload": {
+    "noFile": "Vyberte jeden soubor .csv, .txt nebo .xlsx.",
+    "tooLarge": "Soubor je příliš velký (nejvýše 50 MB)."
+  },
+  "fileError": {
+    "invalid": "Soubor nelze přečíst. Nahrajte CSV (UTF-8 nebo Windows-1250) nebo sešit XLSX.",
+    "empty": "Soubor neobsahuje žádné datové řádky.",
+    "missing_column": "Chybí povinný sloupec {column}.",
+    "invalid_column": "Neplatný sloupec {column} (sloupec vat_ vyžaduje odpovídající sloupec base_ a sazba musí být číslo).",
+    "too_many": "Příliš mnoho řádků (nejvýše 500). Rozdělte soubor na menší části.",
+    "too_large": "Sešit XLSX je po rozbalení příliš velký (nejvýše 200 MB). Rozdělte soubor na menší části.",
+    "unknown": "Soubor byl odmítnut ({code})."
+  },
+  "preview": {
+    "row": "Řádek",
+    "rowNo": "Řádek {n}",
+    "select": "Vybrat řádek {n}",
+    "category": "Kategorie",
+    "messages": "Poznámky",
+    "column": "Sloupec: {column}",
+    "empty": "Soubor neobsahuje žádné doklady."
+  },
+  "categoryMatch": {
+    "existing": "Existující kategorie",
+    "new": "Nová kategorie"
+  },
+  "rowError": {
+    "missing_field": "Chybí povinná hodnota.",
+    "invalid_value": "Neplatná hodnota.",
+    "invalid_date": "Neplatné datum (použijte d.m.rrrr nebo rrrr-mm-dd).",
+    "invalid_amount": "Neplatná částka (nečitelná, příliš velká, se špatným znaménkem nebo s příliš mnoha desetinnými místy).",
+    "no_vat_rows": "Není vyplněn žádný sloupec sazby DPH.",
+    "total_mismatch": "Celková částka neodpovídá rekapitulaci DPH (základy + DPH + zaokrouhlení).",
+    "not_allowed": "Tato kombinace údajů není u daného typu dokladu povolena (např. DUZP u zálohové faktury, DPH mimo standardní režim, datum úhrady u daňového dokladu k platbě).",
+    "duplicate": "Doklad už je v evidenci (vznikl mezitím).",
+    "number_taken": "Číslo z řady přijatých dokladů je už obsazené. Zkontrolujte počítadlo v Nastavení.",
+    "storage_unavailable": "Úložiště souborů je nedostupné. Zkuste import později.",
+    "internal": "Neočekávaná chyba serveru.",
+    "unknown": "Chyba ({code})."
+  },
+  "notAllowed": {
+    "taxDate": "Zálohová faktura nemá DUZP.",
+    "paidDate": "Daňový doklad k platbě nemůže mít datum úhrady.",
+    "vat": "DPH je povolena jen v režimu standard.",
+    "counterparty": "Chybí protistrana."
+  },
+  "warning": {
+    "contact_created": "Kontakt se založí z údajů v řádku.",
+    "category_created": "Kategorie se založí.",
+    "category_inactive": "Kategorie je neaktivní, doklad se naimportuje bez kategorie.",
+    "related_not_found": "Původní doklad {number} nebyl nalezen, doklad se nepropojí.",
+    "unknown": "Upozornění ({code})."
+  }
+}

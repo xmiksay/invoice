@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/api/client";
 import { i18n } from "@/i18n";
 import { entry, isdocFile } from "./testData";
+import { defaultSelection } from "@/features/imports/selection";
+import { totalBytes } from "@/features/imports/upload";
 import {
-  defaultSelection,
   ENTRY_ERRORS,
   entryErrorKey,
   exportErrorKey,
   partitionFiles,
-  totalBytes,
   uploadErrorKey,
   warningKey,
   WARNINGS,

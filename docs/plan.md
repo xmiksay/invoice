@@ -136,6 +136,9 @@ downloadable in the UI, preview → confirm like ISDOC.
   contacts matched by IČO → DIČ → exact name, else created; unknown categories created; limits as ISDOC (50 MiB /
   500 rows); 2b and 2c stay separate PRs. A per-space accounting currency and rounding are noted on #3.
   Contract: [`docs/api/csv.md`](api/csv.md).
+- As implemented: the ISDOC import pipeline (lookups, per-entry check, transaction, wire types) moved to
+  `src/import/` and both imports use it; the format lives in `src/csvio/format.rs` + `write.rs` for 2c to reuse;
+  details in the csv.md Clarifications.
 
 2c CSV export for the accountant: issued and received per the list filter, one row = one document, `;` separator,
 UTF-8 with BOM, decimal comma, dates `dd.mm.yyyy`; columns direction, type, number, supplier number, dates,

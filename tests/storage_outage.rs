@@ -108,7 +108,7 @@ async fn cleanup_keeps_objects_a_row_points_at() {
 async fn failed_isdoc_import_write_rolls_back() {
     use invoice::document::repo::issue::Rate;
     use invoice::error::AppError;
-    use invoice::isdoc::store::{self, Options};
+    use invoice::import::store::{self, Options};
     use invoice::isdoc::{parse, plan};
 
     let db = TestDb::new().await;
@@ -124,8 +124,8 @@ async fn failed_isdoc_import_write_rolls_back() {
         source: None,
     };
     let opts = Options {
-        mark_paid: true,
-        category_id: None,
+        paid_on: Some(p.issue_date),
+        category: None,
         vat_deductible: true,
     };
     let got = store::import(

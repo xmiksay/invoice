@@ -1,71 +1,20 @@
 //! [`Parsed`] → what gets stored: direction, sign, VAT mode, lines, recap
 //! and totals (copied, never recomputed), payment fields. Pure.
 
-use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
-use super::model::{Line, Money, Parsed, Party};
+use super::model::{Line, Money, Parsed};
 use super::parse::{Code, INVALID_AMOUNT};
 use crate::document::compute::{RecapRow, Totals, item_base, round2};
-use crate::document::handlers::dto::{BankSnapshot, PartySnapshot};
+use crate::document::handlers::dto::BankSnapshot;
 use crate::document::line::{ItemData, LineData, PaymentMethod, VatMode};
+pub use crate::import::model::Plan;
+use crate::import::model::{ContactRule, IssuedBank};
 use crate::settings::doc_type::{DocType, ISSUED, RECEIVED};
 
 pub const FOREIGN: Code = "foreign";
 pub const AMBIGUOUS: Code = "ambiguous";
 pub const RATE_FROM_CNB: Code = "rate_from_cnb";
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Plan {
-    pub direction: &'static str,
-    pub doc_type: DocType,
-    /// ISDOC `ID`: our number (issued) or the supplier's (received).
-    pub number: String,
-    pub supplier: Party,
-    pub customer: Option<Party>,
-    /// The supplier is a VAT payer (header `VATApplicable`).
-    pub vat_payer: bool,
-    pub issue_date: NaiveDate,
-    pub tax_point_date: Option<NaiveDate>,
-    pub due_date: Option<NaiveDate>,
-    pub currency: String,
-    /// From the ISDOC; `None` for a foreign currency → ČNB.
-    pub rate: Option<Decimal>,
-    pub vat_mode: VatMode,
-    pub lines: Vec<LineData>,
-    pub totals: Totals,
-    /// `TaxInclusiveAmount`, for the preview.
-    pub gross: Decimal,
-    pub payment_method: PaymentMethod,
-    pub variable_symbol: Option<String>,
-    pub constant_symbol: Option<String>,
-    pub bank: Option<BankSnapshot>,
-    pub note: Option<String>,
-    pub original_ref: Option<String>,
-    pub warnings: Vec<Code>,
-}
-
-impl Plan {
-    /// The other party: the customer of an issued document, the supplier of
-    /// a received one.
-    pub fn counterparty(&self) -> Option<&Party> {
-        if self.direction == ISSUED {
-            self.customer.as_ref()
-        } else {
-            Some(&self.supplier)
-        }
-    }
-
-    /// ČNB rate date: the tax point (received: the received date, which is
-    /// the tax point too), else the issue date.
-    pub fn rate_date(&self) -> NaiveDate {
-        self.tax_point_date.unwrap_or(self.issue_date)
-    }
-
-    pub fn needs_cnb(&self) -> bool {
-        self.currency != "CZK" && self.rate.is_none()
-    }
-}
 
 fn ico_eq(a: Option<&str>, company: &str) -> bool {
     let strip = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
@@ -292,7 +241,7 @@ pub fn plan(p: Parsed, company_ico: Option<&str>) -> Result<Plan, Code> {
         gross: round2(p.totals.gross * k),
         doc_type: p.doc_type,
         number: p.number,
-        vat_payer: p.vat_applicable,
+        vat_payer: Some(p.vat_applicable),
         issue_date: p.issue_date,
         tax_point_date,
         due_date,
@@ -304,29 +253,15 @@ pub fn plan(p: Parsed, company_ico: Option<&str>) -> Result<Plan, Code> {
         constant_symbol: digits(pay.constant_symbol.as_deref(), 4),
         bank,
         note: p.note,
+        locale: "cs".into(),
+        received_date: None,
         original_ref: p.original_ref,
         supplier: p.supplier,
         customer: p.customer,
         warnings,
+        contact_rule: ContactRule::IcoOrName,
+        issued_bank: IssuedBank::Payment,
     })
-}
-
-/// The snapshot of an ISDOC party, as written.
-pub fn snapshot(p: &Party, vat_payer: Option<bool>) -> PartySnapshot {
-    PartySnapshot {
-        name: p.name.clone(),
-        ico: p.ico.clone(),
-        dic: p.dic.clone(),
-        street: p.street.clone(),
-        city: p.city.clone(),
-        zip: p.zip.clone(),
-        country: p.country.clone(),
-        registration: p.registration.clone(),
-        vat_payer,
-        email: p.email.clone(),
-        phone: p.phone.clone(),
-        web: None,
-    }
 }
 
 #[cfg(test)]

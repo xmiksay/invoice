@@ -6,7 +6,8 @@ const RED = "!bg-red-100 !text-red-800 dark:!bg-red-900/50 dark:!text-red-300";
 
 export const PREVIEW_CLASS: Record<PreviewStatus, string> = { ok: GREEN, duplicate: GRAY, error: RED };
 export const RESULT_CLASS: Record<ResultStatus, string> = { imported: GREEN, skipped: GRAY, failed: RED };
-export const CONTACT_CLASS = {
+/** Contact / category match: a record that the import creates stands out. */
+export const MATCH_CLASS = {
   existing: "",
   new: "!bg-amber-100 !text-amber-800 dark:!bg-amber-900/50 dark:!text-amber-300",
 } as const;

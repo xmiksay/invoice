@@ -7,6 +7,7 @@ use std::io::{Cursor, Read};
 
 use super::model::MANIFEST_NS;
 use super::parse::{Code, INVALID_XML};
+pub use crate::import::form::File;
 
 /// Entry error: a zip nested deeper than the limit.
 pub const TOO_DEEP: Code = "too_deep";
@@ -40,11 +41,6 @@ pub const LIMITS: Limits = Limits {
 pub enum Exceeded {
     TooMany,
     TooLarge,
-}
-
-pub struct File {
-    pub name: String,
-    pub bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

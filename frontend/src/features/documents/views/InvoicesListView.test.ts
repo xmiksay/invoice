@@ -38,6 +38,7 @@ async function mountList(path = "/invoices") {
       { path: "/invoices", name: "invoices", component: InvoicesListView },
       { path: "/invoices/new", name: "invoice-new", component: stub },
       { path: "/import/isdoc", name: "isdoc-import", component: stub },
+      { path: "/import/csv", name: "csv-import", component: stub },
       { path: "/invoices/:id", name: "invoice-detail", component: stub },
     ],
   });
@@ -180,6 +181,7 @@ describe("InvoicesListView", () => {
     });
     const w = await mountList("/invoices?type=proforma");
     expect(w.find('[data-test="import-isdoc"]').attributes("href")).toBe("/import/isdoc");
+    expect(w.find('[data-test="import-csv"]').attributes("href")).toBe("/import/csv");
     await w.find('[data-test="isdoc-export"]').trigger("click");
     await flushPromises();
     const url = String(fetch.mock.calls.find(([u]) => String(u).startsWith("/api/documents/isdoc"))?.[0]);

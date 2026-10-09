@@ -11,7 +11,7 @@ use super::model::{Line, Money, NS, Parsed, Party, Payment, TaxRow, Totals, doc_
 use crate::document::line::MAX_INPUT;
 
 /// Entry error code (see `docs/api/isdoc.md`).
-pub type Code = &'static str;
+pub use crate::import::model::Code;
 
 pub const INVALID_XML: Code = "invalid_xml";
 pub const UNSUPPORTED_VERSION: Code = "unsupported_version";
@@ -125,6 +125,7 @@ fn party(n: Node) -> Result<Party, Code> {
         registration,
         email: text(p, &["Contact", "ElectronicMail"]),
         phone: text(p, &["Contact", "Telephone"]),
+        web: None,
     })
 }
 

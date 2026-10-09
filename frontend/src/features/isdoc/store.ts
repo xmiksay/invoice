@@ -1,8 +1,8 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
+import { useSelection } from "@/features/imports/selection";
 import { isdocApi } from "./api";
 import type { ConfirmOptions, ConfirmResult, PreviewEntry } from "./types";
-import { defaultSelection } from "./upload";
 
 export type BatchOptions = Omit<ConfirmOptions, "selected">;
 
@@ -15,17 +15,13 @@ const defaultOptions = (): BatchOptions => ({ markPaid: true, categoryId: null, 
 export const useIsdocImportStore = defineStore("isdoc/import", () => {
   const files = ref<File[]>([]);
   const entries = ref<PreviewEntry[] | null>(null);
-  const selected = ref<string[]>([]);
+  const selection = useSelection(entries);
+  const { selected, isSelected } = selection;
   const options = ref<BatchOptions>(defaultOptions());
   const results = ref<ConfirmResult[] | null>(null);
 
-  const isSelected = (e: PreviewEntry) => selected.value.includes(e.key);
   /** The category / VAT deductible options apply (and are shown) only when a received entry is selected. */
   const receivedSelected = computed(() => !!entries.value?.some((e) => e.direction === "received" && isSelected(e)));
-
-  function toggle(key: string, on: boolean): void {
-    selected.value = on ? [...selected.value, key] : selected.value.filter((k) => k !== key);
-  }
 
   function reset(): void {
     files.value = [];
@@ -40,7 +36,7 @@ export const useIsdocImportStore = defineStore("isdoc/import", () => {
     files.value = next;
     const res = await isdocApi.preview(next);
     entries.value = res.entries;
-    selected.value = defaultSelection(res.entries);
+    selection.toggleAll(true);
   }
 
   async function confirm(): Promise<void> {
@@ -54,5 +50,5 @@ export const useIsdocImportStore = defineStore("isdoc/import", () => {
     results.value = res.results;
   }
 
-  return { files, entries, selected, options, results, receivedSelected, isSelected, toggle, reset, preview, confirm };
+  return { files, entries, ...selection, options, results, receivedSelected, reset, preview, confirm };
 });

@@ -52,6 +52,7 @@ function open(id: string) {
       <div class="flex flex-wrap gap-2">
         <IsdocExportButton :query="store.query" />
         <RouterLink :to="{ name: 'isdoc-import' }" class="btn" data-test="import-isdoc">{{ t("isdoc.import.action") }}</RouterLink>
+        <RouterLink :to="{ name: 'csv-import' }" class="btn" data-test="import-csv">{{ t("csvImport.import.action") }}</RouterLink>
         <RouterLink :to="importLink" class="btn" data-test="import-document">{{ t("documents.import.action") }}</RouterLink>
         <RouterLink v-if="newLink" :to="newLink.to" class="btn btn-primary" data-test="new-document">{{ newLink.label }}</RouterLink>
       </div>

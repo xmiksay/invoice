@@ -1,20 +1,21 @@
-//! Confirm: one analysed entry → one stored document, in its own transaction
-//! (contact, document, lines, recap, original PDF, payment).
+//! Confirm: one planned entry → one stored document, in its own transaction
+//! (contact, category, document, lines, recap, original PDF, payment).
 
 use bytes::Bytes;
-use chrono::Datelike;
+use chrono::{Datelike, NaiveDate};
 use rust_decimal::Decimal;
 use sea_orm::{
-    ActiveModelTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction, EntityTrait, Set,
-    Statement, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,
+    EntityTrait, QueryFilter, Set, Statement, TransactionTrait,
 };
 use uuid::Uuid;
 
+use super::category::{self, CategoryRef};
 use super::lookup;
-use super::model::Party;
-use super::plan::{Plan, snapshot};
+use super::model::{ContactRule, IssuedBank, Party, Plan};
 use crate::contact::entity::contact;
 use crate::document::entity::{document, payment};
+use crate::document::handlers::dto::BankSnapshot;
 use crate::document::line::Status;
 use crate::document::repo::issue::Rate;
 use crate::document::repo::{lines, original, payments, write};
@@ -26,11 +27,14 @@ use crate::settings::repo::number_series;
 use crate::storage;
 use crate::validation::normalize_iban;
 
-/// Batch options of `confirm`.
+/// What a source decides per entry beyond the plan.
 #[derive(Debug, Clone)]
 pub struct Options {
-    pub mark_paid: bool,
-    pub category_id: Option<Uuid>,
+    /// One payment of the payable on this date (not for a DDPP, nor when
+    /// the payable is 0).
+    pub paid_on: Option<NaiveDate>,
+    pub category: Option<CategoryRef>,
+    /// Received only.
     pub vat_deductible: bool,
 }
 
@@ -42,8 +46,12 @@ fn json<T: serde::Serialize>(v: &T) -> Result<serde_json::Value, AppError> {
     Ok(serde_json::to_value(v).map_err(anyhow::Error::from)?)
 }
 
-async fn contact_for<C: ConnectionTrait>(db: &C, p: &Party) -> Result<Uuid, AppError> {
-    if let Some(c) = lookup::contact(db, p).await? {
+async fn contact_for<C: ConnectionTrait>(
+    db: &C,
+    p: &Party,
+    rule: ContactRule,
+) -> Result<Uuid, AppError> {
+    if let Some(c) = lookup::contact(db, p, rule).await? {
         return Ok(c.id);
     }
     let now = chrono::Utc::now().into();
@@ -68,11 +76,11 @@ async fn contact_for<C: ConnectionTrait>(db: &C, p: &Party) -> Result<Uuid, AppE
     Ok(id)
 }
 
-/// Our bank account named by the ISDOC payment details.
-async fn bank_account<C: ConnectionTrait>(db: &C, plan: &Plan) -> Result<Option<Uuid>, AppError> {
-    let Some(bank) = &plan.bank else {
-        return Ok(None);
-    };
+/// Our bank account named by the payment details.
+async fn matching_account<C: ConnectionTrait>(
+    db: &C,
+    bank: &BankSnapshot,
+) -> Result<Option<Uuid>, AppError> {
     let wanted = [bank.iban.as_deref(), bank.account_number.as_deref()];
     let wanted: Vec<String> = wanted.into_iter().flatten().map(normalize_iban).collect();
     Ok(bank_account::Entity::find()
@@ -86,6 +94,37 @@ async fn bank_account<C: ConnectionTrait>(db: &C, plan: &Plan) -> Result<Option<
                 .any(|x| wanted.contains(&normalize_iban(x)))
         })
         .map(|b| b.id))
+}
+
+/// An issued document's bank account and snapshot.
+async fn issued_bank<C: ConnectionTrait>(
+    db: &C,
+    plan: &Plan,
+) -> Result<(Option<Uuid>, Option<BankSnapshot>), AppError> {
+    match plan.issued_bank {
+        IssuedBank::Payment => match &plan.bank {
+            Some(b) => Ok((matching_account(db, b).await?, Some(b.clone()))),
+            None => Ok((None, None)),
+        },
+        IssuedBank::CurrencyDefault => {
+            let account = bank_account::Entity::find()
+                .filter(bank_account::Column::Currency.eq(plan.currency.as_str()))
+                .filter(bank_account::Column::IsDefault.eq(true))
+                .one(db)
+                .await?;
+            Ok(match account {
+                Some(a) => (
+                    Some(a.id),
+                    Some(BankSnapshot {
+                        account_number: a.account_number,
+                        iban: a.iban,
+                        bic: a.bic,
+                    }),
+                ),
+                None => (None, None),
+            })
+        }
+    }
 }
 
 /// Payable types; a DDPP takes no payment.
@@ -120,11 +159,20 @@ async fn insert(
     let now = chrono::Utc::now();
     let issued = plan.direction == ISSUED;
     let contact_id = match plan.counterparty() {
-        Some(p) => Some(contact_for(txn, p).await?),
+        Some(p) => Some(contact_for(txn, p, plan.contact_rule).await?),
         None => None,
     };
     let related = lookup::related(txn, plan).await?;
-    let received_date = plan.tax_point_date.unwrap_or(plan.issue_date);
+    let received_date = plan.received_date();
+    let category_id = match &opts.category {
+        Some(c) => category::resolve(txn, plan.direction, c).await?,
+        None => None,
+    };
+    let (bank_account_id, bank_snapshot) = if issued {
+        issued_bank(txn, plan).await?
+    } else {
+        (None, None)
+    };
     let (number, year, seq) = if issued {
         (plan.number.clone(), plan.issue_date.year(), None)
     } else {
@@ -150,13 +198,9 @@ async fn insert(
         exchange_rate: Set(rate.rate),
         exchange_rate_date: Set(rate.date),
         exchange_rate_source: Set(rate.source.map(str::to_string)),
-        locale: Set("cs".into()),
+        locale: Set(plan.locale.clone()),
         vat_mode: Set(plan.vat_mode.as_str().into()),
-        bank_account_id: Set(if issued {
-            bank_account(txn, plan).await?
-        } else {
-            None
-        }),
+        bank_account_id: Set(bank_account_id),
         payment_method: Set(plan.payment_method.as_str().into()),
         variable_symbol: Set(plan.variable_symbol.clone()),
         constant_symbol: Set(plan.constant_symbol.clone()),
@@ -164,15 +208,12 @@ async fn insert(
         internal_note: Set(plan.note.clone().filter(|_| !issued)),
         // As received create: no rounding flag; it is CZK-only for issued ones.
         round_total: Set(issued && plan.currency == "CZK" && !plan.totals.rounding.is_zero()),
-        supplier_snapshot: Set(Some(json(&snapshot(&plan.supplier, Some(plan.vat_payer)))?)),
+        supplier_snapshot: Set(Some(json(&plan.supplier.snapshot(plan.vat_payer))?)),
         customer_snapshot: Set(match (&plan.customer, issued) {
-            (Some(c), true) => Some(json(&snapshot(c, None))?),
+            (Some(c), true) => Some(json(&c.snapshot(None))?),
             _ => None,
         }),
-        bank_snapshot: Set(match (&plan.bank, issued) {
-            (Some(b), true) => Some(json(b)?),
-            _ => None,
-        }),
+        bank_snapshot: Set(bank_snapshot.as_ref().map(json).transpose()?),
         paid: Set(Decimal::ZERO),
         related_document_id: Set(related),
         supplier_number: Set((!issued).then(|| plan.number.clone())),
@@ -186,7 +227,7 @@ async fn insert(
                 .map(|a| a.chars().take(60).collect()),
             _ => None,
         }),
-        category_id: Set(opts.category_id.filter(|_| !issued)),
+        category_id: Set(category_id),
         custom_fields: Set(serde_json::json!({})),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
@@ -213,15 +254,18 @@ async fn insert(
         })
     })?;
     // Display-only for both directions: the recap and totals above come from
-    // the ISDOC and are never recomputed from these lines.
+    // the source and are never recomputed from these lines.
     lines::replace(txn, id, &plan.lines).await?;
     lines::replace_recap(txn, id, &plan.totals).await?;
     let paid = plan.totals.payable;
-    if opts.mark_paid && payable(plan.doc_type) && paid > Decimal::ZERO {
+    if let Some(date) = opts.paid_on
+        && payable(plan.doc_type)
+        && paid > Decimal::ZERO
+    {
         payment::ActiveModel {
             id: Set(Uuid::new_v4()),
             document_id: Set(id),
-            date: Set(plan.due_date.unwrap_or(plan.issue_date)),
+            date: Set(date),
             amount: Set(paid),
             note: Set(None),
             created_at: Set(now.into()),
@@ -270,7 +314,7 @@ pub async fn import(
 
 async fn rollback(txn: DatabaseTransaction, e: AppError) -> AppError {
     if let Err(r) = txn.rollback().await {
-        tracing::warn!(error = %r, "rollback ISDOC import");
+        tracing::warn!(error = %r, "rollback import entry");
     }
     e
 }

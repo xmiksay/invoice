@@ -6,33 +6,24 @@ use std::collections::HashSet;
 use anyhow::Context as _;
 use sea_orm::DatabaseConnection;
 
-use super::lookup;
 use super::parse::{self, Code};
 use super::plan::{self, Plan};
 use super::upload::{self, Exceeded, File, LIMITS};
 use crate::error::AppError;
+use crate::import::check::{self, Checked};
 use crate::settings::repo::company;
 
-pub const RELATED_NOT_FOUND: Code = "related_not_found";
 pub use super::upload::PDF_SKIPPED;
-pub const CONTACT_CREATED: Code = "contact_created";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Status {
-    Ok,
-    Duplicate,
-}
+pub use crate::import::check::{CONTACT_CREATED, RELATED_NOT_FOUND, Status};
 
 #[derive(Debug, Clone)]
 pub struct Ready {
     pub plan: Plan,
-    pub status: Status,
     /// The original PDF to store.
     pub pdf: Option<bytes::Bytes>,
+    /// The plan's own warnings (incl. [`PDF_SKIPPED`]), before the check's.
     pub warnings: Vec<Code>,
-    /// `Some(true)`: an existing contact matches the counterparty.
-    pub contact_exists: Option<bool>,
-    pub related_found: bool,
+    pub checked: Checked,
 }
 
 #[derive(Debug, Clone)]
@@ -80,73 +71,34 @@ pub async fn analyze(
             Exceeded::TooMany => AppError::field("files", "too_many"),
             Exceeded::TooLarge => AppError::field("files", "too_large"),
         })?;
-    let plans: Vec<&Plan> = planned
+    let entries: Vec<(&str, Option<&Plan>)> = planned
         .iter()
-        .filter_map(|(_, o)| o.as_ref().ok().map(|(p, _, _)| p))
+        .map(|(k, o)| (k.as_str(), o.as_ref().ok().map(|(p, _, _)| p)))
         .collect();
-    let mut seen = HashSet::new();
-    let mut out = Vec::with_capacity(planned.len());
-    for (key, outcome) in &planned {
-        let outcome = match outcome {
-            Err(code) => Err(*code),
-            Ok((plan, pdf, skipped)) => {
-                let in_batch = !seen.insert(lookup::identity(plan));
-                let mut warnings = plan.warnings.clone();
-                if *skipped {
-                    warnings.push(PDF_SKIPPED);
+    let checked = check::check(db, &entries, only).await?;
+    Ok(planned
+        .into_iter()
+        .zip(checked)
+        .map(|((key, outcome), checked)| {
+            let outcome = match (outcome, checked) {
+                (Ok((plan, pdf, skipped)), Some(checked)) => {
+                    let mut warnings = plan.warnings.clone();
+                    if skipped {
+                        warnings.push(PDF_SKIPPED);
+                    }
+                    // Unselected entries of a confirm are never stored.
+                    let pdf = pdf.filter(|_| only.is_none_or(|o| o.contains(&key)));
+                    Ok(Ready {
+                        plan,
+                        pdf,
+                        warnings,
+                        checked,
+                    })
                 }
-                if only.is_some_and(|o| !o.contains(key)) {
-                    out.push(Analyzed {
-                        key: key.clone(),
-                        outcome: Ok(Ready {
-                            plan: plan.clone(),
-                            status: if in_batch {
-                                Status::Duplicate
-                            } else {
-                                Status::Ok
-                            },
-                            pdf: None,
-                            warnings,
-                            contact_exists: None,
-                            related_found: false,
-                        }),
-                    });
-                    continue;
-                }
-                let duplicate = in_batch || lookup::duplicate(db, plan).await?;
-                let contact_exists = match plan.counterparty() {
-                    Some(p) => Some(lookup::contact(db, p).await?.is_some()),
-                    None => None,
-                };
-                if contact_exists == Some(false) {
-                    warnings.push(CONTACT_CREATED);
-                }
-                let related_found = plan.original_ref.is_some()
-                    && (lookup::related(db, plan).await?.is_some()
-                        || plans
-                            .iter()
-                            .any(|o| !std::ptr::eq(*o, plan) && lookup::is_original_of(plan, o)));
-                if plan.original_ref.is_some() && !related_found {
-                    warnings.push(RELATED_NOT_FOUND);
-                }
-                Ok(Ready {
-                    plan: plan.clone(),
-                    status: if duplicate {
-                        Status::Duplicate
-                    } else {
-                        Status::Ok
-                    },
-                    pdf: pdf.clone(),
-                    warnings,
-                    contact_exists,
-                    related_found,
-                })
-            }
-        };
-        out.push(Analyzed {
-            key: key.clone(),
-            outcome,
-        });
-    }
-    Ok(out)
+                (Err(code), _) => Err(code),
+                (Ok(_), None) => Err(parse::INVALID_XML),
+            };
+            Analyzed { key, outcome }
+        })
+        .collect())
 }

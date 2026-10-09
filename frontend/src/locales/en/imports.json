@@ -1,0 +1,46 @@
+{
+  "status": {
+    "ok": "OK",
+    "duplicate": "Duplicate",
+    "error": "Error"
+  },
+  "direction": {
+    "issued": "Issued",
+    "received": "Received"
+  },
+  "contactMatch": {
+    "existing": "Existing contact",
+    "new": "New contact"
+  },
+  "preview": {
+    "selectAll": "Select all",
+    "select": "Select {key}",
+    "status": "Status",
+    "document": "Document",
+    "counterparty": "Counterparty",
+    "dates": "Dates",
+    "total": "Total",
+    "ico": "IČO {ico}",
+    "issueDate": "Issued {date}",
+    "taxPointDate": "Tax point {date}",
+    "dueDate": "Due {date}"
+  },
+  "result": {
+    "summary": "Imported {imported} of {total}.",
+    "outcome": "Outcome",
+    "open": "Open document",
+    "notSelected": "Not imported (not selected, or no longer OK).",
+    "status": {
+      "imported": "Imported",
+      "skipped": "Skipped",
+      "failed": "Failed"
+    }
+  },
+  "page": {
+    "back": "Back to the list",
+    "reading": "Reading the preview…",
+    "importing": "Importing…",
+    "confirm": "Import selected ({n})",
+    "selected": "{n} of {total} selected"
+  }
+}

@@ -139,3 +139,80 @@ they fit.
 Specified in phase 2c.
 
 ## Clarifications (as implemented)
+Additive details settled during the Phase 2b backend. No field of the contract changed shape.
+
+Upload and file errors
+- Exactly one `file` part: none → 422 `file: required`, more → `file: invalid`. Confirm `options` missing or malformed
+  → 422 `options: invalid`; `selected` defaults to `[]`. File errors carry `detail` next to `fields`:
+  `{"code":"validation","fields":{"file":"missing_column"},"detail":"supplier_number"}`.
+- **`missing_column`** is raised when a data row needs an absent column: `direction`, `doc_type`, `issue_date`,
+  `total` always, `number` for issued rows, `supplier_number` for received rows, `counterparty_name` for every
+  type but `simplified`, `exchange_rate` for foreign currencies. The first such row (file order) names the column.
+  A column that no row needs may be absent.
+- **`invalid_column`** also covers a known header that appears twice, and a rate given twice (`base_21` +
+  `base_21_0`). A rate header accepts `_`, `.` or `,` as the decimal mark (0–100, ≤ 2 dp). `vat_0` is accepted.
+  Duplicate unknown headers are ignored. A header-only file → `empty`. More than 50 rate columns (the recap rows a
+  received document holds, `MAX_RECAP_ROWS`) → `invalid_column` naming the 51st `base_{r}` in header order.
+- **XLSX:** more than 200 MiB actually decompressed (zip bomb) → 422 `file: too_large`. A ZIP with more than
+  10 000 entries, or one that is no workbook → `invalid`. The first sheet is read cell by cell: the used range it
+  declares is never allocated (A1 + XFD1048576 is a few KB). Only non-empty cells count. A cell right of column 200
+  → `invalid`. More than 500 rows after the header → `too_many`. The header is the first row with a non-empty cell.
+  Keys and `row` use the real sheet row numbers.
+- CSV line numbers are the line where a record starts. Blank lines and lines inside quoted cells count. CRLF and
+  lone CR are read as line ends.
+
+Values
+- **Encoding:** a leading UTF-8 BOM is dropped before the Windows-1250 fallback decodes the rest.
+- **Numbers:** a leading `+`, `-` or `−` is allowed. A single mark that occurs twice (`1.234.567`) is invalid.
+  Trailing zeros do not count towards the dp limit (`1,500` = 1.5). XLSX numeric cells are taken at Excel's 15
+  significant digits, so binary noise disappears (`0.1+0.2` → `0.3`, `1234.5` → `1234.50`).
+- **XLSX cell types:** a number in a date column → `invalid_date`; a date in an amount column → `invalid_amount`.
+  A numeric IČO is left-padded to 8 digits. A boolean cell reads as `true` / `false`. A number in a text column is
+  written without trailing zeros.
+- **`invalid_value`** also covers:
+  - a bad IČO checksum or DIČ format;
+  - `exchange_rate` other than empty / `1` for CZK;
+  - text over its limit: `number` / `supplier_number` / `related_number` 40, `counterparty_name` 200,
+    `counterparty_street` 200, `counterparty_city` 100, `counterparty_zip` 20, `category` 100, `note` 2000.
+- **`invalid_amount`** also covers a foreign `exchange_rate` ≤ 0, and a conversion that would not fit a money
+  column (reported on `exchange_rate`). `|rounding|` must be < 100.
+- **Signs:** a `credit_note` / `advance_credit_note` with a negative `total` is negated as a whole, rounding
+  included. A positive one is taken as is. After that every `base_*`, `vat_*` and `total` must be ≥ 0, else
+  `invalid_amount` on the first offending column (mixed signs). `rounding` may have either sign in every type.
+- Ignored by direction: issued rows ignore `received_date` and `vat_deductible`; received rows ignore `number`.
+
+Mapping
+- **Totals:** stored `total` = Σ(base + vat), `rounding` beside it, `payable` = the `total` column (as received
+  documents store them). CZK documents keep no `baseCzk` / `vatCzk` / `totalCzk`, like every CZK document. Foreign
+  ones store the CZK recap as given and `totalCzk` = `round2(total × rate)`, as a manual received document does.
+  The difference goes to the first candidate that stays ≥ 0: the derived VAT of each rate with VAT ≠ 0, then each
+  base, highest rate first. None qualifies → `total_mismatch`. A recap amount never turns negative. Example: EUR
+  at 25, `base_21` 2500, `vat_21` 0,20, `base_12` 250, `vat_12` 0,10, `total` 109,99 → 21 %: 99,98 + 0,01;
+  12 %: 10,00 + 0,00.
+- **Counterparty match:**
+  - A candidate whose IČO or DIČ contradicts the row's is never matched. So a row with an IČO matches by DIČ or
+    name only contacts without an IČO.
+  - The name compare is `lower(btrim(name))`. The earliest created contact wins.
+  - A created contact takes the row's name, IČO, DIČ, address and country. Repeats of a new party in one file
+    create it once (later rows match it in their own transaction).
+- **Snapshots:** an issued document's supplier snapshot is the whole company profile, incl. registration and
+  contact lines. A received supplier snapshot is the row party with `vatPayer` null, as for a manual received
+  document. Both directions take the company's default locale.
+- **Default `vat_mode`:** `standard`, except for issued rows when the company is not a VAT payer: `non_payer`, as for a
+  native issued document. VAT on such a row → `not_allowed`.
+- Issued rows: `variableSymbol` only from the row (never derived from the number), no constant symbol, an issued
+  DDPP without `due_date` gets the issue date. `due_date` before `issue_date` is accepted (import).
+- **Category:** an inactive match → `categoryMatch: null` + `category_inactive`. A new name repeated in the file
+  shows `new` / `category_created` on every row; it is created once.
+- **Preview:** an error row still shows `direction`, `docType`, `number` (issued: `number`, received:
+  `supplier_number`) and `counterparty` when those cells are readable; the rest is null. Warnings are listed
+  category first, then `contact_created`, then `related_not_found`.
+- **Confirm** runs on the ISDOC pipeline (now `src/import/`):
+  - rank order (originals first);
+  - one transaction per row with the advisory lock and the duplicate re-check;
+  - failure codes `duplicate`, `number_taken`, `storage_unavailable`, `internal`;
+  - the database lookups only for the selected rows.
+- **Sample:** the rate columns are Settings → VAT rates plus 21 % (the rate the example rows use). Dates are fixed in
+  2026. Categories are `Služby` (issued) and `Software` (received). The parties are IČO 12345679 / 87654326.
+  `Content-Type: text/csv; charset=utf-8`. The sample imports back without errors for any company whose IČO
+  differs from the sample parties.

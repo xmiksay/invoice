@@ -1,0 +1,65 @@
+{
+  "import": {
+    "action": "Import CSV / XLSX",
+    "title": "CSV / XLSX import",
+    "dropHint": "Drop a .csv, .txt or .xlsx file here, or pick it. One row is one document; the columns follow the sample.",
+    "pick": "Choose a file",
+    "sample": "Download sample",
+    "limits": "One file, at most 50 MB and 500 rows. Issued and received documents can be mixed (the direction column).",
+    "file": "File: {name} ({size})",
+    "again": "Import another file"
+  },
+  "upload": {
+    "noFile": "Choose a single .csv, .txt or .xlsx file.",
+    "tooLarge": "The file is too large (50 MB at most)."
+  },
+  "fileError": {
+    "invalid": "The file cannot be read. Upload a CSV (UTF-8 or Windows-1250) or an XLSX workbook.",
+    "empty": "The file contains no data rows.",
+    "missing_column": "A required column is missing: {column}.",
+    "invalid_column": "Invalid column {column} (a vat_ column needs its base_ column, and the rate must be a number).",
+    "too_many": "Too many rows (500 at most). Split the file into smaller parts.",
+    "too_large": "The XLSX workbook is too large once unpacked (200 MB at most). Split the file into smaller parts.",
+    "unknown": "The file was rejected ({code})."
+  },
+  "preview": {
+    "row": "Row",
+    "rowNo": "Row {n}",
+    "select": "Select row {n}",
+    "category": "Category",
+    "messages": "Notes",
+    "column": "Column: {column}",
+    "empty": "The file contains no documents."
+  },
+  "categoryMatch": {
+    "existing": "Existing category",
+    "new": "New category"
+  },
+  "rowError": {
+    "missing_field": "A required value is missing.",
+    "invalid_value": "Invalid value.",
+    "invalid_date": "Invalid date (use d.m.yyyy or yyyy-mm-dd).",
+    "invalid_amount": "Invalid amount (unreadable, too large, wrong sign or too many decimal places).",
+    "no_vat_rows": "No VAT rate column is filled in.",
+    "total_mismatch": "The total does not match the VAT recap (bases + VAT + rounding).",
+    "not_allowed": "This combination is not allowed for the document type (e.g. a tax point date on a proforma, VAT outside the standard mode, a payment date on an advance tax document).",
+    "duplicate": "The document already exists (created meanwhile).",
+    "number_taken": "The number from the received series is already taken. Check the counter in Settings.",
+    "storage_unavailable": "The file storage is unavailable. Try the import later.",
+    "internal": "Unexpected server error.",
+    "unknown": "Error ({code})."
+  },
+  "notAllowed": {
+    "taxDate": "A proforma has no tax point date.",
+    "paidDate": "An advance tax document cannot have a payment date.",
+    "vat": "VAT is allowed only in the standard VAT mode.",
+    "counterparty": "The counterparty is missing."
+  },
+  "warning": {
+    "contact_created": "A contact will be created from the row.",
+    "category_created": "The category will be created.",
+    "category_inactive": "The category is inactive; the document will be imported without a category.",
+    "related_not_found": "Original document {number} was not found; it will not be linked.",
+    "unknown": "Warning ({code})."
+  }
+}

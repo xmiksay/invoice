@@ -50,6 +50,7 @@ async function mountAt(path: string) {
       { path: "/received", name: "received", component: ReceivedListView },
       { path: "/received/new", name: "received-new", component: stub },
       { path: "/import/isdoc", name: "isdoc-import", component: stub },
+      { path: "/import/csv", name: "csv-import", component: stub },
       { path: "/received/:id", name: "received-detail", component: ReceivedDetailView },
       { path: "/received/:id/edit", name: "received-edit", component: stub },
       { path: "/invoices/:id", name: "invoice-detail", component: stub },
@@ -93,6 +94,7 @@ describe("ReceivedListView", () => {
     expect(w.find('[data-test="new-document"]').attributes("href")).toBe("/received/new?docType=credit_note");
     expect(w.find('[data-test="tab-proforma"]').attributes("href")).toBe("/received?type=proforma");
     expect(w.find('[data-test="import-isdoc"]').attributes("href")).toBe("/import/isdoc?from=received");
+    expect(w.find('[data-test="import-csv"]').attributes("href")).toBe("/import/csv?from=received");
   });
 
   it("records any of the seven types, e.g. a debit note", async () => {

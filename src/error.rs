@@ -80,6 +80,11 @@ pub enum AppError {
     #[error("validation failed: {0:?}")]
     Validation(FieldErrors),
 
+    /// A validation error whose `detail` names the offending part of the
+    /// input (e.g. the CSV column a file error is about).
+    #[error("validation failed: {0:?} ({1})")]
+    ValidationDetail(FieldErrors, String),
+
     #[error("conflict: {0}")]
     Conflict(String),
 
@@ -173,12 +178,21 @@ impl AppError {
         Self::Validation(errors)
     }
 
+    /// Single-field validation error with a `detail`.
+    pub fn field_detail(field: &str, reason: &'static str, detail: impl Into<String>) -> Self {
+        let mut errors = FieldErrors::new();
+        errors.add(field, reason);
+        Self::ValidationDetail(errors, detail.into())
+    }
+
     pub fn status_and_code(&self) -> (StatusCode, &'static str) {
         match self {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
-            Self::Validation(_) => (StatusCode::UNPROCESSABLE_ENTITY, "validation"),
+            Self::Validation(_) | Self::ValidationDetail(..) => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "validation")
+            }
             Self::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             Self::AresNotFound => (StatusCode::NOT_FOUND, "ares_not_found"),
             Self::AresUnavailable(_) => (StatusCode::BAD_GATEWAY, "ares_unavailable"),
@@ -279,8 +293,10 @@ pub struct ErrorBody {
     /// Only for `validation` / `template_invalid`: camelCase field name → reason code.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fields: Option<BTreeMap<String, String>>,
-    /// Only for `pdf_render_failed` (the render service's message), `smtp_failed`
-    /// (the SMTP server's response) and `template_invalid` (line + message).
+    /// For `pdf_render_failed` (the render service's message), `smtp_failed`
+    /// (the SMTP server's response), `template_invalid` (line + message) and a
+    /// `validation` error that names the offending input part (e.g. the CSV
+    /// column of a `missing_column` file error).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
 }
@@ -303,7 +319,7 @@ impl IntoResponse for AppError {
         }
         let (status, code) = self.status_and_code();
         let fields = match &self {
-            Self::Validation(f) => Some(
+            Self::Validation(f) | Self::ValidationDetail(f, _) => Some(
                 f.0.iter()
                     .map(|(k, v)| (k.clone(), (*v).to_string()))
                     .collect(),
@@ -315,7 +331,9 @@ impl IntoResponse for AppError {
             _ => None,
         };
         let detail = match &self {
-            Self::PdfRenderFailed(d) | Self::SmtpFailed(d) => Some(d.clone()),
+            Self::PdfRenderFailed(d) | Self::SmtpFailed(d) | Self::ValidationDetail(_, d) => {
+                Some(d.clone())
+            }
             Self::TemplateInvalid { detail, .. } => Some(detail.clone()),
             _ => None,
         };

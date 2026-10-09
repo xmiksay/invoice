@@ -2,16 +2,11 @@
   "import": {
     "action": "Import ISDOC",
     "title": "ISDOC import",
-    "back": "Back to the list",
     "dropHint": "Drop .isdoc, .isdocx or .zip files here (a ZIP inside a ZIP works too), or pick them.",
     "pick": "Choose files",
     "limits": "At most 50 MB and 500 documents at once. Issued and received documents are told apart by your company's IČO.",
     "files": "Files: {names} ({size})",
-    "ignored": "Skipped (unsupported file type): {names}",
-    "reading": "Reading the preview…",
-    "importing": "Importing…",
-    "confirm": "Import selected ({n})",
-    "selected": "{n} of {total} selected"
+    "ignored": "Skipped (unsupported file type): {names}"
   },
   "upload": {
     "noFiles": "None of the chosen files is an .isdoc, .isdocx or .zip.",
@@ -20,31 +15,7 @@
     "unpackedTooLarge": "The unpacked archives are too large (200 MB at most). Split the import into smaller parts.",
     "category": "The chosen category is no longer active. Pick another one."
   },
-  "status": {
-    "ok": "OK",
-    "duplicate": "Duplicate",
-    "error": "Error"
-  },
-  "direction": {
-    "issued": "Issued",
-    "received": "Received"
-  },
-  "contactMatch": {
-    "existing": "Existing contact",
-    "new": "New contact"
-  },
   "preview": {
-    "selectAll": "Select all",
-    "select": "Select {key}",
-    "status": "Status",
-    "document": "Document",
-    "counterparty": "Counterparty",
-    "dates": "Dates",
-    "total": "Total",
-    "ico": "IČO {ico}",
-    "issueDate": "Issued {date}",
-    "taxPointDate": "Tax point {date}",
-    "dueDate": "Due {date}",
     "empty": "No ISDOC document was found in the files."
   },
   "entryError": {
@@ -81,16 +52,7 @@
     "receivedHint": "Applies to all selected received documents; the received date is the tax point date. Each can be edited later."
   },
   "result": {
-    "summary": "Imported {imported} of {total}.",
-    "outcome": "Outcome",
-    "open": "Open document",
-    "notSelected": "Not imported (not selected, or no longer OK).",
-    "again": "Import more files",
-    "status": {
-      "imported": "Imported",
-      "skipped": "Skipped",
-      "failed": "Failed"
-    }
+    "again": "Import more files"
   },
   "export": {
     "document": "Download ISDOC",

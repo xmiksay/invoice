@@ -220,3 +220,24 @@ async fn email_errors() {
         )
     );
 }
+
+#[tokio::test]
+async fn validation_detail_names_the_part() {
+    let (status, json) = body(AppError::field_detail(
+        "file",
+        "missing_column",
+        "supplier_number",
+    ))
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "code": "validation",
+            "fields": { "file": "missing_column" },
+            "detail": "supplier_number"
+        })
+    );
+    let (_, plain) = body(AppError::field("file", "empty")).await;
+    assert!(plain.get("detail").is_none(), "{plain}");
+}

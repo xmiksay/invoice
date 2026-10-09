@@ -5,7 +5,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { i18n } from "@/i18n";
 import { mockFetchRoutes, reply } from "@/test-utils";
 import { entry, isdocFile } from "../testData";
-import { MAX_UPLOAD_BYTES } from "../upload";
+import { MAX_UPLOAD_BYTES } from "@/features/imports/upload";
 import IsdocImportView from "./IsdocImportView.vue";
 
 const categories = [
@@ -43,7 +43,7 @@ async function mountView(path = "/import/isdoc") {
 }
 
 async function pick(w: VueWrapper, files: File[]) {
-  const input = w.find('[data-test="isdoc-input"]');
+  const input = w.find('[data-test="import-input"]');
   Object.defineProperty(input.element, "files", { value: files, configurable: true });
   await input.trigger("change");
   await flushPromises();
@@ -68,11 +68,11 @@ describe("IsdocImportView", () => {
     expect(rows(w)).toHaveLength(4);
     expect([0, 1, 2, 3].map((i) => checkbox(w, i).element.checked)).toEqual([true, true, false, false]);
     expect([0, 1, 2, 3].map((i) => checkbox(w, i).element.disabled)).toEqual([false, false, true, true]);
-    expect(rows(w)[1]!.find('[data-test="isdoc-contact"]').text()).toBe("New contact");
+    expect(rows(w)[1]!.find('[data-test="import-contact"]').text()).toBe("New contact");
     expect(rows(w)[1]!.find('[data-test="isdoc-warnings"]').text()).toContain("Original document FV-1 was not found");
     expect(rows(w)[1]!.text()).toContain("Received invoice");
     expect(rows(w)[3]!.find('[data-test="isdoc-error"]').text()).toBe("Your company's IČO is neither the supplier's nor the customer's.");
-    expect(w.find('[data-test="isdoc-confirm"]').text()).toBe("Import selected (2)");
+    expect(w.find('[data-test="import-confirm"]').text()).toBe("Import selected (2)");
   });
 
   it("shows the received options only while a received row is selected; expense categories only", async () => {
@@ -89,7 +89,7 @@ describe("IsdocImportView", () => {
     await w.find('[data-test="isdoc-select-all"]').setValue(true);
     expect(w.find('[data-test="isdoc-received-options"]').exists()).toBe(true);
     await w.find('[data-test="isdoc-select-all"]').setValue(false);
-    expect(w.find<HTMLButtonElement>('[data-test="isdoc-confirm"]').element.disabled).toBe(true);
+    expect(w.find<HTMLButtonElement>('[data-test="import-confirm"]').element.disabled).toBe(true);
   });
 
   it("confirms with the same files + options and links the imported documents", async () => {
@@ -112,17 +112,17 @@ describe("IsdocImportView", () => {
     await w.find('[data-test="isdoc-mark-paid"]').setValue(false);
     await w.find('[data-test="isdoc-category"]').setValue("cat1");
     await w.find('[data-test="isdoc-vat-deductible"]').setValue(false);
-    await w.find('[data-test="isdoc-confirm"]').trigger("click");
+    await w.find('[data-test="import-confirm"]').trigger("click");
     await flushPromises();
 
     const body = fetch.mock.calls.find(([url]) => url === "/api/import/isdoc/confirm")![1]!.body as FormData;
     expect(body.getAll("files")).toEqual([file]);
     expect(JSON.parse(body.get("options") as string)).toEqual({ selected: ["a.zip/1.isdoc", "a.zip/2.isdoc"], markPaid: false, categoryId: "cat1", vatDeductible: false });
 
-    expect(w.find('[data-test="isdoc-summary"]').text()).toBe("Imported 2 of 5.");
-    const links = w.findAll('[data-test="isdoc-result-link"]').map((l) => l.attributes("href"));
+    expect(w.find('[data-test="import-summary"]').text()).toBe("Imported 2 of 5.");
+    const links = w.findAll('[data-test="import-result-link"]').map((l) => l.attributes("href"));
     expect(links).toEqual(["/invoices/d1", "/received/d2"]);
-    expect(w.findAll('[data-test="isdoc-result-error"]').map((e) => e.text())).toEqual([
+    expect(w.findAll('[data-test="import-result-error"]').map((e) => e.text())).toEqual([
       "The document already exists (created meanwhile).",
       "The ČNB exchange rates are unavailable. Try the import later.",
     ]);
@@ -139,7 +139,7 @@ describe("IsdocImportView", () => {
     await pick(w, [isdocFile("a.zip")]);
     await w.find('[data-test="isdoc-category"]').setValue("cat1");
     await checkbox(w, 1).setValue(false);
-    await w.find('[data-test="isdoc-confirm"]').trigger("click");
+    await w.find('[data-test="import-confirm"]').trigger("click");
     await flushPromises();
     const body = fetch.mock.calls.find(([url]) => url === "/api/import/isdoc/confirm")![1]!.body as FormData;
     expect(JSON.parse(body.get("options") as string)).toEqual({ selected: ["a.zip/1.isdoc"], markPaid: true, categoryId: null, vatDeductible: true });
@@ -149,8 +149,8 @@ describe("IsdocImportView", () => {
     let answer = reply(413, { code: "too_large" });
     const fetch = mockFetchRoutes({ "POST /api/import/isdoc/preview": () => answer, "GET /api/settings/categories": categories });
     const w = await mountView("/import/isdoc?from=received");
-    expect(w.find('[data-test="isdoc-back"]').attributes("href")).toBe("/received");
-    const alert = () => w.find('[data-test="isdoc-error-alert"]').text();
+    expect(w.find('[data-test="import-back"]').attributes("href")).toBe("/received");
+    const alert = () => w.find('[data-test="import-error-alert"]').text();
 
     await pick(w, [isdocFile("a.pdf")]);
     expect(alert()).toBe("None of the chosen files is an .isdoc, .isdocx or .zip.");

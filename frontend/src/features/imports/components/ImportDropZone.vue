@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { useI18n } from "vue-i18n";
-import { ACCEPT_ATTR } from "../upload";
 
-/** Drop area + file picker for `.isdoc` / `.isdocx` / `.zip`; emits every picked or dropped file (unfiltered). */
-const props = defineProps<{ disabled?: boolean }>();
+/** Drop area + file picker; emits every picked or dropped file (unfiltered — the page checks the types). */
+const props = defineProps<{ accept: string; multiple?: boolean; disabled?: boolean; hint: string; pick: string; limits: string }>();
 const emit = defineEmits<{ files: [files: File[]] }>();
 
-const { t } = useI18n();
 const input = ref<HTMLInputElement | null>(null);
 const over = ref(false);
 
@@ -30,16 +27,19 @@ function onDrop(event: DragEvent) {
   <div
     class="flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 text-center transition-colors"
     :class="over ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40' : 'border-gray-300 dark:border-gray-700'"
-    data-test="isdoc-drop"
+    data-test="import-drop"
     @dragover.prevent="over = !disabled"
     @dragleave="over = false"
     @drop.prevent="onDrop"
   >
-    <p class="text-sm text-gray-600 dark:text-gray-400">{{ t("isdoc.import.dropHint") }}</p>
-    <input ref="input" type="file" multiple :accept="ACCEPT_ATTR" class="hidden" data-test="isdoc-input" @change="onPick" />
-    <button type="button" class="btn btn-primary" :disabled="disabled" data-test="isdoc-pick" @click="input?.click()">
-      {{ t("isdoc.import.pick") }}
-    </button>
-    <p class="text-xs text-gray-500 dark:text-gray-400">{{ t("isdoc.import.limits") }}</p>
+    <p class="text-sm text-gray-600 dark:text-gray-400">{{ hint }}</p>
+    <input ref="input" type="file" :multiple="multiple" :accept="accept" class="hidden" data-test="import-input" @change="onPick" />
+    <div class="flex flex-wrap justify-center gap-2">
+      <button type="button" class="btn btn-primary" :disabled="disabled" data-test="import-pick" @click="input?.click()">
+        {{ pick }}
+      </button>
+      <slot name="actions" />
+    </div>
+    <p class="text-xs text-gray-500 dark:text-gray-400">{{ limits }}</p>
   </div>
 </template>

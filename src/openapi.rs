@@ -72,6 +72,9 @@ use utoipa::{Modify, OpenApi};
         crate::settings::handlers::custom_fields::delete,
         crate::isdoc::import::preview,
         crate::isdoc::import::confirm,
+        crate::csvio::handlers::preview,
+        crate::csvio::handlers::confirm,
+        crate::csvio::handlers::sample,
         crate::isdoc::export::document_isdoc,
         crate::isdoc::export::bulk,
         crate::email::handlers::settings::status,
@@ -90,6 +93,7 @@ use utoipa::{Modify, OpenApi};
         crate::document::handlers::received_input::ReceivedInput,
         crate::document::handlers::received_input::RecapInput,
         crate::isdoc::import::OptionsInput,
+        crate::csvio::handlers::CsvOptionsInput,
     )),
     modifiers(&BearerAuth)
 )]
@@ -155,6 +159,9 @@ mod tests {
             "/api/pdf/design",
             "/api/import/isdoc/preview",
             "/api/import/isdoc/confirm",
+            "/api/import/csv/preview",
+            "/api/import/csv/confirm",
+            "/api/import/csv/sample",
             "/api/documents/{id}/isdoc",
             "/api/documents/isdoc",
             "/api/settings/email",

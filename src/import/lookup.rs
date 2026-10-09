@@ -1,15 +1,14 @@
 //! Database lookups of the import: existing contact, duplicate, related
-//! original. `analyze` runs them for the preview and for the selected
-//! entries of a confirm; `store` runs them again inside each entry's
+//! original. [`super::check`] runs them for the preview and for the selected
+//! entries of a confirm; [`super::store`] runs them again inside each entry's
 //! transaction, the duplicate check under an advisory lock on the
 //! document's identity.
 
 use sea_orm::sea_query::{Expr, SimpleExpr};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use uuid::Uuid;
 
-use super::model::Party;
-use super::plan::Plan;
+use super::model::{ContactRule, Party, Plan};
 use crate::contact::entity::contact;
 use crate::document::entity::document::{Column, Entity};
 use crate::document::handlers::meta::related_types;
@@ -25,20 +24,58 @@ pub fn party_key(p: &Party) -> String {
     }
 }
 
-/// The contact with the party's IČO; without an IČO, one with no IČO and
-/// exactly the party's name.
+/// The existing contact of `p` under `rule`.
 pub async fn contact<C: ConnectionTrait>(
     db: &C,
     p: &Party,
+    rule: ContactRule,
 ) -> Result<Option<contact::Model>, AppError> {
-    let q = contact::Entity::find();
-    let q = match &p.ico {
-        Some(ico) => q.filter(contact::Column::Ico.eq(ico.as_str())),
-        None => q
-            .filter(contact::Column::Ico.is_null())
-            .filter(contact::Column::Name.eq(p.name.as_str())),
+    use contact::Column;
+    let q = || contact::Entity::find().order_by_asc(Column::CreatedAt);
+    if let Some(ico) = &p.ico {
+        let found = q().filter(Column::Ico.eq(ico.as_str())).one(db).await?;
+        if found.is_some() || rule == ContactRule::IcoOrName {
+            return Ok(found);
+        }
+    }
+    if rule == ContactRule::IcoOrName {
+        return Ok(q()
+            .filter(Column::Ico.is_null())
+            .filter(Column::Name.eq(p.name.as_str()))
+            .one(db)
+            .await?);
+    }
+    // No contact holds the party's IČO here, so any contact with an IČO
+    // would contradict it.
+    let compatible = |q: sea_orm::Select<contact::Entity>| {
+        let q = if p.ico.is_some() {
+            q.filter(Column::Ico.is_null())
+        } else {
+            q
+        };
+        match &p.dic {
+            Some(dic) => q.filter(Column::Dic.is_null().or(Column::Dic.eq(dic.as_str()))),
+            None => q,
+        }
     };
-    Ok(q.one(db).await?)
+    if let Some(dic) = &p.dic {
+        let found = compatible(q().filter(Column::Dic.eq(dic.as_str())))
+            .one(db)
+            .await?;
+        if found.is_some() {
+            return Ok(found);
+        }
+    }
+    let name = p.name.trim().to_string();
+    if name.is_empty() {
+        return Ok(None);
+    }
+    Ok(compatible(q().filter(Expr::cust_with_values(
+        "lower(btrim(name)) = lower($1)",
+        [name],
+    )))
+    .one(db)
+    .await?)
 }
 
 /// Received documents of the same supplier (snapshot): by IČO, else by name
