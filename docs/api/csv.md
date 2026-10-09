@@ -136,7 +136,51 @@ warnings with the column), select all `ok`, Confirm, result table with links. Re
 they fit.
 
 ## Export (2c)
-Specified in phase 2c.
+
+Written exactly in the [Format](#format) above (the writer behind the sample): `;`, UTF-8 BOM, CRLF, decimal comma,
+`dd.mm.yyyy`, every column of the table in its order, rate columns from Settings → VAT rates (plus any other rate that
+occurs in the exported documents, so no amount is ever dropped). Drafts and cancelled documents are **never**
+exported. Rows are ordered by direction (issued first), tax date (issue date when none), number.
+
+### `GET /api/export/csv?{list filters}` — the list export
+- The same filters as `GET /api/documents` (`direction` required, `docType`, `status`, `paymentState`, `overdue`,
+  `contactId`, `q`, `from`, `to`, `categoryId`, `imported`, …; `limit` / `offset` ignored) → what the list shows,
+  minus drafts and cancelled. A proforma is included when the filter includes it (e.g. its tab).
+- Filename `doklady-{issued|received}-{yyyy-mm-dd}.csv` (today).
+
+### `GET /api/export/accountant?from=YYYY-MM-DD&to=YYYY-MM-DD&direction=issued|received|both` — for the accountant
+- Documents whose **tax date** (DUZP; received: tax date, else received date) is in `[from, to]` (both required,
+  `from ≤ to`, at most 366 days apart → else 422 `from`/`to` `invalid`). `direction` default `both`.
+- Every type **except proforma** (not a tax document); drafts and cancelled excluded.
+- Filename `ucetni-{from}-{to}.csv`.
+
+### Both
+- `200 text/csv; charset=utf-8`, `Content-Disposition: attachment`, streamed. More than 10 000 matching documents →
+  422 `{"fields":{"filter":"too_many"}}` (checked before streaming). An empty result is a header-only file.
+- **Values per column:**
+  - `number`: our number (received: the internal number), `supplier_number`: received only.
+  - `related_number`: the linked original (issued: its number; received: its supplier number), else empty.
+  - Dates as stored; `received_date` received only.
+  - Counterparty = the document's snapshot (issued: customer, received: supplier); a contactless simplified document
+    leaves them empty.
+  - `currency`; `exchange_rate` only for a foreign currency (≤ 6 dp, trailing zeros dropped).
+  - `base_{r}` / `vat_{r}`: the stored recap **in CZK** (CZK document: the recap itself; foreign: `baseCzk` / `vatCzk`).
+    A final invoice exports its stored recap as is (the advance deductions included in it).
+  - `rounding`, `total` in the document currency; `total_czk` = `totalCzk` (CZK document: `total`).
+  - `paid_date`: the date of the payment that made the document fully paid (`paymentState` `paid` / `overpaid`),
+    else empty — so a partially paid document exports unpaid.
+  - `variable_symbol`, `vat_deductible` (received: `1`/`0`; issued empty), `category` (name), `note` (issued
+    `headerNote`, received `internalNote`).
+  - Credit notes and DDPP corrections: every amount column negative (as stored positive × −1).
+- **Round trip:** importing an export reproduces each document's direction, type, numbers, dates, counterparty, VAT
+  mode, CZK recap, totals, category and full payment (a final invoice comes back with `payable` = `total`, without its
+  deduction link; partial payments are not exported).
+
+### UI (2c)
+- Issued and received lists: "Export CSV" button next to the ISDOC export → downloads the current list filter
+  (tab + filters, no paging); `too_many` explained.
+- "Export pro účetní" (on both lists): a small dialog — period (from / to, prefilled with the previous calendar
+  month), direction (both / issued / received) → downloads `GET /api/export/accountant`.
 
 ## Clarifications (as implemented)
 Additive details settled during the Phase 2b backend. No field of the contract changed shape.

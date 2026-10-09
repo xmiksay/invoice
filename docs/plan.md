@@ -143,6 +143,10 @@ downloadable in the UI, preview → confirm like ISDOC.
 2c CSV export for the accountant: issued and received per the list filter, one row = one document, `;` separator,
 UTF-8 with BOM, decimal comma, dates `dd.mm.yyyy`; columns direction, type, number, supplier number, dates,
 counterparty + IČO/DIČ, currency, rate, base/VAT per rate in CZK, total, paid, category; credit notes negative.
+- Decided in the 2c grill: English header names stay (export = import format); export from the issued / received
+  list (current filter) and an "accountant" export by tax-date period for both directions in one file; drafts and
+  cancelled never exported, proformas only through a list filter that includes them. Contract: the Export section
+  of [`docs/api/csv.md`](api/csv.md).
 
 ### Phase 3 — accounting & MCP
 Pohoda XML (Stormware) and Money S3 XML export of issued + received invoices per
