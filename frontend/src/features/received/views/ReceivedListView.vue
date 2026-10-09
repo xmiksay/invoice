@@ -3,6 +3,8 @@ import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { useAction } from "@/composables/useAction";
+import AccountantExportButton from "@/features/csvExport/components/AccountantExportButton.vue";
+import CsvExportButton from "@/features/csvExport/components/CsvExportButton.vue";
 import DocTypeTabs from "@/features/documents/components/DocTypeTabs.vue";
 import InvoiceFilters from "@/features/documents/components/InvoiceFilters.vue";
 import ListDocMeta from "@/features/documents/components/ListDocMeta.vue";
@@ -39,6 +41,8 @@ function open(id: string) {
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h1 class="text-2xl font-semibold">{{ t(`received.list.title.${docType}`) }}</h1>
       <div class="flex flex-wrap gap-2">
+        <CsvExportButton :query="store.query" />
+        <AccountantExportButton />
         <RouterLink :to="{ name: 'isdoc-import', query: { from: 'received' } }" class="btn" data-test="import-isdoc">{{ t("isdoc.import.action") }}</RouterLink>
         <RouterLink :to="{ name: 'csv-import', query: { from: 'received' } }" class="btn" data-test="import-csv">{{ t("csvImport.import.action") }}</RouterLink>
         <RouterLink :to="{ name: 'received-new', query: { docType } }" class="btn btn-primary" data-test="new-document">{{ t(`received.newTitle.${docType}`) }}</RouterLink>

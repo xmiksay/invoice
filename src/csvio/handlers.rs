@@ -5,8 +5,7 @@ use std::collections::{HashMap, HashSet};
 use axum::Json;
 use axum::extract::multipart::MultipartRejection;
 use axum::extract::{Multipart, State};
-use axum::http::header;
-use axum::response::IntoResponse;
+use axum::response::Response;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -177,21 +176,16 @@ pub async fn confirm(
     security(("bearer" = [])),
     responses((status = 200, content_type = "text/csv", description = "`import-sample.csv`: the header with the current rate columns and three example rows"))
 )]
-pub async fn sample(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
+pub async fn sample(State(state): State<AppState>) -> Result<Response, AppError> {
     let rates: Vec<_> = vat_rates::list(&state.db)
         .await?
         .into_iter()
         .map(|r| r.rate)
         .collect();
     let body = write::sample(&rates)?;
-    Ok((
-        [
-            (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
-            (
-                header::CONTENT_DISPOSITION,
-                "attachment; filename=\"import-sample.csv\"",
-            ),
-        ],
+    Ok(crate::download::attachment(
+        "text/csv; charset=utf-8",
+        "import-sample.csv",
         body,
     ))
 }

@@ -1,7 +1,7 @@
 # invoice
 
 Single-user invoice management: issued and received invoices, Czech VAT, ISDOC,
-CSV / XLSX import,
+CSV / XLSX import and CSV export for the accountant,
 PDF rendering through [mdcast](https://github.com/xmiksay/mdcast) with a
 per-instance design. Rust (Axum + SeaORM/Postgres) with an embedded Vue 3 SPA.
 

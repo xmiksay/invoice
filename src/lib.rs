@@ -7,6 +7,7 @@ pub mod config;
 pub mod contact;
 pub mod csvio;
 pub mod document;
+pub mod download;
 pub mod email;
 pub mod error;
 pub mod extract;

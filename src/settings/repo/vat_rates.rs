@@ -1,7 +1,7 @@
 use sea_orm::sea_query::Expr;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, DatabaseTransaction, DbErr, EntityTrait,
-    QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbErr,
+    EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 use uuid::Uuid;
 
@@ -9,7 +9,7 @@ use crate::error::{AppError, unique_violation};
 use crate::settings::entity::vat_rate::{self, ActiveModel, Column, Entity};
 use crate::settings::handlers::vat_rates::VatRateData;
 
-pub async fn list(db: &DatabaseConnection) -> Result<Vec<vat_rate::Model>, AppError> {
+pub async fn list<C: ConnectionTrait>(db: &C) -> Result<Vec<vat_rate::Model>, AppError> {
     Ok(Entity::find()
         .order_by_asc(Column::Position)
         .order_by_desc(Column::Rate)

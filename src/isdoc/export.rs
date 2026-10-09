@@ -6,8 +6,7 @@ use std::io::{Cursor, Write as _};
 
 use anyhow::Context as _;
 use axum::extract::State;
-use axum::http::header;
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use sea_orm::{
     ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
     QuerySelect,
@@ -17,7 +16,6 @@ use uuid::Uuid;
 
 use super::export_xml::{self, Deposit, Source, Supplement};
 use crate::app::AppState;
-use crate::contact::handlers::dto::ListQuery as Paging;
 use crate::document::compute::RecapRow;
 use crate::document::entity::document::{self, Column, Entity};
 use crate::document::handlers::dto::{BankSnapshot, ListQuery, PartySnapshot};
@@ -247,18 +245,7 @@ pub async fn plain(db: &DatabaseConnection, id: Uuid) -> Result<Exported, AppErr
 }
 
 fn attachment(e: Exported) -> Response {
-    (
-        [
-            (header::CONTENT_TYPE, e.content_type.to_string()),
-            (
-                header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}\"", e.filename),
-            ),
-            (header::CACHE_CONTROL, "no-store".to_string()),
-        ],
-        e.bytes,
-    )
-        .into_response()
+    crate::download::attachment(e.content_type, &e.filename, e.bytes)
 }
 
 #[utoipa::path(
@@ -310,16 +297,8 @@ pub async fn bulk(
     ApiQuery(mut q): ApiQuery<ListQuery>,
 ) -> Result<Response, AppError> {
     q.direction = Some(ISSUED.into());
-    let (term, _, _) = Paging {
-        q: q.q.clone(),
-        limit: None,
-        offset: None,
-    }
-    .normalized();
-    let select = || {
-        query::filtered(&q, term.as_deref(), today())
-            .filter(Column::Status.ne(Status::Draft.as_str()))
-    };
+    let select =
+        || query::export_select(&q, today()).filter(Column::Status.ne(Status::Draft.as_str()));
     if select().count(&state.db).await? > MAX_BULK {
         return Err(AppError::field("filter", "too_many"));
     }
