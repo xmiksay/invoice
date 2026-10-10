@@ -14,6 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+argon2 = "0.5"
 axum = { version = "0.8", features = ["macros", "multipart"] }
 base64 = "0.22"
 bytes = "1"
@@ -23,6 +24,7 @@ clap = { version = "4", features = ["derive"] }
 config = { version = "0.15", default-features = false }
 csv = "1"
 encoding_rs = "0.8"
+getrandom = "0.3"
 futures-util = { version = "0.3", default-features = false }
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls", "aws-lc-rs", "webpki-roots", "hostname"] }
 md-5 = "0.10"
@@ -53,6 +55,13 @@ chrono-tz = "0.10"
 zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 rmcp = { version = "3.5.1", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
 schemars = { version = "1", features = ["chrono04", "uuid1"] }
+
+# argon2 is unusably slow unoptimised; tests hash passwords on every login.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
 
 [dev-dependencies]
 rust_xlsxwriter = "0.95"

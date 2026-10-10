@@ -14,10 +14,16 @@ use crate::document::entity::document;
 use crate::document::handlers::meta::{Meta, MetaCtx};
 use crate::error::AppError;
 use crate::settings::entity::{category, custom_field};
+use crate::space::SpaceId;
 
 /// Active definitions applying to `direction`, by position.
-pub async fn defs<C: ConnectionTrait>(db: &C, direction: &str) -> Result<Vec<FieldDef>, AppError> {
+pub async fn defs<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+    direction: &str,
+) -> Result<Vec<FieldDef>, AppError> {
     custom_field::Entity::find()
+        .filter(custom_field::Column::SpaceId.eq(space))
         .filter(custom_field::Column::Active.eq(true))
         .filter(custom_field::Column::AppliesTo.is_in([direction, "both"]))
         .order_by_asc(custom_field::Column::Position)
@@ -45,17 +51,23 @@ pub fn stored_fields(doc: &document::Model) -> Values {
 /// `doc`: the saved document being changed, if any.
 pub async fn load<C: ConnectionTrait>(
     db: &C,
+    space: SpaceId,
     direction: &str,
     category_id: Option<Uuid>,
     doc: Option<&document::Model>,
 ) -> Result<MetaCtx, AppError> {
     let category = match category_id {
-        Some(id) => category::Entity::find_by_id(id).one(db).await?,
+        Some(id) => {
+            category::Entity::find_by_id(id)
+                .filter(category::Column::SpaceId.eq(space))
+                .one(db)
+                .await?
+        }
         None => None,
     };
     Ok(MetaCtx {
         category,
-        defs: defs(db, direction).await?,
+        defs: defs(db, space, direction).await?,
         stored_category: doc.and_then(|d| d.category_id),
         stored_fields: doc.map(stored_fields).unwrap_or_default(),
     })
@@ -64,6 +76,7 @@ pub async fn load<C: ConnectionTrait>(
 /// Allowed in every status, both directions.
 pub async fn set(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     meta: Meta,
     internal_note: Option<String>,
@@ -71,7 +84,7 @@ pub async fn set(
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let doc = query::lock(txn, id).await?;
+                let doc = query::lock(txn, space, id).await?;
                 let mut row: document::ActiveModel = doc.into();
                 row.category_id = Set(meta.category_id);
                 row.custom_fields = Set(serde_json::Value::Object(meta.custom_fields));

@@ -18,6 +18,7 @@ use crate::import::check::{self, Checked};
 use crate::import::model::{Code, Party, Plan};
 use crate::settings::doc_type::{DocType, RECEIVED};
 use crate::settings::repo::company;
+use crate::space::SpaceId;
 
 pub const CATEGORY_CREATED: Code = "category_created";
 pub const CATEGORY_INACTIVE: Code = "category_inactive";
@@ -109,8 +110,8 @@ pub fn file_error(e: FileError) -> AppError {
     }
 }
 
-async fn ctx(db: &DatabaseConnection) -> Result<Ctx, AppError> {
-    let c = company::get(db).await?;
+async fn ctx(db: &DatabaseConnection, space: SpaceId) -> Result<Ctx, AppError> {
+    let c = company::get(db, space).await?;
     Ok(Ctx {
         company: Party {
             name: c.name,
@@ -134,10 +135,11 @@ async fn ctx(db: &DatabaseConnection) -> Result<Ctx, AppError> {
 /// selected ones).
 pub async fn analyze(
     db: &DatabaseConnection,
+    space: SpaceId,
     bytes: Vec<u8>,
     only: Option<&HashSet<String>>,
 ) -> Result<Vec<Entry>, AppError> {
-    let ctx = ctx(db).await?;
+    let ctx = ctx(db, space).await?;
     let parsed = tokio::task::spawn_blocking(move || parse(&bytes, &ctx))
         .await
         .context("CSV parsing panicked")?
@@ -148,7 +150,7 @@ pub async fn analyze(
         .zip(&parsed)
         .map(|(k, (_, o))| (k.as_str(), o.as_ref().ok().map(|m| &m.plan)))
         .collect();
-    let checked = check::check(db, &entries, only).await?;
+    let checked = check::check(db, space, &entries, only).await?;
     drop(entries);
     let mut categories = Categories::new();
     let mut out = Vec::with_capacity(parsed.len());
@@ -162,7 +164,7 @@ pub async fn analyze(
                     warnings: Vec::new(),
                 };
                 if only.is_none_or(|o| o.contains(&key)) {
-                    categorize(db, &mut categories, &mut ready).await?;
+                    categorize(db, space, &mut categories, &mut ready).await?;
                 }
                 Ok(ready)
             }
@@ -186,6 +188,7 @@ type Categories = HashMap<(&'static str, String), Option<bool>>;
 
 async fn categorize(
     db: &DatabaseConnection,
+    space: SpaceId,
     cache: &mut Categories,
     r: &mut Ready,
 ) -> Result<(), AppError> {
@@ -197,7 +200,9 @@ async fn categorize(
     let active = match cache.get(&key) {
         Some(a) => *a,
         None => {
-            let a = category::find(db, kind, name).await?.map(|c| c.active);
+            let a = category::find(db, space, kind, name)
+                .await?
+                .map(|c| c.active);
             cache.insert(key, a);
             a
         }

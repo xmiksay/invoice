@@ -116,6 +116,7 @@ impl Sample {
         locale: Locale,
     ) -> Result<Sample, AppError> {
         let bank = bank_account::Entity::find()
+            .filter(bank_account::Column::SpaceId.eq(company.space_id))
             .filter(bank_account::Column::Currency.eq("CZK"))
             .filter(bank_account::Column::IsDefault.eq(true))
             .one(db)
@@ -202,7 +203,7 @@ mod tests {
 
     fn company() -> company::Model {
         company::Model {
-            id: 1,
+            space_id: uuid::Uuid::nil(),
             name: String::new(),
             ico: None,
             dic: None,
@@ -224,6 +225,7 @@ mod tests {
     fn bank() -> bank_account::Model {
         bank_account::Model {
             id: uuid::Uuid::nil(),
+            space_id: uuid::Uuid::nil(),
             label: None,
             currency: "CZK".into(),
             account_number: Some("19-2000145399/0800".into()),

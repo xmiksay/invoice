@@ -1,0 +1,26 @@
+<script setup lang="ts">
+import { useI18n } from "vue-i18n";
+import { useSessionStore } from "@/stores/session";
+
+const { t } = useI18n();
+const session = useSessionStore();
+
+function retry() {
+  window.location.reload();
+}
+</script>
+
+<template>
+  <div class="flex min-h-[70dvh] items-center justify-center">
+    <div v-if="session.bootFailure?.status === 'not_found'" class="card w-full max-w-md space-y-3" data-test="space-not-found">
+      <h1 class="text-xl font-semibold">{{ t("spaces.notFound.title") }}</h1>
+      <p class="text-sm text-gray-600 dark:text-gray-400">{{ t("spaces.notFound.text") }}</p>
+      <a :href="session.bootFailure.baseUrl" class="btn btn-primary" data-test="base-link">{{ t("spaces.notFound.link") }}</a>
+    </div>
+    <div v-else class="card w-full max-w-md space-y-3" data-test="boot-error">
+      <h1 class="text-xl font-semibold">{{ t("spaces.bootError.title") }}</h1>
+      <p class="text-sm text-gray-600 dark:text-gray-400">{{ t("spaces.bootError.text") }}</p>
+      <button type="button" class="btn btn-primary" @click="retry">{{ t("spaces.bootError.retry") }}</button>
+    </div>
+  </div>
+</template>

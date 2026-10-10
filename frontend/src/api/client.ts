@@ -1,4 +1,3 @@
-import { useAuthStore } from "@/stores/auth";
 import type { ApiErrorBody, FieldErrors } from "./types";
 
 /**
@@ -22,18 +21,25 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
   /** Serialized as JSON; a `FormData` goes out as multipart (the browser sets the boundary). */
   body?: unknown;
   /**
-   * Explicit token instead of the stored one. Used to validate a candidate
-   * token at login, so a 401 then must not log out / redirect.
+   * A 401 is an expected answer here (the session probe, the login itself), so it must
+   * not trigger the "go to login" handler.
    */
-  token?: string;
+  quiet401?: boolean;
+}
+
+export interface AuthHandlers {
+  /** Any 401 except `quiet401` requests: the session is gone. */
+  unauthorized: () => void;
+  /** 403 `email_unverified`: the user has to verify the e-mail first. */
+  emailUnverified: () => void;
 }
 
 // Registered by main.ts with the router. Kept as a hook rather than importing
 // the router here to avoid a client → router → views → client import cycle.
-let onUnauthorized: () => void = () => {};
+let handlers: AuthHandlers = { unauthorized: () => {}, emailUnverified: () => {} };
 
-export function setUnauthorizedHandler(handler: () => void): void {
-  onUnauthorized = handler;
+export function setAuthHandlers(next: Partial<AuthHandlers>): void {
+  handlers = { unauthorized: () => {}, emailUnverified: () => {}, ...next };
 }
 
 async function errorBody(res: Response): Promise<ApiErrorBody> {
@@ -50,15 +56,15 @@ async function errorBody(res: Response): Promise<ApiErrorBody> {
   return { code: `http_${res.status}` };
 }
 
-/** Sends the request with the Bearer header; any non-2xx becomes an `ApiError`. */
+/**
+ * Sends the request with the session cookie (same origin only); any non-2xx becomes an `ApiError`.
+ * The browser adds `Origin` to mutations itself, which the server's CSRF check needs.
+ */
 async function send(path: string, options: RequestOptions, accept: string): Promise<Response> {
-  const { body, token: explicitToken, headers: extraHeaders, ...init } = options;
-  const auth = useAuthStore();
-  const token = explicitToken ?? auth.token;
+  const { body, quiet401, headers: extraHeaders, ...init } = options;
 
   const headers = new Headers(extraHeaders);
   headers.set("Accept", accept);
-  if (token) headers.set("Authorization", `Bearer ${token}`);
   const multipart = body instanceof FormData;
   if (body !== undefined && !multipart) headers.set("Content-Type", "application/json");
 
@@ -66,6 +72,7 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
   try {
     res = await fetch(path, {
       ...init,
+      credentials: "same-origin",
       headers,
       body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
     });
@@ -75,10 +82,8 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
 
   if (!res.ok) {
     const { code, fields, detail } = await errorBody(res);
-    if (res.status === 401 && explicitToken === undefined) {
-      auth.logout();
-      onUnauthorized();
-    }
+    if (res.status === 401 && !quiet401) handlers.unauthorized();
+    if (res.status === 403 && code === "email_unverified") handlers.emailUnverified();
     throw new ApiError(res.status, code, fields, detail ?? null);
   }
   return res;
@@ -86,8 +91,10 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const res = await send(path, options, "application/json");
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // 202 / 204 carry no body (register, password reset, …); any other empty 2xx is treated the same.
+  if (res.status === 202 || res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text === "" ? undefined : JSON.parse(text)) as T;
 }
 
 export interface BlobResponse {
@@ -97,8 +104,8 @@ export interface BlobResponse {
 }
 
 /**
- * File download (a PDF, an ISDOC / ZIP, a CSV). A plain link cannot carry the Bearer token, so files
- * are fetched here and handed to the page as a blob.
+ * File download (a PDF, an ISDOC / ZIP, a CSV), fetched here and handed to the page as a blob so an
+ * error stays an `ApiError` with a readable message instead of a broken tab.
  */
 export async function requestBlob(path: string, options: RequestOptions = {}): Promise<BlobResponse> {
   const res = await send(path, options, "application/pdf, application/zip, application/xml, text/csv, application/octet-stream, application/json");

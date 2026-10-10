@@ -8,6 +8,7 @@ use super::dto::{Computed, Document, DocumentList, ListQuery, lines_out};
 use super::input::DocumentInput;
 use super::{fetch, received};
 use crate::app::AppState;
+use crate::auth::{Read, Write};
 use crate::contact::handlers::dto::ListQuery as Paging;
 use crate::document::entity::document;
 use crate::document::line::Status;
@@ -18,18 +19,20 @@ use crate::error::{AppError, ErrorBody};
 use crate::extract::{ApiJson, ApiPath, ApiQuery, from_value};
 use crate::settings::doc_type::RECEIVED;
 use crate::settings::repo::company;
+use crate::space::SpaceId;
 use crate::time::today;
 
 #[utoipa::path(
     get,
     path = "/api/documents",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(ListQuery),
     responses((status = 200, body = DocumentList))
 )]
 pub async fn list(
     State(state): State<AppState>,
+    access: Read,
     ApiQuery(query): ApiQuery<ListQuery>,
 ) -> Result<Json<DocumentList>, AppError> {
     let (q, limit, offset) = Paging {
@@ -39,20 +42,21 @@ pub async fn list(
     }
     .normalized();
     Ok(Json(
-        list_page(&state, &query, q.as_deref(), limit, offset).await?,
+        list_page(&state, access.space(), &query, q.as_deref(), limit, offset).await?,
     ))
 }
 
 /// One page of the document list; `term` / `limit` / `offset` already normalized.
 pub async fn list_page(
     state: &AppState,
+    space: SpaceId,
     query: &ListQuery,
     term: Option<&str>,
     limit: u64,
     offset: u64,
 ) -> Result<DocumentList, AppError> {
     let today = today();
-    let (docs, total) = query::list(&state.db, query, term, limit, offset, today).await?;
+    let (docs, total) = query::list(&state.db, space, query, term, limit, offset, today).await?;
     Ok(DocumentList {
         items: view::summaries(&state.db, docs, today).await?,
         total,
@@ -63,7 +67,7 @@ pub async fn list_page(
     post,
     path = "/api/documents",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body(content = DocumentInput, description = "An issued draft (`DocumentInput`), or with `direction: \"received\"` a received document (`ReceivedInput`)"),
     responses(
         (status = 201, body = Document),
@@ -73,6 +77,7 @@ pub async fn list_page(
 )]
 pub async fn create(
     State(state): State<AppState>,
+    access: Write,
     ApiJson(body): ApiJson<serde_json::Value>,
 ) -> Result<(StatusCode, Json<Document>), AppError> {
     let direction = body
@@ -80,41 +85,49 @@ pub async fn create(
         .and_then(|d| d.as_str())
         .map(str::trim);
     let id = if direction == Some(RECEIVED) {
-        received::create(&state, body).await?
+        received::create(&state, access.space(), body).await?
     } else {
-        create_draft(&state, from_value(body)?).await?
+        create_draft(&state, access.space(), from_value(body)?).await?
     };
-    Ok((StatusCode::CREATED, Json(fetch(&state, id).await?)))
+    Ok((
+        StatusCode::CREATED,
+        Json(fetch(&state, access.space(), id).await?),
+    ))
 }
 
 /// Create an issued-direction draft; omitted fields get the contact / company defaults.
-pub async fn create_draft(state: &AppState, input: DocumentInput) -> Result<Uuid, AppError> {
-    let ctx = context::load(&state.db, &input, today(), None).await?;
+pub async fn create_draft(
+    state: &AppState,
+    space: SpaceId,
+    input: DocumentInput,
+) -> Result<Uuid, AppError> {
+    let ctx = context::load(&state.db, space, &input, today(), None).await?;
     let (mut data, evaluated) = input.validate(&ctx)?;
-    context::resolve_bank(&state.db, &mut data, true).await?;
-    write::create(&state.db, data, evaluated.totals).await
+    context::resolve_bank(&state.db, space, &mut data, true).await?;
+    write::create(&state.db, space, data, evaluated.totals).await
 }
 
 #[utoipa::path(
     get,
     path = "/api/documents/{id}",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     responses((status = 200, body = Document), (status = 404, body = ErrorBody))
 )]
 pub async fn get(
     State(state): State<AppState>,
+    access: Read,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<Document>, AppError> {
-    Ok(Json(fetch(&state, id).await?))
+    Ok(Json(fetch(&state, access.space(), id).await?))
 }
 
 #[utoipa::path(
     put,
     path = "/api/documents/{id}",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     request_body(content = DocumentInput, description = "`DocumentInput` for an issued draft, `ReceivedInput` for a received document"),
     responses(
@@ -126,38 +139,41 @@ pub async fn get(
 )]
 pub async fn update(
     State(state): State<AppState>,
+    access: Write,
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(body): ApiJson<serde_json::Value>,
 ) -> Result<Json<Document>, AppError> {
-    let doc = query::find(&state.db, id).await?;
+    let space = access.space();
+    let doc = query::find(&state.db, space, id).await?;
     if doc.direction == RECEIVED {
-        received::update(&state, &doc, body).await?;
-        return Ok(Json(fetch(&state, id).await?));
+        received::update(&state, space, &doc, body).await?;
+        return Ok(Json(fetch(&state, space, id).await?));
     }
-    update_draft(&state, &doc, from_value(body)?).await?;
-    Ok(Json(fetch(&state, id).await?))
+    update_draft(&state, space, &doc, from_value(body)?).await?;
+    Ok(Json(fetch(&state, space, id).await?))
 }
 
 /// Replace every field of an issued-direction draft (`document_locked` otherwise).
 pub async fn update_draft(
     state: &AppState,
+    space: SpaceId,
     doc: &document::Model,
     input: DocumentInput,
 ) -> Result<(), AppError> {
     if view::status(doc)? != Status::Draft {
         return Err(AppError::DocumentLocked);
     }
-    let ctx = context::load(&state.db, &input, today(), Some(doc)).await?;
+    let ctx = context::load(&state.db, space, &input, today(), Some(doc)).await?;
     let (mut data, evaluated) = input.validate(&ctx)?;
-    context::resolve_bank(&state.db, &mut data, false).await?;
-    write::update(&state.db, doc.id, data, evaluated.totals).await
+    context::resolve_bank(&state.db, space, &mut data, false).await?;
+    write::update(&state.db, space, doc.id, data, evaluated.totals).await
 }
 
 #[utoipa::path(
     delete,
     path = "/api/documents/{id}",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     responses(
         (status = 204),
@@ -167,17 +183,19 @@ pub async fn update_draft(
 )]
 pub async fn delete(
     State(state): State<AppState>,
+    access: Write,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let doc = query::find(&state.db, id).await?;
+    let space = access.space();
+    let doc = query::find(&state.db, space, id).await?;
     let original = if doc.direction == RECEIVED {
-        received_repo::delete(&state.db, id).await?
+        received_repo::delete(&state.db, space, id).await?
     } else {
-        write::delete(&state.db, id).await?
+        write::delete(&state.db, space, id).await?
     };
     // After the commit: a failed delete never loses the file.
     if let Some(rel) = original {
-        state.pdf.storage().remove(&rel).await;
+        state.pdf.space(space)?.storage().remove(&rel).await;
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -186,7 +204,7 @@ pub async fn delete(
     post,
     path = "/api/documents/compute",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body = ComputeInput,
     responses(
         (status = 200, body = Computed),
@@ -195,16 +213,21 @@ pub async fn delete(
 )]
 pub async fn compute(
     State(state): State<AppState>,
+    access: Write,
     ApiJson(input): ApiJson<ComputeInput>,
 ) -> Result<Json<Computed>, AppError> {
-    Ok(Json(compute_totals(&state, input).await?))
+    Ok(Json(compute_totals(&state, access.space(), input).await?))
 }
 
 /// Live lines + totals of an unsaved document, no writes.
-pub async fn compute_totals(state: &AppState, input: ComputeInput) -> Result<Computed, AppError> {
-    let company = company::get(&state.db).await?;
+pub async fn compute_totals(
+    state: &AppState,
+    space: SpaceId,
+    input: ComputeInput,
+) -> Result<Computed, AppError> {
+    let company = company::get(&state.db, space).await?;
     let existing = match input.document_id {
-        Some(id) => match query::find(&state.db, id).await {
+        Some(id) => match query::find(&state.db, space, id).await {
             Ok(doc) => Some(context::existing(&doc)?),
             Err(AppError::NotFound) => None,
             Err(e) => return Err(e),
@@ -214,10 +237,10 @@ pub async fn compute_totals(state: &AppState, input: ComputeInput) -> Result<Com
     let exact = ddpp_correction::basis_for(&state.db, existing.as_ref()).await?;
     let ctx = ComputeCtx {
         vat_payer: company.vat_payer,
-        default_rate: context::default_vat_rate(&state.db).await?,
+        default_rate: context::default_vat_rate(&state.db, space).await?,
         default_locale: company.default_locale,
         existing,
-        advances: advance_sources::load(&state.db, &input.advance_ids()).await?,
+        advances: advance_sources::load(&state.db, space, &input.advance_ids()).await?,
         exact,
     };
     let (lines, evaluated) = input.validate(&ctx)?;

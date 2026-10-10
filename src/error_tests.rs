@@ -134,6 +134,40 @@ fn unauthorized_sets_www_authenticate() {
 }
 
 #[tokio::test]
+async fn auth_errors() {
+    for (err, status, code) in [
+        (
+            AppError::InvalidCredentials,
+            StatusCode::UNAUTHORIZED,
+            "invalid_credentials",
+        ),
+        (AppError::Forbidden, StatusCode::FORBIDDEN, "forbidden"),
+        (
+            AppError::EmailUnverified,
+            StatusCode::FORBIDDEN,
+            "email_unverified",
+        ),
+        (AppError::Csrf, StatusCode::FORBIDDEN, "csrf"),
+        (
+            AppError::RateLimited(42),
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+        ),
+    ] {
+        let (s, json) = body(err).await;
+        assert_eq!(s, status);
+        assert_eq!(json, serde_json::json!({ "code": code }));
+    }
+    let resp = AppError::RateLimited(42).into_response();
+    assert_eq!(
+        resp.headers().get(header::RETRY_AFTER),
+        Some(&HeaderValue::from_static("42"))
+    );
+    let resp = AppError::InvalidCredentials.into_response();
+    assert!(resp.headers().get(header::WWW_AUTHENTICATE).is_none());
+}
+
+#[tokio::test]
 async fn internal_error_does_not_leak_detail() {
     let (_, json) = body(AppError::from(anyhow::anyhow!("password=hunter2"))).await;
     assert_eq!(json, serde_json::json!({ "code": "internal" }));

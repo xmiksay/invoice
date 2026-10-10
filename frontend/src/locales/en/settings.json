@@ -9,7 +9,8 @@
     "categories": "Categories",
     "customFields": "Custom fields",
     "email": "E-mail",
-    "accounting": "Accounting"
+    "accounting": "Accounting",
+    "space": "Space"
   },
   "company": {
     "vatPayer": "VAT payer",

@@ -85,3 +85,19 @@ describe("pdf errors", () => {
     expect(errorDetailOf(new Error("boom"))).toBeNull();
   });
 });
+
+describe("auth error messages", () => {
+  it.each([
+    [401, "invalid_credentials", "errors.invalidCredentials"],
+    [403, "forbidden", "errors.forbidden"],
+    [403, "csrf", "errors.csrf"],
+    [403, "email_unverified", "errors.emailUnverified"],
+    [429, "rate_limited", "errors.rateLimited"],
+  ])("%i %s → %s", (status, code, key) => {
+    expect(errorMessageKey(new ApiError(status, code))).toEqual({ key });
+  });
+
+  it.each(["too_short", "reserved", "taken", "mismatch", "too_high"])("has a reason message for %s", (code) => {
+    expect(reasonKey(code)).toBe(`validation.${code}`);
+  });
+});

@@ -12,7 +12,7 @@ pub fn request(body: &Value, bearer: Option<&str>) -> Request<Body> {
     let mut b = Request::builder()
         .method(Method::POST)
         .uri("/api/mcp")
-        .header("host", "invoice.example.test")
+        .header("host", super::TEST_HOST)
         .header("content-type", "application/json")
         .header("accept", "application/json, text/event-stream");
     if let Some(t) = bearer {
@@ -78,4 +78,23 @@ pub async fn tool_error(app: &Router, name: &str, args: Value) -> Value {
     let result = call_tool(app, name, args).await;
     assert_eq!(result["isError"], true, "{name}: {result}");
     result["structuredContent"].clone()
+}
+
+/// `tools/call` with `token` on `host`; the `result` object.
+pub async fn tool_as(app: &Router, host: &str, token: &str, name: &str, args: Value) -> Value {
+    let body = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                       "params": { "name": name, "arguments": args } });
+    let mut req = request(&body, Some(token));
+    req.headers_mut().insert(
+        "host",
+        axum::http::HeaderValue::from_str(host).expect("host header"),
+    );
+    let resp = send(app.clone(), req).await;
+    assert_eq!(resp.status(), StatusCode::OK, "{name}");
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 22)
+        .await
+        .expect("read body");
+    let v: Value = serde_json::from_slice(&bytes).expect("JSON-RPC body");
+    assert!(v.get("error").is_none(), "{name}: {v}");
+    v["result"].clone()
 }

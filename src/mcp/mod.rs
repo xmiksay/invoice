@@ -20,15 +20,18 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::app::AppState;
+use crate::auth::Authed;
 use crate::document::handlers::fetch;
-use crate::error::ErrorBody;
+use crate::error::{AppError, ErrorBody};
+use crate::space::{Role, SpaceId};
+use axum::http::request::Parts;
 use result::{pdf_url, to_value, with};
 
 /// Same as axum's default JSON body limit.
 pub const BODY_LIMIT: usize = 2 * 1024 * 1024;
 
 const INSTRUCTIONS: &str = "\
-Invoice management of one Czech company (single user).
+Invoice management of one Czech company (this space; what you may do depends on your token's role).
 Documents have a direction: `issued` (our invoices to customers) or `received` (supplier invoices, read only here). \
 Issued types: `invoice`, `proforma` (advance request, not a tax document), `simplified` (simplified tax document); \
 also `advance_tax_doc` (DDPP, created automatically when a VAT payer's proforma is paid), `credit_note`, `debit_note`.
@@ -63,7 +66,7 @@ impl ServerHandler for InvoiceMcp {
     }
 }
 
-/// Routes relative to `/api/mcp` (mounted behind the Bearer middleware).
+/// Routes relative to `/api/mcp` (mounted behind the auth middleware).
 pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .route_service("/", service(state))
@@ -77,8 +80,8 @@ fn service(state: AppState) -> StreamableHttpService<InvoiceMcp, NeverSessionMan
         .with_legacy_session_mode(false)
         .with_json_response(true)
         .with_sse_keep_alive(None)
-        // Served on the instance's own public host; the Bearer token, not a
-        // loopback Host allowlist, is what guards it (no DNS-rebinding exposure).
+        // Served on the space's own host; the auth middleware (token or
+        // session), not a loopback Host allowlist, is what guards it.
         .disable_allowed_hosts()
         .with_max_request_body_bytes(BODY_LIMIT);
     let tool_router = InvoiceMcp::tools();
@@ -131,9 +134,27 @@ async fn json_errors(resp: Response) -> Response {
     out
 }
 
+/// Run a tool in the caller's space at `min` role or above; below it the
+/// tool error `{"code":"forbidden"}`. The auth middleware in front of the
+/// MCP service put the caller into the request extensions.
+async fn in_space<T, Fut>(
+    parts: &Parts,
+    min: Role,
+    f: impl FnOnce(SpaceId) -> Fut,
+) -> Result<T, AppError>
+where
+    Fut: Future<Output = Result<T, AppError>>,
+{
+    let authed = parts
+        .extensions
+        .get::<Authed>()
+        .ok_or(AppError::Unauthorized)?;
+    f(authed.scope(min)?.space).await
+}
+
 /// A document as `GET /api/documents/{id}` returns it, plus `pdfUrl`.
-async fn document_value(state: &AppState, id: Uuid) -> Result<Value, crate::error::AppError> {
-    let doc = fetch(state, id).await?;
+async fn document_value(state: &AppState, space: SpaceId, id: Uuid) -> Result<Value, AppError> {
+    let doc = fetch(state, space, id).await?;
     let url = pdf_url(doc.id, &doc.direction, doc.imported, doc.original.is_some());
     Ok(with(to_value(&doc)?, "pdfUrl", url))
 }
@@ -143,7 +164,7 @@ async fn document_value(state: &AppState, id: Uuid) -> Result<Value, crate::erro
     post,
     path = "/api/mcp",
     tag = "mcp",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body(
         content = Object,
         description = "One JSON-RPC 2.0 message (MCP Streamable HTTP, stateless): `initialize`, `tools/list`, `tools/call`, … See docs/api/mcp.md."

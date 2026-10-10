@@ -342,7 +342,7 @@ async fn confirm_rechecks_duplicates_under_a_lock() {
     let db = TestDb::new().await;
     let app = router(db.conn.clone());
     set_company(&app, true).await;
-    let pdf = common::pdf_service(&dead_url(), common::shared_storage());
+    let pdf = common::space_pdf(&dead_url(), common::shared_storage(), db.space);
     let opts = Options {
         paid_on: None,
         category: None,

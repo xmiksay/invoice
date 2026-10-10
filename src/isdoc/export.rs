@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use super::export_xml::{self, Deposit, Source, Supplement};
 use crate::app::AppState;
+use crate::auth::Read;
 use crate::document::compute::RecapRow;
 use crate::document::entity::document::{self, Column, Entity};
 use crate::document::handlers::dto::{BankSnapshot, ListQuery, PartySnapshot};
@@ -26,6 +27,7 @@ use crate::extract::{ApiPath, ApiQuery};
 use crate::pdf::handlers::safe_filename;
 use crate::pdf::{PdfService, archive};
 use crate::settings::doc_type::{DocType, ISSUED, RECEIVED};
+use crate::space::SpaceId;
 use crate::time::today;
 
 /// Most documents one bulk export may hold.
@@ -192,7 +194,7 @@ pub async fn export(
     pdf: &PdfService,
     id: Uuid,
 ) -> Result<Exported, AppError> {
-    let full = query::load(db, id).await?;
+    let full = query::load(db, pdf.space_id(), id).await?;
     if full.doc.direction == RECEIVED {
         return Err(AppError::NotFound);
     }
@@ -240,8 +242,12 @@ async fn plain_of(db: &DatabaseConnection, full: Full) -> Result<Exported, AppEr
 
 /// The plain ISDOC XML of an issued, non-draft document (the e-mail
 /// attachment; the caller checks the state).
-pub async fn plain(db: &DatabaseConnection, id: Uuid) -> Result<Exported, AppError> {
-    plain_of(db, query::load(db, id).await?).await
+pub async fn plain(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<Exported, AppError> {
+    plain_of(db, query::load(db, space, id).await?).await
 }
 
 fn attachment(e: Exported) -> Response {
@@ -252,7 +258,7 @@ fn attachment(e: Exported) -> Response {
     get,
     path = "/api/documents/{id}/isdoc",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     responses(
         (status = 200, description = "`{number}.isdocx` (ISDOC + PDF + manifest), or `{number}.isdoc` without a PDF", content_type = "application/zip"),
@@ -263,9 +269,11 @@ fn attachment(e: Exported) -> Response {
 )]
 pub async fn document_isdoc(
     State(state): State<AppState>,
+    access: Read,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Response, AppError> {
-    Ok(attachment(export(&state.db, &state.pdf, id).await?))
+    let pdf = state.pdf.space(access.space())?;
+    Ok(attachment(export(&state.db, &pdf, id).await?))
 }
 
 /// `name`, or `name` with `-2`, `-3`… before the extension when taken.
@@ -284,7 +292,7 @@ fn unique_name(taken: &mut HashSet<String>, name: &str) -> String {
     get,
     path = "/api/documents/isdoc",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(ListQuery),
     responses(
         (status = 200, description = "`isdoc-export.zip` of the matching issued non-draft documents", content_type = "application/zip"),
@@ -294,11 +302,14 @@ fn unique_name(taken: &mut HashSet<String>, name: &str) -> String {
 )]
 pub async fn bulk(
     State(state): State<AppState>,
+    access: Read,
     ApiQuery(mut q): ApiQuery<ListQuery>,
 ) -> Result<Response, AppError> {
     q.direction = Some(ISSUED.into());
-    let select =
-        || query::export_select(&q, today()).filter(Column::Status.ne(Status::Draft.as_str()));
+    let space = access.space();
+    let select = || {
+        query::export_select(space, &q, today()).filter(Column::Status.ne(Status::Draft.as_str()))
+    };
     if select().count(&state.db).await? > MAX_BULK {
         return Err(AppError::field("filter", "too_many"));
     }
@@ -311,13 +322,14 @@ pub async fn bulk(
         .into_tuple()
         .all(&state.db)
         .await?;
+    let pdf = state.pdf.space(space)?;
     // Entries go straight into the archive; a document that fails is
     // skipped and listed in `errors.txt` instead of failing the export.
     let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let (mut taken, mut errors, mut first_error, mut written) =
         (HashSet::new(), String::new(), None, 0usize);
     for (id, number) in docs {
-        match export(&state.db, &state.pdf, id).await {
+        match export(&state.db, &pdf, id).await {
             Ok(e) => {
                 zip_add(&mut w, &unique_name(&mut taken, &e.filename), &e.bytes)?;
                 written += 1;

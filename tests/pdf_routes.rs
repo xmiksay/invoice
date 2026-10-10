@@ -81,7 +81,7 @@ async fn ddpp_is_archived_right_after_the_payment() {
     assert!(
         env.storage
             .path()
-            .join(format!("documents/2026/{ddpp}.pdf"))
+            .join(db.key(&format!("documents/2026/{ddpp}.pdf")))
             .is_file()
     );
 }
@@ -124,7 +124,7 @@ async fn preview_renders_a_sample() {
         .collect();
     assert_eq!(kinds, ["item", "item", "item", "subtotal", "text"]);
     assert!(
-        !env.storage.path().join("documents").exists(),
+        !env.storage.path().join(db.key("documents")).exists(),
         "never stored"
     );
 
@@ -167,7 +167,7 @@ async fn missing_archive_file_is_500() {
     let path = env
         .storage
         .path()
-        .join(format!("documents/2026/{}.pdf", id(&doc)));
+        .join(db.key(&format!("documents/2026/{}.pdf", id(&doc))));
     std::fs::remove_file(path).expect("remove archive");
     let (status, err) = call(
         &app,
@@ -191,7 +191,7 @@ async fn race_loser_serves_the_stored_archive() {
 
     // As if this caller had seen no archive: it renders, loses the
     // `WHERE pdf_path IS NULL` update and must serve the winner's file.
-    let pdf = common::pdf_service(&env.url, env.storage.storage.clone());
+    let pdf = common::space_pdf(&env.url, env.storage.storage.clone(), db.space);
     let doc_id = id(&doc).parse().expect("uuid");
     let bytes = invoice::pdf::archive::archive_missing(&db.conn, &pdf, doc_id)
         .await

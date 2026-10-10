@@ -1,6 +1,7 @@
 # API contract
 
-All routes under `/api`, Bearer auth (already enforced). JSON camelCase on the wire
+All routes under `/api`; since 4a authenticated by a session cookie or a personal Bearer token on a space host
+([spaces.md](spaces.md), [auth.md](auth.md)). JSON camelCase on the wire
 (`#[serde(rename_all = "camelCase")]`). Money/rates are decimals serialized as STRINGS
 (e.g. `"21"`, `"12.5"`) to avoid float loss. Decimal *inputs* of document lines, `exchangeRate`, compute and payments also accept a JSON
 number (taken by its shortest text, then validated like the string) — see `src/num_text.rs`. IDs are UUID strings. Dates `YYYY-MM-DD`.
@@ -32,6 +33,8 @@ Later phases add more codes (`document_locked`, `invalid_state`, `cnb_unavailabl
 | [mcp.md](mcp.md) | MCP endpoint: read tools, drafts, issue, payments (3a) |
 | [accounting.md](accounting.md) | accounting settings, Pohoda XML export (3b) |
 | [money.md](money.md) | Money S3 XML export and its settings (3c) |
+| [spaces.md](spaces.md) | hosts, spaces, roles, data scoping, personal API tokens (4a) |
+| [auth.md](auth.md) | users, registration, login, sessions, password reset, CSRF (4a) |
 
 Each part ends with a "Clarifications (as implemented)" section — the authoritative record of behaviour beyond the
 original contract. Keep every file under 400 lines; add a new part rather than growing one past the cap.

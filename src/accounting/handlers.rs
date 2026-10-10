@@ -6,6 +6,7 @@ use axum::extract::State;
 use super::repo;
 use super::settings::{AccountingSettings, AccountingUpdate};
 use crate::app::AppState;
+use crate::auth::{Manage, Read};
 use crate::error::{AppError, ErrorBody};
 use crate::extract::ApiJson;
 
@@ -13,18 +14,21 @@ use crate::extract::ApiJson;
     get,
     path = "/api/settings/accounting",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     responses((status = 200, body = AccountingSettings, description = "Both sections (`pohoda`, `money`), every direction × exported type row present (missing ones all null)"))
 )]
-pub async fn get(State(state): State<AppState>) -> Result<Json<AccountingSettings>, AppError> {
-    Ok(Json(repo::get(&state.db).await?))
+pub async fn get(
+    State(state): State<AppState>,
+    access: Read,
+) -> Result<Json<AccountingSettings>, AppError> {
+    Ok(Json(repo::get(&state.db, access.space()).await?))
 }
 
 #[utoipa::path(
     put,
     path = "/api/settings/accounting",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body(content = AccountingUpdate, description = "A section present replaces that section (`{}` clears it); an absent one is kept"),
     responses(
         (status = 200, body = AccountingSettings),
@@ -33,8 +37,9 @@ pub async fn get(State(state): State<AppState>) -> Result<Json<AccountingSetting
 )]
 pub async fn put(
     State(state): State<AppState>,
+    access: Manage,
     ApiJson(input): ApiJson<AccountingUpdate>,
 ) -> Result<Json<AccountingSettings>, AppError> {
     let update = input.validate()?;
-    Ok(Json(repo::update(&state.db, update).await?))
+    Ok(Json(repo::update(&state.db, access.space(), update).await?))
 }

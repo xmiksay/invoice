@@ -3,19 +3,19 @@
 //! exchange-rate note.
 
 use anyhow::Context as _;
-use sea_orm::{ConnectionTrait, EntityTrait};
+use sea_orm::ConnectionTrait;
 use uuid::Uuid;
 
 use super::format::Locale;
 use super::payload::{Input, RateInfo};
-use crate::contact::entity::contact;
 use crate::document::entity::document;
 use crate::document::handlers::dto::{BankSnapshot, Document, PartySnapshot};
 use crate::document::line::{Status, VatMode};
 use crate::document::repo::issue::{customer, supplier};
 use crate::document::repo::{context, query, view};
 use crate::error::AppError;
-use crate::settings::entity::company;
+use crate::settings::repo::company;
+use crate::space::SpaceId;
 use crate::time::today;
 
 pub struct Source {
@@ -31,6 +31,7 @@ pub struct Source {
 /// so it is labelled like the invoice's.
 async fn rate_info<C: ConnectionTrait>(
     db: &C,
+    space: SpaceId,
     row: &document::Model,
 ) -> Result<Option<RateInfo>, AppError> {
     let Some(rate) = row.exchange_rate else {
@@ -38,7 +39,7 @@ async fn rate_info<C: ConnectionTrait>(
     };
     let (source, date) = match (row.exchange_rate_source.as_deref(), row.related_document_id) {
         (Some("original"), Some(parent)) => {
-            let p = query::find(db, parent).await?;
+            let p = query::find(db, space, parent).await?;
             (p.exchange_rate_source, p.exchange_rate_date)
         }
         _ => (row.exchange_rate_source.clone(), row.exchange_rate_date),
@@ -49,11 +50,15 @@ async fn rate_info<C: ConnectionTrait>(
     }))
 }
 
-pub async fn load<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<Source, AppError> {
-    let full = query::load(db, id).await?;
+pub async fn load<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<Source, AppError> {
+    let full = query::load(db, space, id).await?;
     let row = full.doc.clone();
     let doc = view::document(full, today())?;
-    let rate = rate_info(db, &row).await?;
+    let rate = rate_info(db, space, &row).await?;
     if doc.status != Status::Draft {
         return Ok(Source {
             supplier: doc.supplier.clone(),
@@ -64,16 +69,13 @@ pub async fn load<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<Source, AppErr
             rate,
         });
     }
-    let company = company::Entity::find_by_id(company::SINGLETON_ID)
-        .one(db)
-        .await?
-        .context("company singleton row missing")?;
+    let company = company::get(db, space).await?;
     let contact = match row.contact_id {
-        Some(cid) => contact::Entity::find_by_id(cid).one(db).await?,
+        Some(cid) => context::contact(db, space, cid).await?,
         None => None,
     };
     let bank = match row.bank_account_id {
-        Some(bid) => context::bank_account(db, bid).await?,
+        Some(bid) => context::bank_account(db, space, bid).await?,
         None => None,
     };
     Ok(Source {

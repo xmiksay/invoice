@@ -5,11 +5,14 @@ import { useRoute } from "vue-router";
 import AppHeader from "@/components/AppHeader.vue";
 import AppToast from "@/components/AppToast.vue";
 import { useHealthStore } from "@/stores/health";
+import { useSessionStore } from "@/stores/session";
 
 const { t } = useI18n();
 const route = useRoute();
 const health = useHealthStore();
-const showHeader = computed(() => route.name !== undefined && route.name !== "login");
+const session = useSessionStore();
+// Signed-out screens (login, registration, …) and the boot-failure page stand alone.
+const showHeader = computed(() => route.name !== undefined && !route.meta.public && session.me !== null);
 
 watch(
   showHeader,

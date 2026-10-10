@@ -18,6 +18,7 @@ use super::write;
 use crate::document::entity::{document, payment, vat_recap};
 use crate::error::AppError;
 use crate::settings::repo::{categories, vat_rates};
+use crate::space::SpaceId;
 
 /// Documents loaded (and written) per query round.
 pub const CHUNK: usize = 500;
@@ -31,8 +32,12 @@ fn group<T>(rows: Vec<T>, key: impl Fn(&T) -> Uuid) -> HashMap<Uuid, Vec<T>> {
 }
 
 /// Settings → VAT rates plus every rate the documents' recap uses.
-pub async fn rates<C: ConnectionTrait>(db: &C, ids: &[Uuid]) -> Result<Vec<Decimal>, AppError> {
-    let mut rates: Vec<Decimal> = vat_rates::list(db)
+pub async fn rates<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+    ids: &[Uuid],
+) -> Result<Vec<Decimal>, AppError> {
+    let mut rates: Vec<Decimal> = vat_rates::list(db, space)
         .await?
         .into_iter()
         .map(|r| r.rate)
@@ -189,11 +194,12 @@ async fn next(mut w: Walk) -> Result<Option<(Vec<u8>, Walk)>, AppError> {
 
 async fn prepare(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     ids: &[Uuid],
 ) -> Result<(Vec<Decimal>, Vec<u8>, HashMap<Uuid, String>), AppError> {
-    let rates = rates(txn, ids).await?;
+    let rates = rates(txn, space, ids).await?;
     let head = write::head(&rates)?;
-    let categories = categories::list(txn)
+    let categories = categories::list(txn, space)
         .await?
         .into_iter()
         .map(|c| (c.id, c.name))
@@ -213,10 +219,11 @@ pub async fn rollback(txn: DatabaseTransaction, label: &str) {
 /// (logged). `label` names the export in the logs.
 pub async fn body(
     txn: DatabaseTransaction,
+    space: SpaceId,
     ids: Vec<Uuid>,
     label: &'static str,
 ) -> Result<Body, AppError> {
-    let (rates, head, categories) = match prepare(&txn, &ids).await {
+    let (rates, head, categories) = match prepare(&txn, space, &ids).await {
         Ok(x) => x,
         Err(e) => {
             rollback(txn, label).await;

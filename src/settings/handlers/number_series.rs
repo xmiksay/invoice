@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::app::AppState;
+use crate::auth::{Manage, Read};
 use crate::error::{AppError, ErrorBody};
 use crate::extract::{ApiJson, ApiPath};
 use crate::settings::doc_type::DocType;
@@ -74,12 +75,15 @@ impl NumberSeries {
     get,
     path = "/api/settings/number-series",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     responses((status = 200, body = Vec<NumberSeries>))
 )]
-pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<NumberSeries>>, AppError> {
+pub async fn list(
+    State(state): State<AppState>,
+    access: Read,
+) -> Result<Json<Vec<NumberSeries>>, AppError> {
     let year = current_year();
-    let series = repo::number_series::list(&state.db).await?;
+    let series = repo::number_series::list(&state.db, access.space()).await?;
     Ok(Json(
         series
             .into_iter()
@@ -92,7 +96,7 @@ pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<NumberSeries
     put,
     path = "/api/settings/number-series/{docType}",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("docType" = DocType, Path)),
     request_body = PatternInput,
     responses(
@@ -103,12 +107,13 @@ pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<NumberSeries
 )]
 pub async fn put_pattern(
     State(state): State<AppState>,
+    access: Manage,
     ApiPath(doc_type): ApiPath<DocType>,
     ApiJson(input): ApiJson<PatternInput>,
 ) -> Result<Json<NumberSeries>, AppError> {
     let pattern = input.pattern.trim().to_string();
     Pattern::parse(&pattern).map_err(|_| AppError::field("pattern", "invalid_pattern"))?;
-    let s = repo::number_series::set_pattern(&state.db, doc_type, pattern).await?;
+    let s = repo::number_series::set_pattern(&state.db, access.space(), doc_type, pattern).await?;
     Ok(Json(NumberSeries::build(s, current_year())))
 }
 
@@ -116,7 +121,7 @@ pub async fn put_pattern(
     put,
     path = "/api/settings/number-series/{docType}/counters/{year}",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("docType" = DocType, Path), ("year" = i32, Path)),
     request_body = CounterInput,
     responses(
@@ -127,6 +132,7 @@ pub async fn put_pattern(
 )]
 pub async fn put_counter(
     State(state): State<AppState>,
+    access: Manage,
     ApiPath((doc_type, year)): ApiPath<(DocType, i32)>,
     ApiJson(input): ApiJson<CounterInput>,
 ) -> Result<Json<NumberSeries>, AppError> {
@@ -141,6 +147,7 @@ pub async fn put_counter(
     e.into_result()?;
     let s = repo::number_series::set_counter(
         &state.db,
+        access.space(),
         doc_type,
         year,
         last_number.unwrap_or_default(),
@@ -162,7 +169,7 @@ mod tests {
             counters,
         };
         let c = |year, last_number| counter::Model {
-            doc_type: "invoice".into(),
+            series_id: uuid::Uuid::nil(),
             year,
             last_number,
         };

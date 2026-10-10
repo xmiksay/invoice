@@ -6,7 +6,6 @@ use uuid::Uuid;
 
 use super::received_input::{ReceivedCtx, ReceivedData, ReceivedInput};
 use crate::app::AppState;
-use crate::contact::entity::contact;
 use crate::document::compute::{Overflow, RecapRow};
 use crate::document::entity::{document, vat_recap};
 use crate::document::received;
@@ -17,19 +16,26 @@ use crate::error::AppError;
 use crate::extract::from_value;
 use crate::settings::doc_type::RECEIVED;
 use crate::settings::repo::company;
+use crate::space::SpaceId;
 use crate::time::today;
 
 async fn context(
     db: &DatabaseConnection,
+    space: SpaceId,
     input: &ReceivedInput,
     stored: Option<&document::Model>,
 ) -> Result<ReceivedCtx, AppError> {
     let contact = match input.contact_id {
-        Some(id) => contact::Entity::find_by_id(id).one(db).await?,
+        Some(id) => crate::document::repo::context::contact(db, space, id).await?,
         None => None,
     };
     let related = match input.related_document_id {
-        Some(id) => document::Entity::find_by_id(id).one(db).await?,
+        Some(id) => {
+            document::Entity::find_by_id(id)
+                .filter(document::Column::SpaceId.eq(space))
+                .one(db)
+                .await?
+        }
         None => None,
     };
     let existing = match stored {
@@ -40,7 +46,7 @@ async fn context(
         existing,
         contact,
         related,
-        meta: meta::load(db, RECEIVED, input.category_id, stored).await?,
+        meta: meta::load(db, space, RECEIVED, input.category_id, stored).await?,
     })
 }
 
@@ -81,10 +87,11 @@ async fn rate(
 
 async fn record(
     state: &AppState,
+    space: SpaceId,
     input: ReceivedInput,
     stored: Option<&document::Model>,
 ) -> Result<Record, AppError> {
-    let ctx = context(&state.db, &input, stored).await?;
+    let ctx = context(&state.db, space, &input, stored).await?;
     let data = input.validate(&ctx)?;
     let supplier = ctx
         .contact
@@ -108,15 +115,20 @@ async fn record(
     })
 }
 
-pub async fn create(state: &AppState, body: serde_json::Value) -> Result<Uuid, AppError> {
-    let r = record(state, from_value(body)?, None).await?;
-    let locale = company::get(&state.db).await?.default_locale;
-    repo::create(&state.db, r, locale).await
+pub async fn create(
+    state: &AppState,
+    space: SpaceId,
+    body: serde_json::Value,
+) -> Result<Uuid, AppError> {
+    let r = record(state, space, from_value(body)?, None).await?;
+    let locale = company::get(&state.db, space).await?.default_locale;
+    repo::create(&state.db, space, r, locale).await
 }
 
 /// `PUT` of a stored received document; the body may not switch direction.
 pub async fn update(
     state: &AppState,
+    space: SpaceId,
     doc: &document::Model,
     body: serde_json::Value,
 ) -> Result<(), AppError> {
@@ -128,7 +140,7 @@ pub async fn update(
     {
         return Err(AppError::field("direction", "invalid"));
     }
-    let mut r = record(state, input, Some(doc)).await?;
+    let mut r = record(state, space, input, Some(doc)).await?;
     let stored: Vec<RecapRow> = vat_recap::Entity::find()
         .filter(vat_recap::Column::DocumentId.eq(doc.id))
         .order_by_desc(vat_recap::Column::VatRate)
@@ -154,5 +166,5 @@ pub async fn update(
             rate: doc.exchange_rate,
         },
     );
-    repo::update(&state.db, doc.id, r).await
+    repo::update(&state.db, space, doc.id, r).await
 }

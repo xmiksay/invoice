@@ -4,10 +4,12 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { useAction } from "@/composables/useAction";
 import { PAGE_SIZE, useContactsStore } from "../store";
+import { useSessionStore } from "@/stores/session";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
 const { t } = useI18n();
+const session = useSessionStore();
 const router = useRouter();
 const store = useContactsStore();
 
@@ -37,7 +39,7 @@ function open(id: string) {
   <section class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h1 class="text-2xl font-semibold">{{ t("contacts.title") }}</h1>
-      <RouterLink :to="{ name: 'contact-new' }" class="btn btn-primary">{{ t("contacts.new") }}</RouterLink>
+      <RouterLink v-if="session.can('write')" :to="{ name: 'contact-new' }" class="btn btn-primary" data-test="new-contact">{{ t("contacts.new") }}</RouterLink>
     </div>
 
     <div>

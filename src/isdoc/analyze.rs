@@ -12,6 +12,7 @@ use super::upload::{self, Exceeded, File, LIMITS};
 use crate::error::AppError;
 use crate::import::check::{self, Checked};
 use crate::settings::repo::company;
+use crate::space::SpaceId;
 
 pub use super::upload::PDF_SKIPPED;
 pub use crate::import::check::{CONTACT_CREATED, RELATED_NOT_FOUND, Status};
@@ -60,10 +61,11 @@ fn plan_all(files: Vec<File>, company_ico: Option<String>) -> Result<Vec<Keyed>,
 /// selected ones); the in-batch duplicate pass always covers every entry.
 pub async fn analyze(
     db: &DatabaseConnection,
+    space: SpaceId,
     files: Vec<File>,
     only: Option<&HashSet<String>>,
 ) -> Result<Vec<Analyzed>, AppError> {
-    let ico = company::get(db).await?.ico;
+    let ico = company::get(db, space).await?.ico;
     let planned = tokio::task::spawn_blocking(move || plan_all(files, ico))
         .await
         .context("ISDOC unpacking panicked")?
@@ -75,7 +77,7 @@ pub async fn analyze(
         .iter()
         .map(|(k, o)| (k.as_str(), o.as_ref().ok().map(|(p, _, _)| p)))
         .collect();
-    let checked = check::check(db, &entries, only).await?;
+    let checked = check::check(db, space, &entries, only).await?;
     Ok(planned
         .into_iter()
         .zip(checked)

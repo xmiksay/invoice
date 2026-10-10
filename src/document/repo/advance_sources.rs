@@ -13,6 +13,7 @@ use crate::document::correction::net_recap;
 use crate::document::entity::{document, document_line, vat_recap};
 use crate::document::line::{AdvanceRow, LineData, Status};
 use crate::error::{AppError, FieldErrors};
+use crate::space::SpaceId;
 
 /// `(referenced document, referencing invoice)` for every non-cancelled
 /// invoice with an advance line on one of `ids`.
@@ -79,13 +80,16 @@ async fn deducted_recaps<'a, C: ConnectionTrait>(
 /// The documents named by `ids`, with their recap and current references.
 pub async fn load<C: ConnectionTrait>(
     db: &C,
+    space: SpaceId,
     ids: &[Uuid],
 ) -> Result<HashMap<Uuid, AdvanceSource>, AppError> {
     if ids.is_empty() {
         return Ok(HashMap::new());
     }
-    // Received documents can never be deducted: as if they did not exist.
+    // Received documents (and other spaces' documents) can never be
+    // deducted: as if they did not exist.
     let docs = document::Entity::find()
+        .filter(document::Column::SpaceId.eq(space))
         .filter(document::Column::Id.is_in(ids.to_vec()))
         .filter(document::Column::Direction.eq(crate::settings::doc_type::ISSUED))
         .all(db)
@@ -127,6 +131,7 @@ pub async fn load<C: ConnectionTrait>(
 /// another invoice meanwhile, and (non-payer form) the paid amount unchanged.
 pub async fn lock_and_recheck<C: ConnectionTrait>(
     txn: &C,
+    space: SpaceId,
     document_id: Uuid,
     lines: &[LineData],
 ) -> Result<(), AppError> {
@@ -137,6 +142,7 @@ pub async fn lock_and_recheck<C: ConnectionTrait>(
     ids.sort();
     ids.dedup();
     let locked: HashMap<Uuid, document::Model> = document::Entity::find()
+        .filter(document::Column::SpaceId.eq(space))
         .filter(document::Column::Id.is_in(ids.clone()))
         .order_by_asc(document::Column::Id)
         .lock_exclusive()

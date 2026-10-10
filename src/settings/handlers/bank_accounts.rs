@@ -6,6 +6,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::app::AppState;
+use crate::auth::{Manage, Read};
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::{ApiJson, ApiPath};
 use crate::settings::entity::bank_account;
@@ -83,11 +84,14 @@ impl BankAccountInput {
     get,
     path = "/api/settings/bank-accounts",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     responses((status = 200, body = Vec<BankAccount>))
 )]
-pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<BankAccount>>, AppError> {
-    let rows = repo::bank_accounts::list(&state.db).await?;
+pub async fn list(
+    State(state): State<AppState>,
+    access: Read,
+) -> Result<Json<Vec<BankAccount>>, AppError> {
+    let rows = repo::bank_accounts::list(&state.db, access.space()).await?;
     Ok(Json(rows.into_iter().map(Into::into).collect()))
 }
 
@@ -95,7 +99,7 @@ pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<BankAccount>
     post,
     path = "/api/settings/bank-accounts",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body = BankAccountInput,
     responses(
         (status = 201, body = BankAccount),
@@ -104,9 +108,10 @@ pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<BankAccount>
 )]
 pub async fn create(
     State(state): State<AppState>,
+    access: Manage,
     ApiJson(input): ApiJson<BankAccountInput>,
 ) -> Result<(StatusCode, Json<BankAccount>), AppError> {
-    let row = repo::bank_accounts::create(&state.db, input.validate()?).await?;
+    let row = repo::bank_accounts::create(&state.db, access.space(), input.validate()?).await?;
     Ok((StatusCode::CREATED, Json(row.into())))
 }
 
@@ -114,7 +119,7 @@ pub async fn create(
     put,
     path = "/api/settings/bank-accounts/{id}",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     request_body = BankAccountInput,
     responses(
@@ -125,10 +130,11 @@ pub async fn create(
 )]
 pub async fn update(
     State(state): State<AppState>,
+    access: Manage,
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<BankAccountInput>,
 ) -> Result<Json<BankAccount>, AppError> {
-    let row = repo::bank_accounts::update(&state.db, id, input.validate()?).await?;
+    let row = repo::bank_accounts::update(&state.db, access.space(), id, input.validate()?).await?;
     Ok(Json(row.into()))
 }
 
@@ -136,15 +142,16 @@ pub async fn update(
     delete,
     path = "/api/settings/bank-accounts/{id}",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     responses((status = 204), (status = 404, body = ErrorBody))
 )]
 pub async fn delete(
     State(state): State<AppState>,
+    access: Manage,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    repo::bank_accounts::delete(&state.db, id).await?;
+    repo::bank_accounts::delete(&state.db, access.space(), id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

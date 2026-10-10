@@ -15,8 +15,8 @@ use std::time::Duration;
 use anyhow::Context as _;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use futures_util::TryStreamExt as _;
 use futures_util::stream::BoxStream;
+use futures_util::{StreamExt as _, TryStreamExt as _};
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path;
@@ -252,6 +252,24 @@ impl Storage {
             .map_err(|e| map_err(prefix, e))?;
         out.sort_by(|a, b| a.key.cmp(&b.key));
         Ok(out)
+    }
+
+    /// Delete every object under the directory `prefix` (a deleted space)
+    /// with the backend's bulk delete (S3: batched `DeleteObjects`); returns
+    /// how many were removed. Missing objects are not an error.
+    pub async fn delete_prefix(&self, prefix: &str) -> Result<usize, Error> {
+        let path = parse(prefix)?;
+        let locations = self.store.list(Some(&path)).map_ok(|m| m.location).boxed();
+        let mut deleted = self.store.delete_stream(locations);
+        let mut n = 0;
+        while let Some(r) = deleted.next().await {
+            match r {
+                Ok(_) => n += 1,
+                Err(object_store::Error::NotFound { .. }) => {}
+                Err(e) => return Err(Error::Unavailable(e)),
+            }
+        }
+        Ok(n)
     }
 }
 

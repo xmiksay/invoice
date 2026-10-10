@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { i18n } from "@/i18n";
-import { calls, mockFetchRoutes, reply } from "@/test-utils";
+import { calls, mockFetchRoutes, reply, signIn } from "@/test-utils";
 import { MAX_ORIGINAL_BYTES } from "../original";
 import { useDocumentStore } from "../store";
 import { document } from "../testData";
@@ -15,6 +15,7 @@ const received = (overrides: Partial<Document> = {}) =>
 function mountPanel(doc: Document) {
   const pinia = createPinia();
   setActivePinia(pinia);
+  signIn("owner");
   const store = useDocumentStore();
   store.doc = doc;
   const w = mount({ components: { OriginalPdfPanel }, template: '<OriginalPdfPanel v-if="store.doc" :doc="store.doc" />', setup: () => ({ store }) }, { global: { plugins: [pinia, i18n] } });

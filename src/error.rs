@@ -71,6 +71,26 @@ pub enum AppError {
     #[error("unauthorized")]
     Unauthorized,
 
+    /// Login refused (wrong e-mail / password, not a member, unverified on a
+    /// space host, disabled) — one code for all, no account enumeration.
+    #[error("invalid credentials")]
+    InvalidCredentials,
+
+    /// The caller's effective role is below the route's minimum.
+    #[error("forbidden")]
+    Forbidden,
+
+    #[error("e-mail not verified")]
+    EmailUnverified,
+
+    /// A cookie-authenticated mutation without the request's own `Origin`.
+    #[error("CSRF origin check failed")]
+    Csrf,
+
+    /// Seconds until the limit frees up (`Retry-After`).
+    #[error("rate limited")]
+    RateLimited(u64),
+
     #[error("not found")]
     NotFound,
 
@@ -188,6 +208,11 @@ impl AppError {
     pub fn status_and_code(&self) -> (StatusCode, &'static str) {
         match self {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
+            Self::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
+            Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
+            Self::EmailUnverified => (StatusCode::FORBIDDEN, "email_unverified"),
+            Self::Csrf => (StatusCode::FORBIDDEN, "csrf"),
+            Self::RateLimited(_) => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             Self::Validation(_) | Self::ValidationDetail(..) => {
@@ -355,9 +380,16 @@ impl IntoResponse for AppError {
         self.log();
         let (status, _) = self.status_and_code();
         let mut resp = (status, Json(self.body())).into_response();
-        if matches!(self, Self::Unauthorized) {
-            resp.headers_mut()
-                .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+        match self {
+            Self::Unauthorized => {
+                resp.headers_mut()
+                    .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+            }
+            Self::RateLimited(secs) => {
+                resp.headers_mut()
+                    .insert(header::RETRY_AFTER, HeaderValue::from(secs));
+            }
+            _ => {}
         }
         resp
     }

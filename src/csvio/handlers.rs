@@ -13,6 +13,7 @@ use uuid::Uuid;
 use super::analyze::{self, Entry, Ready};
 use super::write;
 use crate::app::AppState;
+use crate::auth::{Read, Write};
 use crate::document::repo::issue::Rate;
 use crate::error::{AppError, ErrorBody};
 use crate::import::category::CategoryRef;
@@ -21,7 +22,9 @@ use crate::import::model::Code;
 use crate::import::store::{self, Options};
 use crate::import::wire::{self, Confirmed, Counterparty, PreviewEntry};
 use crate::import::{form, lookup};
+use crate::pdf::PdfService;
 use crate::settings::repo::vat_rates;
+use sea_orm::DatabaseConnection;
 
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -94,7 +97,7 @@ fn entry(e: &Entry) -> CsvPreviewEntry {
     post,
     path = "/api/import/csv/preview",
     tag = "import",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body(content_type = "multipart/form-data", description = "One `file` part: `.csv`, `.txt` or `.xlsx` (≤ 50 MiB)"),
     responses(
         (status = 200, body = CsvPreview),
@@ -104,16 +107,17 @@ fn entry(e: &Entry) -> CsvPreviewEntry {
 )]
 pub async fn preview(
     State(state): State<AppState>,
+    access: Write,
     form: Result<Multipart, MultipartRejection>,
 ) -> Result<Json<CsvPreview>, AppError> {
     let (bytes, _) = read_file(form).await?;
-    let entries = analyze::analyze(&state.db, bytes, None).await?;
+    let entries = analyze::analyze(&state.db, access.space(), bytes, None).await?;
     Ok(Json(CsvPreview {
         entries: entries.iter().map(entry).collect(),
     }))
 }
 
-async fn import_one(state: &AppState, r: &Ready) -> Result<Uuid, Code> {
+async fn import_one(pdf: &PdfService, db: &DatabaseConnection, r: &Ready) -> Result<Uuid, Code> {
     let m = &r.mapped;
     let rate = Rate {
         rate: m.plan.rate,
@@ -125,7 +129,7 @@ async fn import_one(state: &AppState, r: &Ready) -> Result<Uuid, Code> {
         category: m.category.clone().map(CategoryRef::Name),
         vat_deductible: m.vat_deductible,
     };
-    store::import(&state.db, &state.pdf, &m.plan, None, &rate, &opts)
+    store::import(db, pdf, &m.plan, None, &rate, &opts)
         .await
         .map_err(wire::failure)
 }
@@ -134,7 +138,7 @@ async fn import_one(state: &AppState, r: &Ready) -> Result<Uuid, Code> {
     post,
     path = "/api/import/csv/confirm",
     tag = "import",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body(content_type = "multipart/form-data", description = "The same `file` as the preview plus an `options` text part holding JSON (`CsvOptionsInput`)"),
     responses(
         (status = 200, body = Confirmed),
@@ -144,12 +148,14 @@ async fn import_one(state: &AppState, r: &Ready) -> Result<Uuid, Code> {
 )]
 pub async fn confirm(
     State(state): State<AppState>,
+    access: Write,
     form: Result<Multipart, MultipartRejection>,
 ) -> Result<Json<Confirmed>, AppError> {
     let (bytes, raw) = read_file(form).await?;
     let input: CsvOptionsInput = form::options(raw)?;
     let selected: HashSet<String> = input.selected.into_iter().collect();
-    let entries = analyze::analyze(&state.db, bytes, Some(&selected)).await?;
+    let entries = analyze::analyze(&state.db, access.space(), bytes, Some(&selected)).await?;
+    let pdf = state.pdf.space(access.space())?;
     let mut todo: Vec<(&str, &Ready)> = entries
         .iter()
         .filter(|e| selected.contains(&e.key))
@@ -161,7 +167,7 @@ pub async fn confirm(
     todo.sort_by_key(|(_, r)| lookup::rank(r.mapped.plan.doc_type));
     let mut done: HashMap<&str, Result<Uuid, Code>> = HashMap::new();
     for (key, r) in todo {
-        done.insert(key, import_one(&state, r).await);
+        done.insert(key, import_one(&pdf, &state.db, r).await);
     }
     Ok(Json(wire::confirmed(
         entries.iter().map(|e| e.key.as_str()),
@@ -173,11 +179,11 @@ pub async fn confirm(
     get,
     path = "/api/import/csv/sample",
     tag = "import",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     responses((status = 200, content_type = "text/csv", description = "`import-sample.csv`: the header with the current rate columns and three example rows"))
 )]
-pub async fn sample(State(state): State<AppState>) -> Result<Response, AppError> {
-    let rates: Vec<_> = vat_rates::list(&state.db)
+pub async fn sample(State(state): State<AppState>, access: Read) -> Result<Response, AppError> {
+    let rates: Vec<_> = vat_rates::list(&state.db, access.space())
         .await?
         .into_iter()
         .map(|r| r.rate)

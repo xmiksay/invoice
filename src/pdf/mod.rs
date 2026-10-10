@@ -25,21 +25,24 @@ use mdcast_client::{AssetBundle, Client, request};
 
 use crate::app::AppState;
 use crate::error::AppError;
+use crate::space::SpaceId;
 use crate::storage::Storage;
 use payload::Payload;
 
 pub const DEFAULT_MDCAST_URL: &str = "https://mdcast.nexial.cz";
 const MDCAST_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// The mdcast client plus the storage designs come from and archives go to.
+/// The instance-wide PDF service: mdcast client, the root storage and the
+/// shared design cache. It renders and stores nothing itself — every route
+/// works through [`PdfRoot::space`], so no key can land outside a space.
 #[derive(Clone)]
-pub struct PdfService {
+pub struct PdfRoot {
     client: Client,
     storage: Storage,
     design_cache: design::Cache,
 }
 
-impl PdfService {
+impl PdfRoot {
     /// Builds the client (no network).
     pub fn new(url: &str, token: Option<&str>, storage: Storage) -> anyhow::Result<Self> {
         let http = reqwest::Client::builder()
@@ -63,18 +66,57 @@ impl PdfService {
         })
     }
 
-    /// Archives, originals and the design overrides.
-    pub fn storage(&self) -> &Storage {
+    /// The service of one space: storage keys under `spaces/{id}/`, the
+    /// design overlay read from `spaces/{id}/design/`.
+    pub fn space(&self, space: SpaceId) -> Result<PdfService, AppError> {
+        let prefix = space.storage_prefix();
+        Ok(PdfService {
+            client: self.client.clone(),
+            storage: self.storage.scoped(&prefix)?,
+            design_cache: self.design_cache.clone(),
+            space,
+        })
+    }
+
+    /// The unscoped storage (space delete removes a whole prefix).
+    pub fn root_storage(&self) -> &Storage {
         &self.storage
     }
 
     pub fn design_cache(&self) -> &design::Cache {
         &self.design_cache
     }
+}
+
+/// The mdcast client plus the storage of one space: its design overlay,
+/// archives and originals.
+#[derive(Clone)]
+pub struct PdfService {
+    client: Client,
+    storage: Storage,
+    design_cache: design::Cache,
+    space: SpaceId,
+}
+
+impl PdfService {
+    /// The space this service reads and writes.
+    pub fn space_id(&self) -> SpaceId {
+        self.space
+    }
+
+    /// Archives, originals and the design overrides.
+    pub fn storage(&self) -> &Storage {
+        &self.storage
+    }
 
     /// Render `payload` with the current design (listed every time).
     pub async fn render(&self, mut payload: Payload) -> Result<Vec<u8>, AppError> {
-        let design = design::load(&self.storage, &self.design_cache).await?;
+        let design = design::load(
+            &self.storage,
+            &self.design_cache,
+            &self.space.storage_prefix(),
+        )
+        .await?;
         payload.assets = payload::Assets {
             logo: design.logo(),
             signature: design.signature(),

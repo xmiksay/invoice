@@ -18,7 +18,7 @@ Everything goes through `make` (`make help` lists targets). `CARGO_BUILD_JOBS=4`
 | Full gate (must be green before push) | `make lint` and `make test` |
 | Backend only | `make lint-backend`, `make test-unit`, `make test-integration` |
 | Frontend only | `make frontend-install`, `make lint-frontend`, `make test-frontend` |
-| Dev | `make dev-server` + `make dev-frontend` (Vite proxies `/api` → `:3000`) |
+| Dev | `make dev-server` + `make dev-frontend` (Vite proxies `/api` → `:3000`, keeps `Host`; spaces at `http://<slug>.localhost:5173`, see `docs/architecture.md`) |
 | Release build / image | `make build`, `make docker-build` |
 
 ## Rules
@@ -30,7 +30,13 @@ Everything goes through `make` (`make help` lists targets). `CARGO_BUILD_JOBS=4`
 - E-mail tests (`tests/email*.rs`) send through an in-process mock SMTP server (`tests/common/smtp.rs`, plain SMTP, can be told to reject) — never a real SMTP server.
 - Errors to clients are `{"code": "..."}`, plus a `fields` map on 422 (`{"code":"validation","fields":{"<camelCaseField>":"<reason>"}}`) and, where a contract says so, a human-oriented `detail` string (e.g. the missing CSV column, a template line, an SMTP reply) — internal/DB detail is logged, never returned (`src/error.rs`).
 - Wire format and every route are specified in [`docs/api/`](../docs/api/README.md) (one file per area, each < 400 lines) — update it with any API change.
-- All `/api/*` except `/api/health` and `/api/openapi.json` require the Bearer token (`src/auth.rs`).
+- Requests are classified by `Host` (`src/auth/host.rs`): the base host of `INVOICE__PUBLIC_URL`, a space host
+  `{slug}.{base host}`, or unknown (404). All `/api/*` except `/api/health`, `/api/openapi.json`, `/api/context` and
+  the public auth routes need the session cookie or a personal API token (`src/auth/ctx.rs`); handlers take a role
+  extractor (`Read` / `Write` / `Manage` / `Own`) and pass its `SpaceId` to every repo — space data is never
+  queried without it ([`docs/api/spaces.md`](../docs/api/spaces.md), [`docs/api/auth.md`](../docs/api/auth.md)).
+- Integration tests run inside a seeded space (`tests/common`: `TestDb.space`, `TEST_TOKEN`, `TEST_HOST`); storage
+  keys of a space are under `spaces/{id}/` (`db.key(..)`).
 - UI strings go through vue-i18n; `frontend/src/locales/{cs,en}/<namespace>.json` must have the same files and identical keys (test enforced); split a namespace file before it passes 400 lines.
 - Migrations are append-only (`src/migration/mod.rs` explains how to add one).
 - New env var → `.env.example` + `docs/architecture.md` in the same change.

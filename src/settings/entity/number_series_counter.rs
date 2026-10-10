@@ -6,7 +6,7 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "number_series_counters")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub doc_type: String,
+    pub series_id: Uuid,
     #[sea_orm(primary_key, auto_increment = false)]
     pub year: i32,
     pub last_number: i32,

@@ -16,6 +16,7 @@ use crate::document::line::{PaymentMethod, Status};
 use crate::error::{AppError, number_violation};
 use crate::settings::doc_type::RECEIVED;
 use crate::settings::repo::number_series;
+use crate::space::SpaceId;
 
 /// Everything a received document's row is written from.
 pub struct Record {
@@ -55,20 +56,31 @@ fn apply(row: &mut ActiveModel, r: Record) -> Totals {
 
 /// Allocates the internal number from the doc type's received series for
 /// the `receivedDate` year, in the same transaction.
-pub async fn create(db: &DatabaseConnection, r: Record, locale: String) -> Result<Uuid, AppError> {
+pub async fn create(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    r: Record,
+    locale: String,
+) -> Result<Uuid, AppError> {
     Ok(db
-        .transaction(|txn| Box::pin(create_in(txn, r, locale)))
+        .transaction(|txn| Box::pin(create_in(txn, space, r, locale)))
         .await?)
 }
 
-async fn create_in(txn: &DatabaseTransaction, r: Record, locale: String) -> Result<Uuid, AppError> {
+async fn create_in(
+    txn: &DatabaseTransaction,
+    space: SpaceId,
+    r: Record,
+    locale: String,
+) -> Result<Uuid, AppError> {
     let id = Uuid::new_v4();
     let year = r.data.received_date.year();
     let doc_type = r.data.doc_type;
     let (number, seq) =
-        number_series::allocate_number(txn, doc_type.series(RECEIVED), year).await?;
+        number_series::allocate_number(txn, space, doc_type.series(RECEIVED), year).await?;
     let mut row = ActiveModel {
         id: Set(id),
+        space_id: Set(space.uuid()),
         direction: Set(RECEIVED.into()),
         doc_type: Set(doc_type.as_str().into()),
         status: Set(Status::Issued.as_str().into()),
@@ -92,8 +104,12 @@ async fn create_in(txn: &DatabaseTransaction, r: Record, locale: String) -> Resu
 }
 
 /// Lock the row and require a received document.
-async fn locked(txn: &DatabaseTransaction, id: Uuid) -> Result<document::Model, AppError> {
-    let doc = query::lock(txn, id).await?;
+async fn locked(
+    txn: &DatabaseTransaction,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<document::Model, AppError> {
+    let doc = query::lock(txn, space, id).await?;
     if doc.direction != RECEIVED {
         return Err(AppError::InvalidState);
     }
@@ -101,11 +117,16 @@ async fn locked(txn: &DatabaseTransaction, id: Uuid) -> Result<document::Model, 
 }
 
 /// The number never changes (also not with the `receivedDate` year).
-pub async fn update(db: &DatabaseConnection, id: Uuid, r: Record) -> Result<(), AppError> {
+pub async fn update(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    id: Uuid,
+    r: Record,
+) -> Result<(), AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let doc = locked(txn, id).await?;
+                let doc = locked(txn, space, id).await?;
                 let mut row: ActiveModel = doc.into();
                 let totals = apply(&mut row, r);
                 row.update(txn).await?;
@@ -117,11 +138,15 @@ pub async fn update(db: &DatabaseConnection, id: Uuid, r: Record) -> Result<(), 
 
 /// Payments cascade; returns the original's path for the caller to remove
 /// after the commit.
-pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<Option<String>, AppError> {
+pub async fn delete(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<Option<String>, AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let doc = locked(txn, id).await?;
+                let doc = locked(txn, space, id).await?;
                 Entity::delete_by_id(id).exec(txn).await?;
                 Ok(doc.original_path)
             })

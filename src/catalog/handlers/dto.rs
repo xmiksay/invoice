@@ -337,6 +337,7 @@ mod tests {
     fn items_must_exist_and_share_a_rate() {
         let item = |id: u128, rate: &str| item::Model {
             id: Uuid::from_u128(id),
+            space_id: Uuid::nil(),
             name: "i".into(),
             unit: None,
             unit_price: d("1"),

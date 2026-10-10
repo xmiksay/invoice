@@ -15,6 +15,7 @@ use crate::document::handlers::meta::related_types;
 use crate::document::line::Status;
 use crate::error::AppError;
 use crate::settings::doc_type::{DocType, ISSUED};
+use crate::space::SpaceId;
 
 /// Identity of a party: its IČO, else its name.
 pub fn party_key(p: &Party) -> String {
@@ -27,11 +28,16 @@ pub fn party_key(p: &Party) -> String {
 /// The existing contact of `p` under `rule`.
 pub async fn contact<C: ConnectionTrait>(
     db: &C,
+    space: SpaceId,
     p: &Party,
     rule: ContactRule,
 ) -> Result<Option<contact::Model>, AppError> {
     use contact::Column;
-    let q = || contact::Entity::find().order_by_asc(Column::CreatedAt);
+    let q = || {
+        contact::Entity::find()
+            .filter(Column::SpaceId.eq(space))
+            .order_by_asc(Column::CreatedAt)
+    };
     if let Some(ico) = &p.ico {
         let found = q().filter(Column::Ico.eq(ico.as_str())).one(db).await?;
         if found.is_some() || rule == ContactRule::IcoOrName {
@@ -92,8 +98,14 @@ fn same_supplier(p: &Party) -> SimpleExpr {
 
 /// Issued: same type and number (drafts included). Received: same supplier
 /// and supplier number.
-pub async fn duplicate<C: ConnectionTrait>(db: &C, plan: &Plan) -> Result<bool, AppError> {
-    let q = Entity::find().filter(Column::Direction.eq(plan.direction));
+pub async fn duplicate<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+    plan: &Plan,
+) -> Result<bool, AppError> {
+    let q = Entity::find()
+        .filter(Column::SpaceId.eq(space))
+        .filter(Column::Direction.eq(plan.direction));
     let q = if plan.direction == ISSUED {
         q.filter(Column::DocType.eq(plan.doc_type.as_str()))
             .filter(Column::Number.eq(plan.number.as_str()))
@@ -115,7 +127,11 @@ pub fn targets(doc_type: DocType) -> Vec<&'static str> {
 }
 
 /// The non-cancelled, non-draft original `OriginalDocumentReference` names.
-pub async fn related<C: ConnectionTrait>(db: &C, plan: &Plan) -> Result<Option<Uuid>, AppError> {
+pub async fn related<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+    plan: &Plan,
+) -> Result<Option<Uuid>, AppError> {
     let Some(reference) = &plan.original_ref else {
         return Ok(None);
     };
@@ -124,6 +140,7 @@ pub async fn related<C: ConnectionTrait>(db: &C, plan: &Plan) -> Result<Option<U
         return Ok(None);
     }
     let q = Entity::find()
+        .filter(Column::SpaceId.eq(space))
         .filter(Column::Direction.eq(plan.direction))
         .filter(Column::DocType.is_in(types))
         .filter(Column::Status.eq(Status::Issued.as_str()));

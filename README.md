@@ -1,10 +1,10 @@
 # invoice
 
-Single-user invoice management: issued and received invoices, Czech VAT, ISDOC,
+Invoice management in spaces (one space = one own company, users with roles): issued and received invoices, Czech VAT, ISDOC,
 CSV / XLSX import, CSV and Pohoda XML export for the accountant, an MCP endpoint
 for AI clients,
 PDF rendering through [mdcast](https://github.com/xmiksay/mdcast) with a
-per-instance design. Rust (Axum + SeaORM/Postgres) with an embedded Vue 3 SPA.
+per-space design. Rust (Axum + SeaORM/Postgres) with an embedded Vue 3 SPA.
 
 Status: skeleton — see [docs/plan.md](docs/plan.md) for scope and phases,
 [docs/architecture.md](docs/architecture.md) for the layout.
@@ -12,14 +12,17 @@ Status: skeleton — see [docs/plan.md](docs/plan.md) for scope and phases,
 ## Quick start
 
 ```sh
-cp .env.example .env            # set INVOICE__API_TOKEN (openssl rand -hex 32)
+cp .env.example .env            # INVOICE__PUBLIC_URL=http://localhost:3000, registration + SMTP
 # local Postgres on localhost:5432 — one-time role/db setup in .env.example
 make frontend-install
 make dev-server                 # backend on :3000
 make dev-frontend               # Vite on :5173, proxies /api
 ```
 
-Open the SPA and log in with the API token.
+Bootstrap = registration: with `INVOICE__REGISTRATION=true` (needs SMTP) register on the base host
+(`http://localhost:3000`), confirm the e-mail, create a space (`firma`) and log in on its host
+(`http://firma.localhost:3000`). Disable registration afterwards if you want. Hosts, roles and tokens:
+[docs/api/spaces.md](docs/api/spaces.md), [docs/api/auth.md](docs/api/auth.md).
 
 ## Make targets
 
@@ -40,14 +43,15 @@ Open the SPA and log in with the API token.
 ## MCP (AI clients)
 
 `POST /api/mcp` is a stateless [Model Context Protocol](https://modelcontextprotocol.io) server (Streamable HTTP)
-behind the same Bearer token: read documents, contacts, ARES, catalog and settings, create contacts and drafts,
+of a space, authenticated by a personal API token of that space (API tokens page; the token's role limits the
+tools — read tools need `accountant`, write tools `member`): read documents, contacts, ARES, catalog and settings, create contacts and drafts,
 issue, record payments, mark sent. Tools and rules: [docs/api/mcp.md](docs/api/mcp.md). PDFs are not sent over
 MCP — results carry `pdfUrl` for a download with the same token.
 
 ```sh
-# Claude Code
-claude mcp add --transport http invoice https://invoice.example.com/api/mcp \
-  --header "Authorization: Bearer $INVOICE_API_TOKEN"
+# Claude Code (the token works only on its space's host)
+claude mcp add --transport http invoice https://firma.invoiceapp.cz/api/mcp \
+  --header "Authorization: Bearer $INVOICE_TOKEN"
 ```
 
 Other clients: an "HTTP" / "Streamable HTTP" server with that URL and the `Authorization` header.
@@ -64,8 +68,8 @@ Sending documents by e-mail needs an SMTP server (`INVOICE__SMTP__HOST`, `PORT`,
 
 ```sh
 invoice storage migrate --from-dir ./data --design-dir ./my-design   # fs archive (+ old design dir) → configured storage
-invoice design push ./my-design     # override design files (invoice.typ, fonts/, logo.svg|png, signature.png)
-invoice design ls                   # effective design: custom vs built-in
-invoice design pull ./backup        # download the overrides
-invoice design rm logo.png          # back to the built-in file
+invoice design push ./my-design --space firma   # override design files of a space (invoice.typ, fonts/, logo.svg|png, signature.png)
+invoice design ls --space firma                 # effective design: custom vs built-in
+invoice design pull ./backup --space firma      # download the overrides
+invoice design rm logo.png --space firma        # back to the built-in file
 ```

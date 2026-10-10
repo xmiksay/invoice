@@ -8,9 +8,14 @@ use crate::document::entity::document;
 use crate::error::{AppError, unique_violation};
 use crate::settings::entity::category::{self, ActiveModel, Column, Entity};
 use crate::settings::handlers::categories::CategoryData;
+use crate::space::SpaceId;
 
-pub async fn list<C: ConnectionTrait>(db: &C) -> Result<Vec<category::Model>, AppError> {
+pub async fn list<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+) -> Result<Vec<category::Model>, AppError> {
     Ok(Entity::find()
+        .filter(Column::SpaceId.eq(space))
         .order_by_asc(Column::Kind)
         .order_by_asc(Column::Position)
         .order_by_asc(Column::Name)
@@ -34,9 +39,14 @@ fn apply(row: &mut ActiveModel, d: CategoryData) {
     row.updated_at = Set(chrono::Utc::now().into());
 }
 
-pub async fn create(db: &DatabaseConnection, d: CategoryData) -> Result<category::Model, AppError> {
+pub async fn create(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    d: CategoryData,
+) -> Result<category::Model, AppError> {
     let mut row = ActiveModel {
         id: Set(Uuid::new_v4()),
+        space_id: Set(space.uuid()),
         created_at: Set(chrono::Utc::now().into()),
         ..Default::default()
     };
@@ -54,8 +64,13 @@ async fn used<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<bool, AppError> {
 
 /// The row lock makes a concurrent document write (its FK check share-locks
 /// the category) wait, so the in-use checks below cannot go stale.
-async fn locked<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<category::Model, AppError> {
+async fn locked<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<category::Model, AppError> {
     Entity::find_by_id(id)
+        .filter(Column::SpaceId.eq(space))
         .lock_exclusive()
         .one(db)
         .await?
@@ -66,13 +81,14 @@ async fn locked<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<category::Model,
 /// depends on it) → `kind: invalid`.
 pub async fn update(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     d: CategoryData,
 ) -> Result<category::Model, AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let existing = locked(txn, id).await?;
+                let existing = locked(txn, space, id).await?;
                 if existing.kind != d.kind && used(txn, id).await? {
                     return Err(AppError::field("kind", "invalid"));
                 }
@@ -84,11 +100,11 @@ pub async fn update(
         .await?)
 }
 
-pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<(), AppError> {
+pub async fn delete(db: &DatabaseConnection, space: SpaceId, id: Uuid) -> Result<(), AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                locked(txn, id).await?;
+                locked(txn, space, id).await?;
                 if used(txn, id).await? {
                     return Err(AppError::CategoryInUse);
                 }

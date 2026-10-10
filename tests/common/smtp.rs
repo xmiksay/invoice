@@ -206,7 +206,7 @@ impl EmailEnv {
         if configured {
             state.email = Some(invoice::email::Mailer::new(&self.config).expect("mailer"));
         }
-        invoice::app::router(state)
+        super::app(state)
     }
 
     /// The app sending through the mock.

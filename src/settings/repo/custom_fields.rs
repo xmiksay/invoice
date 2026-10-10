@@ -1,15 +1,20 @@
 use sea_orm::{
-    ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait, QueryOrder, QuerySelect, Set,
-    TransactionTrait,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait,
+    QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 use uuid::Uuid;
 
 use crate::error::{AppError, FieldErrors, unique_violation};
 use crate::settings::entity::custom_field::{self, ActiveModel, Column, Entity};
 use crate::settings::handlers::custom_fields::CustomFieldData;
+use crate::space::SpaceId;
 
-pub async fn list(db: &DatabaseConnection) -> Result<Vec<custom_field::Model>, AppError> {
+pub async fn list<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+) -> Result<Vec<custom_field::Model>, AppError> {
     Ok(Entity::find()
+        .filter(Column::SpaceId.eq(space))
         .order_by_asc(Column::Position)
         .order_by_asc(Column::Key)
         .all(db)
@@ -35,10 +40,12 @@ fn apply(row: &mut ActiveModel, d: CustomFieldData) {
 
 pub async fn create(
     db: &DatabaseConnection,
+    space: SpaceId,
     d: CustomFieldData,
 ) -> Result<custom_field::Model, AppError> {
     let mut row = ActiveModel {
         id: Set(Uuid::new_v4()),
+        space_id: Set(space.uuid()),
         key: Set(d.key.clone()),
         field_type: Set(d.field_type.as_str().to_string()),
         created_at: Set(chrono::Utc::now().into()),
@@ -51,6 +58,7 @@ pub async fn create(
 /// `key` and `type` are immutable (stored values depend on them) → `invalid`.
 pub async fn update(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     d: CustomFieldData,
 ) -> Result<custom_field::Model, AppError> {
@@ -58,6 +66,7 @@ pub async fn update(
         .transaction(|txn| {
             Box::pin(async move {
                 let existing = Entity::find_by_id(id)
+                    .filter(Column::SpaceId.eq(space))
                     .lock_exclusive()
                     .one(txn)
                     .await?
@@ -79,8 +88,12 @@ pub async fn update(
 }
 
 /// Stored values stay in the documents' JSON (ignored from now on).
-pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<(), AppError> {
-    let res = Entity::delete_by_id(id).exec(db).await?;
+pub async fn delete(db: &DatabaseConnection, space: SpaceId, id: Uuid) -> Result<(), AppError> {
+    let res = Entity::delete_many()
+        .filter(Column::Id.eq(id))
+        .filter(Column::SpaceId.eq(space))
+        .exec(db)
+        .await?;
     if res.rows_affected == 0 {
         return Err(AppError::NotFound);
     }

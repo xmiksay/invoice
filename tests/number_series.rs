@@ -202,6 +202,7 @@ async fn counter_upsert() {
 #[tokio::test]
 async fn allocate_continues_from_counter_and_rolls_back() {
     let db = TestDb::new().await;
+    let space = db.space;
     let app = router(db.conn.clone());
     call(
         &app,
@@ -212,7 +213,7 @@ async fn allocate_continues_from_counter_and_rolls_back() {
     .await;
 
     let txn = db.conn.begin().await.expect("begin");
-    let n = allocate_number(&txn, DocType::CreditNote, 2025)
+    let n = allocate_number(&txn, space, DocType::CreditNote, 2025)
         .await
         .expect("allocate");
     assert_eq!(n, ("D20250010".to_string(), 10));
@@ -220,7 +221,7 @@ async fn allocate_continues_from_counter_and_rolls_back() {
 
     let txn = db.conn.begin().await.expect("begin");
     assert_eq!(
-        allocate_number(&txn, DocType::CreditNote, 2025)
+        allocate_number(&txn, space, DocType::CreditNote, 2025)
             .await
             .expect("allocate")
             .0,
@@ -228,7 +229,7 @@ async fn allocate_continues_from_counter_and_rolls_back() {
         "a rolled-back allocation returns its number"
     );
     assert_eq!(
-        allocate_number(&txn, DocType::CreditNote, 2026)
+        allocate_number(&txn, space, DocType::CreditNote, 2026)
             .await
             .expect("allocate"),
         ("D20260001".to_string(), 1),
@@ -240,6 +241,7 @@ async fn allocate_continues_from_counter_and_rolls_back() {
 #[tokio::test]
 async fn concurrent_allocations_are_distinct_and_consecutive() {
     let db = TestDb::new().await;
+    let space = db.space;
     const N: usize = 20;
 
     let tasks: Vec<_> = (0..N)
@@ -247,7 +249,7 @@ async fn concurrent_allocations_are_distinct_and_consecutive() {
             let conn = db.conn.clone();
             tokio::spawn(async move {
                 let txn = conn.begin().await.expect("begin");
-                let n = allocate_number(&txn, DocType::Invoice, 2026)
+                let n = allocate_number(&txn, space, DocType::Invoice, 2026)
                     .await
                     .expect("allocate")
                     .0;
@@ -283,17 +285,18 @@ async fn concurrent_allocations_are_distinct_and_consecutive() {
 async fn counter_guard_waits_for_an_issue_in_flight() {
     use sea_orm::ConnectionTrait;
     let db = TestDb::new().await;
+    let space = db.space;
     let app = router(db.conn.clone());
 
     // An issue in flight: number allocated and document written, not committed.
     let txn = db.conn.begin().await.expect("begin");
-    let (number, seq) = allocate_number(&txn, DocType::Invoice, 2026)
+    let (number, seq) = allocate_number(&txn, space, DocType::Invoice, 2026)
         .await
         .expect("allocate");
     txn.execute_unprepared(&format!(
-        "INSERT INTO documents (id, direction, doc_type, status, number, number_year, number_seq, \
-         issue_date, due_date, currency, locale, vat_mode, payment_method) VALUES \
-         (gen_random_uuid(), 'issued', 'invoice', 'issued', '{number}', 2026, {seq}, \
+        "INSERT INTO documents (id, space_id, direction, doc_type, status, number, number_year, \
+         number_seq, issue_date, due_date, currency, locale, vat_mode, payment_method) VALUES \
+         (gen_random_uuid(), '{space}', 'issued', 'invoice', 'issued', '{number}', 2026, {seq}, \
          '2026-10-01', '2026-10-15', 'CZK', 'cs', 'standard', 'bank_transfer')"
     ))
     .await

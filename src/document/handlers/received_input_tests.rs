@@ -8,6 +8,7 @@ fn contact() -> contact::Model {
     let now = chrono::Utc::now().into();
     contact::Model {
         id: Uuid::from_u128(1),
+        space_id: Uuid::nil(),
         name: "Dodavatel Test s.r.o.".into(),
         ico: None,
         dic: None,

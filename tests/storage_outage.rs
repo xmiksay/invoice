@@ -85,11 +85,23 @@ async fn cleanup_keeps_objects_a_row_points_at() {
     let doc_id = id(&create_received(&app, &s, json!({})).await);
     let (status, _) = upload(&app, &doc_id, PDF).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    let keys = env.storage.keys("documents").await;
+    // Keys are relative to the space's storage (`spaces/{id}/…`).
+    let pdf = common::space_pdf(&env.url, env.storage.storage.clone(), db.space);
+    let storage = pdf.storage();
+    let keys: Vec<String> = storage
+        .list("documents")
+        .await
+        .expect("list")
+        .into_iter()
+        .map(|o| o.key)
+        .collect();
     let [referenced] = keys.as_slice() else {
         panic!("one original stored: {keys:?}");
     };
-    let storage = &env.storage.storage;
+    assert!(
+        env.storage.bytes(&db.key(referenced)).await.is_some(),
+        "stored under the space prefix"
+    );
     let orphan = "documents/2026/orphan-original-00000000.pdf";
     storage
         .put(orphan, Bytes::from_static(PDF))
@@ -98,10 +110,13 @@ async fn cleanup_keeps_objects_a_row_points_at() {
 
     // The same content re-uploaded shares the key with the stored row: a
     // failure after that write must not delete the live original.
-    remove_unreferenced(&db.conn, storage, referenced).await;
-    remove_unreferenced(&db.conn, storage, orphan).await;
-    assert_eq!(env.storage.bytes(referenced).await.as_deref(), Some(PDF));
-    assert_eq!(env.storage.bytes(orphan).await, None);
+    remove_unreferenced(&db.conn, &pdf, referenced).await;
+    remove_unreferenced(&db.conn, &pdf, orphan).await;
+    assert_eq!(
+        env.storage.bytes(&db.key(referenced)).await.as_deref(),
+        Some(PDF)
+    );
+    assert_eq!(env.storage.bytes(&db.key(orphan)).await, None);
 }
 
 #[tokio::test]
@@ -115,7 +130,7 @@ async fn failed_isdoc_import_write_rolls_back() {
     let env = PdfEnv::new();
     let app = env.router(db.conn.clone());
     set_company(&app, true).await;
-    let pdf = common::pdf_service(&dead_url(), dead_s3());
+    let pdf = common::space_pdf(&dead_url(), dead_s3(), db.space);
     let parsed = parse::parse(fixture("received_vat.isdoc").as_bytes()).expect("parsed");
     let p = plan::plan(parsed, Some("44444443")).expect("plan");
     let rate = Rate {

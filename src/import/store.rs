@@ -24,6 +24,7 @@ use crate::pdf::PdfService;
 use crate::settings::doc_type::{DocType, ISSUED, RECEIVED};
 use crate::settings::entity::bank_account;
 use crate::settings::repo::number_series;
+use crate::space::SpaceId;
 use crate::storage;
 use crate::validation::normalize_iban;
 
@@ -48,16 +49,18 @@ fn json<T: serde::Serialize>(v: &T) -> Result<serde_json::Value, AppError> {
 
 async fn contact_for<C: ConnectionTrait>(
     db: &C,
+    space: SpaceId,
     p: &Party,
     rule: ContactRule,
 ) -> Result<Uuid, AppError> {
-    if let Some(c) = lookup::contact(db, p, rule).await? {
+    if let Some(c) = lookup::contact(db, space, p, rule).await? {
         return Ok(c.id);
     }
     let now = chrono::Utc::now().into();
     let id = Uuid::new_v4();
     contact::ActiveModel {
         id: Set(id),
+        space_id: Set(space.uuid()),
         name: Set(p.name.clone()),
         ico: Set(p.ico.clone()),
         dic: Set(p.dic.clone()),
@@ -79,11 +82,13 @@ async fn contact_for<C: ConnectionTrait>(
 /// Our bank account named by the payment details.
 async fn matching_account<C: ConnectionTrait>(
     db: &C,
+    space: SpaceId,
     bank: &BankSnapshot,
 ) -> Result<Option<Uuid>, AppError> {
     let wanted = [bank.iban.as_deref(), bank.account_number.as_deref()];
     let wanted: Vec<String> = wanted.into_iter().flatten().map(normalize_iban).collect();
     Ok(bank_account::Entity::find()
+        .filter(bank_account::Column::SpaceId.eq(space))
         .all(db)
         .await?
         .into_iter()
@@ -99,15 +104,17 @@ async fn matching_account<C: ConnectionTrait>(
 /// An issued document's bank account and snapshot.
 async fn issued_bank<C: ConnectionTrait>(
     db: &C,
+    space: SpaceId,
     plan: &Plan,
 ) -> Result<(Option<Uuid>, Option<BankSnapshot>), AppError> {
     match plan.issued_bank {
         IssuedBank::Payment => match &plan.bank {
-            Some(b) => Ok((matching_account(db, b).await?, Some(b.clone()))),
+            Some(b) => Ok((matching_account(db, space, b).await?, Some(b.clone()))),
             None => Ok((None, None)),
         },
         IssuedBank::CurrencyDefault => {
             let account = bank_account::Entity::find()
+                .filter(bank_account::Column::SpaceId.eq(space))
                 .filter(bank_account::Column::Currency.eq(plan.currency.as_str()))
                 .filter(bank_account::Column::IsDefault.eq(true))
                 .one(db)
@@ -139,6 +146,7 @@ struct Stored {
 
 async fn insert(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     plan: &Plan,
     file: Option<&[u8]>,
     rate: &Rate,
@@ -149,27 +157,27 @@ async fn insert(
     txn.query_one(Statement::from_sql_and_values(
         txn.get_database_backend(),
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-        [lookup::identity(plan).into()],
+        [format!("{space}|{}", lookup::identity(plan)).into()],
     ))
     .await?;
-    if lookup::duplicate(txn, plan).await? {
+    if lookup::duplicate(txn, space, plan).await? {
         return Err(AppError::Conflict(DUPLICATE.into()));
     }
     let id = Uuid::new_v4();
     let now = chrono::Utc::now();
     let issued = plan.direction == ISSUED;
     let contact_id = match plan.counterparty() {
-        Some(p) => Some(contact_for(txn, p, plan.contact_rule).await?),
+        Some(p) => Some(contact_for(txn, space, p, plan.contact_rule).await?),
         None => None,
     };
-    let related = lookup::related(txn, plan).await?;
+    let related = lookup::related(txn, space, plan).await?;
     let received_date = plan.received_date();
     let category_id = match &opts.category {
-        Some(c) => category::resolve(txn, plan.direction, c).await?,
+        Some(c) => category::resolve(txn, space, plan.direction, c).await?,
         None => None,
     };
     let (bank_account_id, bank_snapshot) = if issued {
-        issued_bank(txn, plan).await?
+        issued_bank(txn, space, plan).await?
     } else {
         (None, None)
     };
@@ -178,11 +186,13 @@ async fn insert(
     } else {
         let year = received_date.year();
         let (n, seq) =
-            number_series::allocate_number(txn, plan.doc_type.series(RECEIVED), year).await?;
+            number_series::allocate_number(txn, space, plan.doc_type.series(RECEIVED), year)
+                .await?;
         (n, year, Some(seq))
     };
     let mut row = document::ActiveModel {
         id: Set(id),
+        space_id: Set(space.uuid()),
         direction: Set(plan.direction.into()),
         doc_type: Set(plan.doc_type.as_str().into()),
         status: Set(Status::Issued.as_str().into()),
@@ -292,7 +302,7 @@ pub async fn import(
     opts: &Options,
 ) -> Result<Uuid, AppError> {
     let txn = db.begin().await?;
-    let stored = match insert(&txn, plan, file.as_deref(), rate, opts).await {
+    let stored = match insert(&txn, pdf.space_id(), plan, file.as_deref(), rate, opts).await {
         Ok(s) => s,
         Err(e) => return Err(rollback(txn, e).await),
     };
@@ -300,12 +310,12 @@ pub async fn import(
         && let Err(e) = pdf.storage().put(rel, bytes).await
     {
         let e = rollback(txn, e.into()).await;
-        original::remove_unreferenced(db, pdf.storage(), rel).await;
+        original::remove_unreferenced(db, pdf, rel).await;
         return Err(e);
     }
     if let Err(e) = txn.commit().await {
         if let Some(rel) = &stored.file {
-            original::remove_unreferenced(db, pdf.storage(), rel).await;
+            original::remove_unreferenced(db, pdf, rel).await;
         }
         return Err(e.into());
     }

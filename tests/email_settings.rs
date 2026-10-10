@@ -98,7 +98,13 @@ async fn templates_save_validate_preview_restore() {
     let env = EmailEnv::new().await;
     let app = env.router(db.conn.clone());
     let doc = create_issued(&app, issuable_with_emails(&app).await).await;
-    let storage = &env.pdf.storage.storage;
+    // Every key of the space lives under `spaces/{id}/`.
+    let storage = &env
+        .pdf
+        .storage
+        .storage
+        .scoped(&db.space.storage_prefix())
+        .expect("space storage");
 
     let (status, list) = call(&app, Method::GET, "/api/settings/email/templates", None).await;
     assert_eq!(status, StatusCode::OK);

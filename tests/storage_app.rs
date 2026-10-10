@@ -25,10 +25,10 @@ async fn archive_and_design(storage: TestStorage) {
     let env = PdfEnv::with_storage(storage);
     let kind = env.storage.kind();
     let app = env.router(db.conn.clone());
+    // The space's design overlay: `spaces/{id}/design/…`.
     let put = |key: &'static str, bytes: &'static [u8]| {
-        env.storage
-            .storage
-            .put(key, bytes::Bytes::from_static(bytes))
+        let (key, storage) = (db.key(key), env.storage.storage.clone());
+        async move { storage.put(&key, bytes::Bytes::from_static(bytes)).await }
     };
     put("design/invoice.typ", b"// custom\n#json(\"/data.json\")")
         .await
@@ -50,7 +50,7 @@ async fn archive_and_design(storage: TestStorage) {
     assert!(render.assets.contains(&"logo.png".to_string()));
     assert!(!render.assets.iter().any(|a| a.contains("hidden")));
 
-    let key = format!("documents/2026/{}.pdf", id(&doc));
+    let key = db.key(&format!("documents/2026/{}.pdf", id(&doc)));
     assert_eq!(env.storage.bytes(&key).await, Some(render.pdf.clone()));
     let (status, headers, bytes) = get_raw(&app, &format!("/api/documents/{}/pdf", id(&doc))).await;
     assert_eq!(status, StatusCode::OK);
@@ -89,7 +89,7 @@ async fn archive_and_design(storage: TestStorage) {
         .expect("replace logo");
     env.storage
         .storage
-        .delete("design/invoice.typ")
+        .delete(&db.key("design/invoice.typ"))
         .await
         .expect("remove template");
     let (status, _, _) = get_raw(&app, "/api/pdf/preview").await;

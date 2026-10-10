@@ -1,4 +1,7 @@
 import { vi } from "vitest";
+import type { Me } from "@/features/auth/types";
+import type { AppContext, Role } from "@/features/spaces/types";
+import { useSessionStore } from "@/stores/session";
 
 /** Stubs global fetch with a single canned response; returns the mock for assertions. */
 export function mockFetch(status: number, body?: unknown) {
@@ -88,3 +91,31 @@ export const pdfReply = (filename?: string, disposition = "inline") =>
       ...(filename ? { "Content-Disposition": `${disposition}; filename="${filename}"` } : {}),
     },
   });
+
+export const BASE_CONTEXT: AppContext = { kind: "base", space: null, registration: true, baseUrl: "http://localhost:3000" };
+export const SPACE_CONTEXT: AppContext = {
+  kind: "space",
+  space: { slug: "firma", name: "Firma s.r.o." },
+  registration: false,
+  baseUrl: "http://localhost:3000",
+};
+
+/** `GET /api/auth/me` body; `role` null = a base-host session. */
+export function meFixture(role: Role | null = "owner", emailVerified = true): Me {
+  return {
+    user: { id: "u1", email: "jana@example.cz", displayName: "Jana", emailVerified },
+    space: role ? { slug: "firma", name: "Firma s.r.o.", role } : null,
+  };
+}
+
+/**
+ * Signs the active pinia's session in as a space member (`role`), or as a base-host user
+ * (`null`). Call after `setActivePinia` and pass the same pinia to `mount`.
+ */
+export function signIn(role: Role | null = "owner", context: AppContext = role ? SPACE_CONTEXT : BASE_CONTEXT) {
+  const session = useSessionStore();
+  session.applyBoot({ status: "ok", context: structuredClone(context) });
+  session.me = meFixture(role);
+  session.loaded = true;
+  return session;
+}

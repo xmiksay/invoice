@@ -1,39 +1,55 @@
 //! Shared state and the top-level Axum router.
 
 use axum::Router;
+use axum::body::Body;
+use axum::http::Request;
 use axum::middleware;
 use axum::routing::get;
 use sea_orm::DatabaseConnection;
 use tower_http::trace::TraceLayer;
 
 use crate::ares::AresClient;
+use crate::auth::host::{self, PublicUrl};
+use crate::auth::ratelimit::RateLimiter;
 use crate::cnb::CnbClient;
 use crate::email::Mailer;
 use crate::error::AppError;
-use crate::pdf::PdfService;
-use crate::secret::Secret;
+use crate::pdf::PdfRoot;
 use crate::{
     ares, auth, catalog, cnb, contact, csvio, document, email, health, isdoc, mcp, openapi, pdf,
-    settings, spa,
+    settings, spa, space,
 };
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: DatabaseConnection,
-    pub api_token: Secret<String>,
     pub ares: AresClient,
     pub cnb: CnbClient,
-    pub pdf: PdfService,
+    /// mdcast + storage; `pdf.space(id)` is the per-space view every route uses.
+    pub pdf: PdfRoot,
     /// `None` when SMTP is not configured (`INVOICE__SMTP__HOST` unset).
     pub email: Option<Mailer>,
+    /// `INVOICE__PUBLIC_URL`: base host, scheme, port.
+    pub public: PublicUrl,
+    /// `INVOICE__REGISTRATION`.
+    pub registration: bool,
+    /// `INVOICE__TRUST_FORWARDED`.
+    pub trust_forwarded: bool,
+    pub limiter: RateLimiter,
 }
 
-/// `/api/health` and `/api/openapi.json` are public; every other `/api/*`
-/// path — including unknown ones — requires the Bearer token. Non-API paths
-/// fall through to the embedded SPA.
+/// `/api/health` and `/api/openapi.json` answer on any host without auth.
+/// Every other `/api` route is classified by its host first (unknown → 404),
+/// then: the public auth routes; account routes (any known host, auth);
+/// base-host routes (`/api/spaces`); space-host routes (everything of
+/// phases 1–3, `/api/space`, `/api/tokens`, MCP). Non-API paths fall
+/// through to the embedded SPA.
 pub fn router(state: AppState) -> Router {
-    let protected = Router::new()
-        .route("/auth/check", get(auth::check))
+    let authenticate = || middleware::from_fn_with_state(state.clone(), auth::ctx::authenticate);
+
+    let space_routes = Router::new()
+        .nest("/space", space::space_router())
+        .nest("/tokens", auth::tokens::router())
         .nest("/settings", settings::router())
         .nest("/settings/email", email::settings_router())
         .nest("/contacts", contact::router())
@@ -46,21 +62,38 @@ pub fn router(state: AppState) -> Router {
         .nest("/pdf", pdf::router())
         .route("/exchange-rates/{currency}", get(cnb::handlers::get_rate))
         .nest("/mcp", mcp::router(state.clone()))
+        .layer(authenticate())
+        .layer(middleware::from_fn(host::space_only));
+
+    let base_routes = Router::new()
+        .nest("/spaces", space::base_router())
+        .layer(authenticate())
+        .layer(middleware::from_fn(host::base_only));
+
+    let hosted = Router::new()
+        .merge(auth::public_router())
+        .merge(auth::account_router().layer(authenticate()))
+        .merge(base_routes)
+        .merge(space_routes)
         .fallback(api_not_found)
         .layer(middleware::from_fn_with_state(
             state.clone(),
-            auth::require_token,
+            host::classify,
         ));
 
     let api = Router::new()
         .route("/health", get(health::health))
         .route("/openapi.json", get(openapi::openapi_json))
-        .merge(protected);
+        .merge(hosted);
 
     Router::new()
         .nest("/api", api)
         .fallback(spa::serve)
-        .layer(TraceLayer::new_for_http())
+        // Path only: query strings can carry secrets (the SPA's `/verify?token=…`,
+        // `/reset?token=…` pages), which must never reach a log.
+        .layer(TraceLayer::new_for_http().make_span_with(|req: &Request<Body>| {
+            tracing::debug_span!("request", method = %req.method(), path = %req.uri().path())
+        }))
         .with_state(state)
 }
 

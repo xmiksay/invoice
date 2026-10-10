@@ -16,6 +16,7 @@ use crate::catalog::entity::{group, item, member};
 use crate::catalog::handlers::dto::{GroupData, check_items};
 use crate::contact::handlers::dto::like_pattern;
 use crate::error::AppError;
+use crate::space::SpaceId;
 
 /// A group with its members (by position) and their items.
 pub struct Full {
@@ -54,8 +55,12 @@ async fn with_members<C: ConnectionTrait>(
         .collect())
 }
 
-pub async fn list(db: &DatabaseConnection, q: Option<&str>) -> Result<Vec<Full>, AppError> {
-    let mut select = group::Entity::find();
+pub async fn list(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    q: Option<&str>,
+) -> Result<Vec<Full>, AppError> {
+    let mut select = group::Entity::find().filter(group::Column::SpaceId.eq(space));
     if let Some(term) = q {
         select = select.filter(Expr::col(group::Column::Name).ilike(like_pattern(term)));
     }
@@ -67,8 +72,9 @@ pub async fn list(db: &DatabaseConnection, q: Option<&str>) -> Result<Vec<Full>,
     with_members(db, groups).await
 }
 
-pub async fn get<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<Full, AppError> {
+pub async fn get<C: ConnectionTrait>(db: &C, space: SpaceId, id: Uuid) -> Result<Full, AppError> {
     let g = group::Entity::find_by_id(id)
+        .filter(group::Column::SpaceId.eq(space))
         .one(db)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -81,12 +87,14 @@ pub async fn get<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<Full, AppError>
 /// Check the member items (locked) and replace the group's members.
 async fn write_members(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     group_id: Uuid,
     members: &[(Uuid, rust_decimal::Decimal)],
 ) -> Result<(), AppError> {
     let ids: Vec<Uuid> = members.iter().map(|(id, _)| *id).collect();
     let items: HashMap<Uuid, item::Model> = item::Entity::find()
         .filter(item::Column::Id.is_in(ids))
+        .filter(item::Column::SpaceId.eq(space))
         .lock_shared()
         .all(txn)
         .await?
@@ -111,13 +119,18 @@ async fn write_members(
     Ok(())
 }
 
-pub async fn create(db: &DatabaseConnection, data: GroupData) -> Result<Full, AppError> {
+pub async fn create(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    data: GroupData,
+) -> Result<Full, AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
                 let now = chrono::Utc::now().into();
                 let row = group::ActiveModel {
                     id: Set(Uuid::new_v4()),
+                    space_id: Set(space.uuid()),
                     name: Set(data.name),
                     collapse: Set(data.collapse),
                     created_at: Set(now),
@@ -125,18 +138,24 @@ pub async fn create(db: &DatabaseConnection, data: GroupData) -> Result<Full, Ap
                 }
                 .insert(txn)
                 .await?;
-                write_members(txn, row.id, &data.members).await?;
-                get(txn, row.id).await
+                write_members(txn, space, row.id, &data.members).await?;
+                get(txn, space, row.id).await
             })
         })
         .await?)
 }
 
-pub async fn update(db: &DatabaseConnection, id: Uuid, data: GroupData) -> Result<Full, AppError> {
+pub async fn update(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    id: Uuid,
+    data: GroupData,
+) -> Result<Full, AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
                 let existing = group::Entity::find_by_id(id)
+                    .filter(group::Column::SpaceId.eq(space))
                     .lock_exclusive()
                     .one(txn)
                     .await?
@@ -146,15 +165,19 @@ pub async fn update(db: &DatabaseConnection, id: Uuid, data: GroupData) -> Resul
                 row.collapse = Set(data.collapse);
                 row.updated_at = Set(chrono::Utc::now().into());
                 row.update(txn).await?;
-                write_members(txn, id, &data.members).await?;
-                get(txn, id).await
+                write_members(txn, space, id, &data.members).await?;
+                get(txn, space, id).await
             })
         })
         .await?)
 }
 
-pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<(), AppError> {
-    let res = group::Entity::delete_by_id(id).exec(db).await?;
+pub async fn delete(db: &DatabaseConnection, space: SpaceId, id: Uuid) -> Result<(), AppError> {
+    let res = group::Entity::delete_many()
+        .filter(group::Column::Id.eq(id))
+        .filter(group::Column::SpaceId.eq(space))
+        .exec(db)
+        .await?;
     if res.rows_affected == 0 {
         return Err(AppError::NotFound);
     }

@@ -9,7 +9,7 @@ fn date(m: u32, d: u32) -> NaiveDate {
 
 fn company(vat_payer: bool) -> company::Model {
     company::Model {
-        id: 1,
+        space_id: Uuid::nil(),
         name: "Me".into(),
         ico: None,
         dic: None,
@@ -46,6 +46,7 @@ fn ctx(apply_defaults: bool, contact: Option<contact::Model>) -> Context {
 fn contact_with_defaults() -> contact::Model {
     contact::Model {
         id: Uuid::from_u128(7),
+        space_id: Uuid::nil(),
         name: "C".into(),
         ico: None,
         dic: None,
