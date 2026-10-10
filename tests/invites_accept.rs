@@ -38,7 +38,7 @@ async fn a_new_account_is_created_verified_while_registration_is_off() {
     assert_eq!(
         info,
         json!({ "space": { "slug": "acme", "name": "Space acme" }, "email": "nova@example.com",
-                "role": "member", "accountExists": false })
+                "role": "member", "accountExists": false, "requireMfa": false })
     );
 
     let (s, cookie, j, _) = accept(

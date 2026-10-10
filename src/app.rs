@@ -15,6 +15,7 @@ use crate::cnb::CnbClient;
 use crate::email::Mailer;
 use crate::error::AppError;
 use crate::pdf::PdfRoot;
+use crate::secret::SecretKey;
 use crate::{
     ares, auth, catalog, cnb, contact, csvio, document, email, health, isdoc, mcp, members,
     openapi, pdf, settings, spa, space,
@@ -35,6 +36,8 @@ pub struct AppState {
     pub registration: bool,
     /// `INVOICE__TRUST_FORWARDED`.
     pub trust_forwarded: bool,
+    /// `INVOICE__SECRET_KEY`: TOTP secrets at rest, recovery-code HMAC.
+    pub secret_key: SecretKey,
     pub limiter: RateLimiter,
 }
 

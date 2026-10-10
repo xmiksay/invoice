@@ -276,3 +276,41 @@ async fn validation_detail_names_the_part() {
     let (_, plain) = body(AppError::field("file", "empty")).await;
     assert!(plain.get("detail").is_none(), "{plain}");
 }
+
+#[tokio::test]
+async fn mfa_errors() {
+    assert_eq!(
+        body(AppError::MfaRequired {
+            account_created: false
+        })
+        .await,
+        (
+            StatusCode::FORBIDDEN,
+            serde_json::json!({ "code": "mfa_required" })
+        )
+    );
+    assert_eq!(
+        body(AppError::MfaRequired {
+            account_created: true
+        })
+        .await,
+        (
+            StatusCode::FORBIDDEN,
+            serde_json::json!({ "code": "mfa_required", "detail": "account_created" })
+        )
+    );
+    assert_eq!(
+        body(AppError::MfaInvalid).await,
+        (
+            StatusCode::UNAUTHORIZED,
+            serde_json::json!({ "code": "mfa_invalid" })
+        )
+    );
+    assert_eq!(
+        body(AppError::MfaEnabled).await,
+        (
+            StatusCode::CONFLICT,
+            serde_json::json!({ "code": "mfa_enabled" })
+        )
+    );
+}

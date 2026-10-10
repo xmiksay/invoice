@@ -37,6 +37,7 @@ pub mod isdoc;
 pub mod mcp;
 pub mod mdcast;
 pub mod members;
+pub mod mfa;
 pub mod money;
 pub mod pohoda;
 pub mod received;
@@ -226,7 +227,18 @@ pub fn state(db: DatabaseConnection, ares_url: &str, cnb_url: &str, pdf: PdfRoot
         public: PublicUrl::parse(PUBLIC_URL).expect("public URL"),
         registration: false,
         trust_forwarded: false,
+        secret_key: test_secret_key(),
         limiter: RateLimiter::default(),
+    }
+}
+
+/// `TEST_SECRET_KEY` (base64, 32 bytes) or a fixed, fictitious test key.
+pub fn test_secret_key() -> invoice::secret::SecretKey {
+    match std::env::var("TEST_SECRET_KEY") {
+        Ok(raw) if !raw.trim().is_empty() => {
+            invoice::secret::SecretKey::parse(&raw).expect("TEST_SECRET_KEY: 32 bytes, base64")
+        }
+        _ => invoice::secret::SecretKey::from_bytes(*b"invoice-test-secret-key-32-bytes"),
     }
 }
 

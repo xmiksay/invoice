@@ -15,6 +15,7 @@ const member = (userId: string, role: Role, extra: Partial<Member> = {}): Member
   role,
   joinedAt: "2026-10-01T10:00:00Z",
   isSelf: false,
+  mfaEnabled: false,
   ...extra,
 });
 const invite = (id: string, extra: Partial<Invite> = {}): Invite => ({
@@ -233,5 +234,14 @@ describe("MembersTab", () => {
     await flushPromises();
     expect(w.find('[data-test="invites-error"]').text()).toBe("Too many attempts. Please try again later.");
     expect(w.find('[data-test="invite-link"]').exists()).toBe(false);
+  });
+
+  it("shows whether each member has two-factor authentication", async () => {
+    mockFetchRoutes({
+      "GET /api/members": [member("me", "owner", { isSelf: true, mfaEnabled: true }), member("m1", "member")],
+      "GET /api/invites": [],
+    });
+    const { w } = await mountTab("owner");
+    expect(w.findAll('[data-test="member-mfa"]').map((c) => c.text())).toEqual(["on", "off"]);
   });
 });

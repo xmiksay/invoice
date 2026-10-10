@@ -18,5 +18,7 @@
   "too_high": "Higher than your own role.",
   "wrong_password": "Wrong password.",
   "already_member": "This user is already a member of the space.",
-  "last_owner": "The last owner has to stay an owner."
+  "last_owner": "The last owner has to stay an owner.",
+  "wrong_code": "Wrong code.",
+  "expired": "Expired."
 }

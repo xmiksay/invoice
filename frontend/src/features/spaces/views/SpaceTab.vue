@@ -7,6 +7,7 @@ import { collectErrors, textRule } from "@/lib/formErrors";
 import { useSessionStore } from "@/stores/session";
 import { spacesApi } from "../api";
 import DeleteSpaceSection from "../components/DeleteSpaceSection.vue";
+import RequireMfaSection from "../components/RequireMfaSection.vue";
 import type { Space } from "../types";
 
 const { t } = useI18n();
@@ -30,7 +31,7 @@ async function onSubmit() {
   saved.value = await submit(
     () => collectErrors({ name: textRule(name.value, { required: true, max: 200 }) }),
     async () => {
-      space.value = await spacesApi.rename(name.value.trim());
+      space.value = await spacesApi.update({ name: name.value.trim() });
       name.value = space.value.name;
       session.renameSpace(space.value.name);
     },
@@ -54,6 +55,7 @@ async function onSubmit() {
       <p v-if="saved" role="status" class="text-sm text-green-700 dark:text-green-400">{{ t("spaces.settings.saved") }}</p>
       <button type="submit" class="btn btn-primary" :disabled="submitting || !space" data-test="space-save">{{ t("common.save") }}</button>
     </form>
+    <RequireMfaSection v-if="space && session.can('spacePolicy')" :space="space" @updated="space = $event" />
     <DeleteSpaceSection v-if="space && session.can('deleteSpace')" :slug="space.slug" />
   </div>
 </template>

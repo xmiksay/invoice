@@ -10,7 +10,7 @@ use crate::auth::host::PublicUrl;
 use crate::cnb::DEFAULT_CNB_URL;
 use crate::email::SmtpConfig;
 use crate::pdf::DEFAULT_MDCAST_URL;
-use crate::secret::Secret;
+use crate::secret::{Secret, SecretKey};
 use crate::storage::StorageConfig;
 
 pub const DEFAULT_BIND: &str = "0.0.0.0:3000";
@@ -35,6 +35,11 @@ pub struct Config {
     raw_trust_forwarded: Option<String>,
     #[serde(skip)]
     pub trust_forwarded: bool,
+    /// `INVOICE__SECRET_KEY` (required): 32 bytes, base64.
+    #[serde(default, rename = "secret_key")]
+    raw_secret_key: Option<Secret<String>>,
+    #[serde(skip)]
+    pub secret_key: SecretKey,
     pub bind: String,
     /// ARES REST root (`INVOICE__ARES_URL`).
     pub ares_url: String,
@@ -81,6 +86,7 @@ impl Config {
             "INVOICE__TRUST_FORWARDED",
             cfg.raw_trust_forwarded.as_deref(),
         )?;
+        cfg.secret_key = secret_key(cfg.raw_secret_key.as_ref())?;
         let cfg = cfg.normalized();
         cfg.validate()?;
         Ok(cfg)
@@ -144,6 +150,16 @@ fn flag(name: &str, raw: Option<&str>) -> Result<bool> {
         None | Some("") | Some("false") | Some("0") => Ok(false),
         Some("true") | Some("1") => Ok(true),
         Some(_) => bail!("{name} must be true or false"),
+    }
+}
+
+/// Missing, empty, not base64 or not 32 bytes → the start is refused.
+fn secret_key(raw: Option<&Secret<String>>) -> Result<SecretKey> {
+    match raw.map(|s| s.expose().trim()).filter(|s| !s.is_empty()) {
+        Some(b64) => SecretKey::parse(b64),
+        None => bail!(
+            "INVOICE__SECRET_KEY is required: 32 random bytes, base64 (`openssl rand -base64 32`)"
+        ),
     }
 }
 

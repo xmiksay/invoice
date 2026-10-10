@@ -1,5 +1,5 @@
 //! Users, sessions, personal API tokens and the per-request auth context.
-//! Contracts: `docs/api/auth.md`, `docs/api/spaces.md`.
+//! Contracts: `docs/api/auth.md`, `docs/api/spaces.md`, `docs/api/mfa.md`.
 
 pub mod crypto;
 pub mod ctx;
@@ -7,6 +7,7 @@ pub mod entity;
 pub mod handlers;
 pub mod host;
 pub mod mail;
+pub mod mfa;
 pub mod ratelimit;
 pub mod resolve;
 pub mod session;
@@ -37,6 +38,7 @@ pub fn public_router() -> Router<AppState> {
         .layer(middleware::from_fn(host::base_only));
     Router::new()
         .route("/auth/login", post(login::login))
+        .route("/auth/login/mfa", post(mfa::login::login_mfa))
         .route("/auth/password-reset", post(password::request_reset))
         .route(
             "/auth/password-reset/confirm",
@@ -54,6 +56,7 @@ pub fn account_router() -> Router<AppState> {
         .route("/auth/me", get(login::me))
         .route("/auth/sessions/revoke-others", post(login::revoke_others))
         .route("/account/password", post(password::change))
+        .merge(mfa::account_router())
 }
 
 pub async fn origin_if_present(req: Request, next: Next) -> Result<Response, AppError> {

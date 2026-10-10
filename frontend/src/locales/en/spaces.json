@@ -44,5 +44,17 @@
     "password": "Your password",
     "submit": "Delete space irreversibly",
     "submitting": "Deleting…"
+  },
+  "mfa": {
+    "title": "Two-factor authentication",
+    "toggle": "Require two-factor authentication",
+    "intro": "Applies from the next sign-in: a member without two-factor authentication cannot sign in to this space. Existing sessions and API tokens keep working until they expire or are revoked.",
+    "ownerFirst": "Turn on two-factor authentication in your own account first.",
+    "toAccount": "Go to account",
+    "lockedOut": "These members do not have two-factor authentication and will be refused at their next sign-in until they turn it on:",
+    "allSet": "Every member has two-factor authentication on.",
+    "enable": "Turn the requirement on",
+    "disableIntro": "Members will then be able to sign in without two-factor authentication.",
+    "disable": "Turn the requirement off"
   }
 }

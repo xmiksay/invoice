@@ -148,6 +148,11 @@ impl HostCtx {
     pub fn space_id(&self) -> Option<SpaceId> {
         self.space.as_ref().map(|s| SpaceId(s.id))
     }
+
+    /// The host's space requires TOTP for new logins / credentials.
+    pub fn requires_mfa(&self) -> bool {
+        self.space.as_ref().is_some_and(|s| s.require_mfa)
+    }
 }
 
 /// Every hosted `/api` route: unknown host or unknown slug → 404.

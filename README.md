@@ -12,7 +12,7 @@ Status: skeleton — see [docs/plan.md](docs/plan.md) for scope and phases,
 ## Quick start
 
 ```sh
-cp .env.example .env            # INVOICE__PUBLIC_URL=http://localhost:3000, registration + SMTP
+cp .env.example .env            # INVOICE__PUBLIC_URL=http://localhost:3000, INVOICE__SECRET_KEY (openssl rand -base64 32), registration + SMTP
 # local Postgres on localhost:5432 — one-time role/db setup in .env.example
 make frontend-install
 make dev-server                 # backend on :3000

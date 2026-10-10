@@ -1,25 +1,32 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, useTemplateRef } from "vue";
+import { computed, onMounted, reactive, ref, useTemplateRef } from "vue";
 import { useI18n } from "vue-i18n";
 import FormField from "@/components/form/FormField.vue";
 import { useFormSubmit } from "@/composables/useFormSubmit";
+import CodeField from "@/features/auth/components/CodeField.vue";
+import { codeRule } from "@/features/auth/validation";
 import { rolesUpTo } from "@/features/spaces/roles";
 import type { Role } from "@/features/spaces/types";
-import { collectErrors, nullIfEmpty, textRule } from "@/lib/formErrors";
+import { collectErrors, isApiError, nullIfEmpty, textRule } from "@/lib/formErrors";
+import { useSessionStore } from "@/stores/session";
 import { useTokensStore } from "../store";
 
 const props = defineProps<{ role: Role }>();
 const emit = defineEmits<{ close: [] }>();
 const { t } = useI18n();
 const store = useTokensStore();
+const session = useSessionStore();
 
 const roles = rolesUpTo(props.role);
 // Least privilege by default; the user raises it deliberately.
-const form = reactive<{ name: string; role: Role; expiresAt: string }>({ name: "", role: "accountant", expiresAt: "" });
+const form = reactive<{ name: string; role: Role; expiresAt: string; code: string }>({ name: "", role: "accountant", expiresAt: "", code: "" });
 const { fieldErrors, error, submitting, submit } = useFormSubmit();
 /** The secret, held only in this dialog; gone when it closes. */
 const secret = ref<string | null>(null);
 const copied = ref(false);
+/** 403 `mfa_required`: the space requires TOTP the user lacks. */
+const mfaRequired = ref(false);
+const accountUrl = computed(() => `${session.baseUrl.replace(/\/$/, "")}/account`);
 
 /** Local "today" as `YYYY-MM-DD` (the date input's `min`). */
 function today(): string {
@@ -29,11 +36,24 @@ function today(): string {
 const minDate = today();
 
 async function onSubmit() {
+  mfaRequired.value = false;
+  const mfa = session.mfaEnabled;
   await submit(
-    () => collectErrors({ name: textRule(form.name, { required: true, max: 100 }), expiresAt: form.expiresAt !== "" && form.expiresAt < minDate && "invalid" }),
+    () =>
+      collectErrors({
+        name: textRule(form.name, { required: true, max: 100 }),
+        expiresAt: form.expiresAt !== "" && form.expiresAt < minDate && "invalid",
+        code: mfa && codeRule(form.code),
+      }),
     async () => {
-      const created = await store.create({ name: form.name.trim(), role: form.role, expiresAt: nullIfEmpty(form.expiresAt) });
-      secret.value = created.token;
+      const code = mfa ? { code: form.code.trim() } : {};
+      try {
+        const created = await store.create({ name: form.name.trim(), role: form.role, expiresAt: nullIfEmpty(form.expiresAt), ...code });
+        secret.value = created.token;
+      } catch (err) {
+        mfaRequired.value = isApiError(err, 403, "mfa_required");
+        throw err;
+      }
     },
   );
 }
@@ -82,7 +102,12 @@ onMounted(() => panel.value?.focus());
         <FormField :label="t('tokens.create.expires')" for="token-expires" :error="fieldErrors.expiresAt" :hint="t('tokens.create.expiresHint')">
           <input id="token-expires" v-model="form.expiresAt" type="date" :min="minDate" class="input" :class="{ 'input-error': fieldErrors.expiresAt }" data-test="token-expires" />
         </FormField>
-        <p v-if="error" role="alert" class="alert-error" data-test="token-error">{{ error }}</p>
+        <CodeField v-if="session.mfaEnabled" id="token-code" v-model="form.code" :error="fieldErrors.code" />
+        <div v-if="mfaRequired" role="alert" class="alert-error space-y-1" data-test="token-mfa-required">
+          <p>{{ t("tokens.create.mfaRequired") }}</p>
+          <a :href="accountUrl" class="font-medium underline" data-test="token-mfa-link">{{ t("tokens.create.mfaSetUp") }}</a>
+        </div>
+        <p v-else-if="error" role="alert" class="alert-error" data-test="token-error">{{ error }}</p>
         <div class="flex justify-end gap-2">
           <button type="button" class="btn" @click="emit('close')">{{ t("common.cancel") }}</button>
           <button type="submit" class="btn btn-primary" :disabled="submitting" data-test="token-create">

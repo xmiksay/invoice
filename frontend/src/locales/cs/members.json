@@ -5,7 +5,8 @@
     "name": "Jméno",
     "email": "E-mail",
     "role": "Role",
-    "joined": "Členem od"
+    "joined": "Členem od",
+    "mfa": "MFA"
   },
   "remove": "Odebrat",
   "confirmRemove": "Opravdu odebrat {name} ze space? Okamžitě ztratí přístup i své API tokeny v tomto space.",
@@ -53,6 +54,22 @@
     "submitNew": "Vytvořit účet a přijmout",
     "submitting": "Přijímám…",
     "invalid": "Pozvánka je neplatná, už byla použita, nahrazena novější nebo vypršela. Požádejte o novou.",
-    "toBase": "Přejít na úvodní stránku"
+    "toBase": "Přejít na úvodní stránku",
+    "requireMfaExisting": "Tento space vyžaduje dvoufázové ověření. Pokud ho máte zapnuté, zadejte i kód z aplikace.",
+    "requireMfaNew": "Tento space vyžaduje dvoufázové ověření. Po založení účtu si ho budete muset zapnout, než se ke space připojíte.",
+    "mfa": {
+      "existing": "Space {name} vyžaduje dvoufázové ověření, které váš účet nemá zapnuté. Pozvánka zůstává platná.",
+      "created": "Účet je založený. Space {name} ale vyžaduje dvoufázové ověření, proto vás zatím nepřipojil. Pozvánka zůstává platná.",
+      "link": "Přejít do účtu na úvodní stránce",
+      "steps": {
+        "login": "Přihlaste se na úvodní stránce svým e-mailem a heslem.",
+        "enable": "V účtu zapněte dvoufázové ověření.",
+        "reopen": "Znovu otevřete odkaz z pozvánky."
+      }
+    }
+  },
+  "mfa": {
+    "on": "zapnuto",
+    "off": "vypnuto"
   }
 }

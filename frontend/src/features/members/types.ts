@@ -9,6 +9,8 @@ export interface Member {
   /** RFC 3339. */
   joinedAt: string;
   isSelf: boolean;
+  /** The member has TOTP on (the listing is admin+ only). */
+  mfaEnabled: boolean;
 }
 
 /** `GET /api/invites` row: a pending, unexpired invitation. */
@@ -41,6 +43,8 @@ export interface InviteInfo {
   email: string;
   role: Role;
   accountExists: boolean;
+  /** The space requires TOTP: a member needs it before joining. */
+  requireMfa: boolean;
 }
 
 export interface AcceptInviteBody {
@@ -48,4 +52,6 @@ export interface AcceptInviteBody {
   password: string;
   /** Only for a new account. */
   displayName?: string;
+  /** Step-up, only for an existing account with TOTP. */
+  code?: string;
 }

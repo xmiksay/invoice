@@ -154,3 +154,7 @@ expires_at; unique (space_id, email)).
 - New error code: 409 `last_owner` (remove, leave). Migration `m20261017_000001_space_invites` (`space_invites`,
   FKs to `spaces` and `users` (`invited_by`) with `ON DELETE CASCADE`, unique `(space_id, email)` and
   `token_hash`).
+- **4c** ([mfa.md](mfa.md)): `GET /api/members` items gain `mfaEnabled`; `GET /api/invites/accept` gains
+  `requireMfa`; `POST /api/invites/accept` takes a step-up `code` (existing account with TOTP) and answers 403
+  `mfa_required` in a space with the policy for an account without TOTP (a new account is created first:
+  `detail: "account_created"`).

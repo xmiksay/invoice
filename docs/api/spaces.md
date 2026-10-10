@@ -169,3 +169,7 @@ For MCP and scripts. A token belongs to **one user in one space** and works only
   `Origin` it is unaffected.
 - Members are added through invitations since 4b ([members.md](members.md)); the role tests still write
   `space_members` rows directly (`tests/common/auth.rs::member`), which is simpler.
+- **4c** ([mfa.md](mfa.md)): `SpaceInfo` gains `requireMfa`; `PUT /api/space` takes `{ name?, requireMfa? }`
+  (`requireMfa` owner only, session only, needs the owner's TOTP and a step-up `code`, on and off); `DELETE
+  /api/space` and `POST /api/tokens` take a step-up `code` for users with TOTP; `POST /api/tokens` in a space with
+  the policy → 403 `mfa_required` for a caller without TOTP.

@@ -111,7 +111,7 @@ async fn register_verify_login_create_space_and_log_in_on_its_host() {
     assert_eq!(status, StatusCode::CREATED, "{created}");
     assert_eq!(
         created,
-        json!({ "slug": "jana", "name": "Jana s.r.o.", "role": "owner", "url": "http://jana.localhost:3000" })
+        json!({ "slug": "jana", "name": "Jana s.r.o.", "role": "owner", "url": "http://jana.localhost:3000", "requireMfa": false })
     );
     let (_, list) = on(
         &app,

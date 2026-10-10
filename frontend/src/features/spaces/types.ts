@@ -19,6 +19,16 @@ export interface Space {
   role: Role;
   /** Absolute URL of the space host. */
   url: string;
+  /** Members must use TOTP to sign in (from their next login). */
+  requireMfa: boolean;
+}
+
+/** `PUT /api/space`; `requireMfa` is owner only. */
+export interface UpdateSpaceBody {
+  name?: string;
+  requireMfa?: boolean;
+  /** Step-up, required with `requireMfa` (the owner's TOTP / recovery code). */
+  code?: string;
 }
 
 export interface CreateSpaceBody {
@@ -29,4 +39,6 @@ export interface CreateSpaceBody {
 export interface DeleteSpaceBody {
   slug: string;
   password: string;
+  /** Step-up, only for a user with TOTP. */
+  code?: string;
 }

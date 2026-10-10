@@ -9,7 +9,7 @@ import SpaceTab from "./SpaceTab.vue";
 
 vi.mock("@/lib/navigate", () => ({ leaveTo: vi.fn() }));
 
-const current = (role: Role) => ({ slug: "firma", name: "Firma s.r.o.", role, url: "http://firma.localhost:3000" });
+const current = (role: Role) => ({ slug: "firma", name: "Firma s.r.o.", role, url: "http://firma.localhost:3000", requireMfa: false });
 
 describe("SpaceTab", () => {
   beforeEach(() => {

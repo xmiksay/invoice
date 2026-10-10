@@ -6,11 +6,12 @@ import { mountView } from "@/testMount";
 import type { InviteInfo } from "../types";
 import InviteAcceptView from "./InviteAcceptView.vue";
 
-const info = (accountExists: boolean): InviteInfo => ({
+const info = (accountExists: boolean, requireMfa = false): InviteInfo => ({
   space: { slug: "firma", name: "Firma s.r.o." },
   email: "petr@example.cz",
   role: "accountant",
   accountExists,
+  requireMfa,
 });
 
 describe("InviteAcceptView", () => {
@@ -105,5 +106,65 @@ describe("InviteAcceptView", () => {
     await w.find('[data-test="accept-password"]').setValue("my password!");
     await submit(w);
     expect(w.find('[data-test="accept-invalid"]').exists()).toBe(true);
+  });
+
+  describe("two-factor authentication", () => {
+    it("hints at the space's requirement and offers an optional code to an existing account", async () => {
+      const fetch = mockFetchRoutes({
+        "GET /api/invites/accept": info(true, true),
+        "POST /api/invites/accept": reply(204),
+        "GET /api/auth/me": meFixture("accountant", true, true),
+      });
+      const { w, router } = await mountAccept();
+      expect(w.find('[data-test="accept-require-mfa"]').text()).toContain("requires two-factor authentication");
+      await w.find('[data-test="accept-password"]').setValue("my password!");
+      await w.find('[data-test="accept-code"]').setValue(" 123456 ");
+      await submit(w);
+      expect(sentRequest(fetch, 1).body).toEqual({ token: "T1", password: "my password!", code: "123456" });
+      expect(router.currentRoute.value.name).toBe("home");
+    });
+
+    it("explains 403 mfa_required for an existing account without TOTP", async () => {
+      const fetch = mockFetchRoutes({ "GET /api/invites/accept": info(true, true), "POST /api/invites/accept": reply(403, { code: "mfa_required" }) });
+      const { w, router } = await mountAccept();
+      await w.find('[data-test="accept-password"]').setValue("my password!");
+      await submit(w);
+      // An empty optional code is not sent: an account without TOTP must reach the explanation.
+      expect(sentRequest(fetch, 1).body).toEqual({ token: "T1", password: "my password!" });
+      expect(w.find('[data-test="accept-mfa-existing"]').text()).toContain("Firma s.r.o. requires two-factor authentication");
+      expect(w.find('[data-test="accept-mfa-existing"]').findAll("li")).toHaveLength(2);
+      expect(w.find('[data-test="accept-mfa-link"]').attributes("href")).toBe("http://localhost:3000/account");
+      expect(w.find("form").exists()).toBe(false);
+      expect(router.currentRoute.value.name).toBe("view");
+    });
+
+    it("explains 403 mfa_required + account_created for a new account", async () => {
+      mockFetchRoutes({ "GET /api/invites/accept": info(false, true), "POST /api/invites/accept": reply(403, { code: "mfa_required", detail: "account_created" }) });
+      const { w } = await mountAccept();
+      expect(w.find('[data-test="accept-require-mfa"]').text()).toContain("After creating the account");
+      expect(w.find('[data-test="accept-code"]').exists()).toBe(false);
+      await w.find('[data-test="accept-name"]').setValue("Petr");
+      await w.find('[data-test="accept-password"]').setValue("long enough pw");
+      await submit(w);
+      const panel = w.find('[data-test="accept-mfa-created"]');
+      expect(panel.text()).toContain("Your account is created.");
+      expect(panel.findAll("li").map((l) => l.text())[0]).toContain("Sign in on the main site");
+      expect(w.find('[data-test="accept-mfa-link"]').attributes("href")).toBe("http://localhost:3000/account");
+    });
+
+    it("asks for the code once the server requires it (existing account with TOTP)", async () => {
+      const accept = vi.fn((body: unknown) => ((body as { code?: string }).code ? reply(204) : reply(422, { code: "validation", fields: { code: "required" } })));
+      const fetch = mockFetchRoutes({ "GET /api/invites/accept": info(true), "POST /api/invites/accept": accept, "GET /api/auth/me": meFixture("accountant", true, true) });
+      const { w, router } = await mountAccept();
+      expect(w.find('[data-test="accept-require-mfa"]').exists()).toBe(false);
+      expect(w.find('[data-test="accept-code"]').exists()).toBe(false);
+      await w.find('[data-test="accept-password"]').setValue("my password!");
+      await submit(w);
+      expect(w.find("#accept-code-error").text()).toBe(i18n.global.t("validation.required"));
+      await w.find('[data-test="accept-code"]').setValue("abcde-fghij");
+      await submit(w);
+      expect(sentRequest(fetch, 2).body).toEqual({ token: "T1", password: "my password!", code: "abcde-fghij" });
+      expect(router.currentRoute.value.name).toBe("home");
+    });
   });
 });

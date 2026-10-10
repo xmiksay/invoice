@@ -93,4 +93,82 @@ For a user with TOTP these also require `code` (TOTP or recovery) next to the pa
   accept outcomes, step-up on every listed route.
 
 ## Clarifications (as implemented)
-(filled during the 4c implementation)
+- **Secret key**: `INVOICE__SECRET_KEY` = standard base64 (padded or not, surrounding whitespace trimmed) of exactly
+  32 bytes; missing, empty, not base64 or another length → the start is refused with a message naming the variable.
+  Two subkeys are derived from it (HMAC-SHA256 over fixed labels): one for AES-256-GCM, one for the recovery-code
+  HMAC — "keyed by the secret key" in that sense. The sealed value is `nonce (12) ‖ ciphertext ‖ tag` (bytea) with
+  the **user id as associated data** (a sealed secret copied to another user does not decrypt). A secret that does
+  not decrypt (key changed, damaged row) is logged at `error` per attempt and a TOTP code is answered as **wrong
+  without a reservation in the login bucket** (no 500, no lockout); recovery codes need no decryption and keep
+  working **as long as the key is the same**. **Contract correction:** the recovery-code HMAC is keyed by
+  `INVOICE__SECRET_KEY` too, so *changing* the key also invalidates every recovery code — the Config note "users
+  recover with a recovery code" does not hold for a changed key; such users need TOTP cleared in the database
+  (`UPDATE users SET totp_secret = NULL …`, `DELETE FROM recovery_codes …`). Treat the key as permanent.
+- **Storage** (migration `m20261018_000001_mfa`): `users.totp_secret` (`NOT NULL` = TOTP on), `totp_pending` +
+  `totp_pending_expires_at` (setup), `totp_last_step` (replay guard); `recovery_codes` (user, HMAC hex, unique per
+  user; a used code is deleted); `mfa_logins` (sha256 of the `invoice_mfa` cookie, user, space — `NULL` = base host —,
+  user agent, failures, expiry); `spaces.require_mfa` (default `false`). The per-request auth query loads only
+  `totp_secret IS NOT NULL` (→ `mfaEnabled`); the secret, pending setup and last step are read on demand where a
+  code is checked or enrolment runs.
+- **Codes**: the input is normalized (lowercase, `-` and whitespace removed). 6 digits → TOTP, 10 base32 characters
+  → recovery code, anything else → wrong. TOTP accepts steps now−1 … now+1, compared in constant time; the accepted
+  step is stored with a conditional update (`totp_last_step < step`), so a code of a step ≤ the stored one — or the
+  same code sent twice in parallel — is refused. A recovery code is spent by a single `DELETE`. `enable` stores the
+  step of its code, so that code cannot be reused for a login.
+- **Status / setup / enable / disable / regenerate**: all session only (a token → 403 `forbidden`), any known host.
+  `setup` checks `mfa_enabled` (409) before the password; the secret is 20 bytes, `secret` = base32 without
+  padding (32 chars); `otpauthUri` uses the base host **without the port** and percent-encodes the e-mail (`+` →
+  `%2B`, `@` kept). `enable`: TOTP already on → 409 `mfa_enabled`; no / expired pending → 422 `code: expired`; empty
+  `code` → `code: required`; a setup replaced or expired between the read and the write → `code: expired`.
+  `disable` of a user without TOTP checks only the password and answers 204 — **nothing is deleted** (no session,
+  token or pending login). `recovery-codes` of a user without TOTP → 409 `{"code":"conflict"}`. Regenerating
+  replaces the codes in one transaction (one multi-row insert).
+- **Disable** deletes, in one transaction, the secret, the pending setup, all recovery codes, the user's pending
+  logins, the user's sessions on hosts of spaces with `require_mfa` (incl. the current one when called there) and
+  the user's API tokens in those spaces. Other sessions (base host, spaces without the policy) stay.
+- **Step-up order** (`password change`, `DELETE /api/space`, `POST /api/tokens`, `PUT /api/space` with
+  `requireMfa`, `disable`, `recovery-codes`): the other checks first (field validation, password); `code: required`
+  is reported together with them; the code is checked — and spent — **only when nothing else failed**, wrong →
+  `code: invalid`. A wrong password with any code → only `password` / `currentPassword: invalid`. **A `code` sent by
+  a user without TOTP is ignored everywhere** (no 422). Code failures count in the user's login bucket (e-mail,
+  5 / 15 min); the invite accept and the login code step also in the IP bucket (20 / 15 min).
+- **No code is spent by a failing request.** Invite accept and the login code step verify (and spend) the code
+  **inside the operation's transaction, after its own checks**: accept = space lock → consume the invitation →
+  inviter re-check (`may_grant`) → code → user / membership / session; a wrong code rolls everything back (the
+  invitation stays usable, 422 `code: invalid`); a failed inviter re-check commits only the consumed invitation and
+  never looks at the code. On the other step-up routes the code is the last check; only DB failures can follow it.
+- **Password events end pending logins**: a password change, a reset confirm and `sessions/revoke-others` delete
+  the user's `mfa_logins` rows together with the sessions (`session::delete_others`).
+- **Login**: the `mfa_required` refusal and the `{ "mfa": "required" }` answer both come after a correct password
+  and the usual checks (disabled, verified + member on a space host); the login reservation is refunded then. A user
+  **with** TOTP gets the code step on every host, also where the policy is off. The pending login purges expired
+  rows on creation. `POST /api/auth/login/mfa` is **one transaction that first locks the pending row** (`FOR
+  UPDATE`), so attempts on one pending login run in turn: it re-checks the user (disabled, verified, still a member
+  → 401 `invalid_credentials`), checks the code, then either counts the failure on the locked row and commits it
+  (the 5th failure deletes the row; later requests → 401 `invalid_credentials`; 8 parallel wrong codes → exactly
+  5 × `mfa_invalid` + 3 × `invalid_credentials`) or deletes the row and creates the session with the user agent of
+  the first step (single use: a parallel request with another code → 401 `invalid_credentials`, its code unspent).
+  Wrong codes also count in the login buckets (429 when used up). The response sets the session cookie and a
+  `Set-Cookie` clearing `invoice_mfa` (`Max-Age=0`). A pending cookie of another host → 401 `invalid_credentials`.
+- **Space policy**: `PUT /api/space` takes `{ name?, requireMfa?, code? }` (all optional; an empty body → 200
+  unchanged). `requireMfa` present (on **or off**): effective role below owner → 403 `forbidden`, a token → 403
+  `forbidden` (session only) — both before any validation; the owner without TOTP → 422 `requireMfa:
+  mfa_not_enabled` (reported with `name` errors); with TOTP a step-up `code` is required (`code: required |
+  invalid`, login bucket). Changing only `name` is unchanged (admin+, token or session, no code). `requireMfa` is
+  part of every `SpaceInfo` (also `GET /api/spaces` and `POST /api/spaces`).
+- **Where the policy is checked**: login, invitation accept and **`POST /api/tokens`** (minting a credential counts
+  as a new login: a caller without TOTP in a space with the policy → 403 `mfa_required`, checked first, also from
+  an existing session or token). Existing sessions and tokens are never re-checked per request.
+- **Invitations** (`POST /api/invites/accept`, space with the policy): rate limit → token → existing account:
+  password (401 `invalid_credentials`) → no TOTP: a sent `code` is ignored, 403 `mfa_required` (invitation kept) →
+  TOTP: missing `code` → 422 `code: required`, then the transaction above (wrong → 422 `code: invalid`, login
+  buckets e-mail + IP). New account: `displayName` / `password` validation (422) → the user is created **verified**
+  with that name and password in its own transaction (no membership, no session, invitation kept) → 403
+  `{"code":"mfa_required","detail":"account_created"}`; an address registered meanwhile → 409 `conflict`. Without
+  the policy an existing account with TOTP still needs the `code` (step-up). `GET /api/invites/accept` returns
+  `requireMfa`.
+- `GET /api/account/mfa` `requiredBy` = the user's spaces with the policy, sorted by name (case-insensitive), then
+  slug. `GET /api/members` items carry `mfaEnabled` (TOTP on), `GET /api/auth/me` carries `user.mfaEnabled`.
+- New error codes: 403 `mfa_required` (`detail: "account_created"` only for the new-account accept), 401
+  `mfa_invalid`, 409 `mfa_enabled`. Nothing secret (TOTP secret, codes, recovery codes, `invoice_mfa` cookie, the
+  secret key) is logged; the secret key is `[REDACTED]` in `Debug`.

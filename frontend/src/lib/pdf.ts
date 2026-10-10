@@ -49,5 +49,10 @@ export async function openPdf(load: () => Promise<BlobResponse>): Promise<void> 
 /** Saves the file (a PDF, or an ISDOC / ZIP) under the server's filename, else `fallbackName`. */
 export async function downloadPdf(load: () => Promise<BlobResponse>, fallbackName: string): Promise<void> {
   const { blob, filename } = await load();
-  clickAnchor(objectUrl(blob), filename ?? fallbackName);
+  saveBlob(blob, filename ?? fallbackName);
+}
+
+/** Saves a blob built in the browser (e.g. the recovery codes as .txt). */
+export function saveBlob(blob: Blob, filename: string): void {
+  clickAnchor(objectUrl(blob), filename);
 }

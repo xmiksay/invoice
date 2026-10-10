@@ -13,7 +13,7 @@ use crate::error::AppError;
 
 pub const API_TOKEN_PREFIX: &str = "inv_";
 
-fn random_bytes<const N: usize>() -> Result<[u8; N], AppError> {
+pub(crate) fn random_bytes<const N: usize>() -> Result<[u8; N], AppError> {
     let mut buf = [0u8; N];
     getrandom::fill(&mut buf).map_err(|e| anyhow!("OS random source failed: {e}"))?;
     Ok(buf)

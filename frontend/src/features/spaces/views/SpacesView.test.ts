@@ -7,7 +7,7 @@ import { mountView } from "@/testMount";
 import type { Space } from "../types";
 import SpacesView from "./SpacesView.vue";
 
-const space = (slug: string, name: string, role: Space["role"] = "owner"): Space => ({ slug, name, role, url: `http://${slug}.localhost:3000` });
+const space = (slug: string, name: string, role: Space["role"] = "owner"): Space => ({ slug, name, role, url: `http://${slug}.localhost:3000`, requireMfa: false });
 
 describe("SpacesView", () => {
   beforeEach(() => {

@@ -1,0 +1,45 @@
+{
+  "title": "Two-factor authentication",
+  "password": "Your password",
+  "off": "Off. Besides the password, signing in can also require a code from an app (Google Authenticator, Aegis, 1Password…).",
+  "on": "On. Recovery codes left: {count}.",
+  "codesLow": "You are running out of recovery codes. Generate new ones.",
+  "requiredHint": "Required by these spaces: {spaces}. You cannot sign in to them without it.",
+  "code": {
+    "totp": "Code from the app",
+    "recovery": "Recovery code",
+    "anyHint": "Or one of your recovery codes."
+  },
+  "enable": {
+    "open": "Turn on two-factor authentication",
+    "passwordIntro": "Confirm your password to turn it on.",
+    "continue": "Continue",
+    "scan": "Scan the QR code with your authenticator app, or enter the key manually. Then type the 6-digit code the app shows.",
+    "qrAlt": "QR code for the authenticator app",
+    "manualKey": "Key for manual entry",
+    "submit": "Turn on",
+    "expired": "The setup has expired (it lasts 10 minutes). Enter your password and start again."
+  },
+  "codes": {
+    "title": "Recovery codes",
+    "warning": "Store them somewhere safe. Each code can be used once instead of an app code, e.g. when you lose your phone. They will not be shown again.",
+    "copy": "Copy",
+    "copied": "Copied.",
+    "download": "Download .txt",
+    "saved": "I have saved them.",
+    "close": "Done",
+    "fileHeader": "Invoice recovery codes for {email}. Each works only once."
+  },
+  "regenerate": {
+    "open": "New recovery codes",
+    "intro": "Generates 10 new recovery codes; the current ones stop working.",
+    "submit": "Generate"
+  },
+  "disable": {
+    "open": "Turn off",
+    "intro": "Signing in will then be protected by the password alone.",
+    "requiredBy": "These spaces require two-factor authentication. Turning it off signs you out of them at once, your API tokens there stop working, and you can sign in again only after turning it back on:",
+    "submit": "Turn off two-factor authentication",
+    "done": "Two-factor authentication is off."
+  }
+}

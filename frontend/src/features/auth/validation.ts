@@ -32,3 +32,13 @@ export function validateRegistration(form: { email: string; password: string; di
 export function passwordFieldReason(reason: string | undefined): string | undefined {
   return reason === "invalid" ? "wrong_password" : reason;
 }
+
+/** Same for a step-up `code` field: `invalid` there means a wrong TOTP / recovery code. */
+export function codeFieldReason(reason: string | undefined): string | undefined {
+  return reason === "invalid" ? "wrong_code" : reason;
+}
+
+/** Only presence is checked: a TOTP and a recovery code differ in format, the server decides. */
+export function codeRule(value: string): string | null {
+  return value.trim() === "" ? "required" : null;
+}

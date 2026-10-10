@@ -18,6 +18,8 @@ export const useSessionStore = defineStore("session", () => {
   const role = computed(() => me.value?.space?.role ?? null);
   const isSpace = computed(() => context.value?.kind === "space");
   const baseUrl = computed(() => context.value?.baseUrl ?? "/");
+  /** Step-up forms ask for a TOTP / recovery code next to the password. */
+  const mfaEnabled = computed(() => me.value?.user.mfaEnabled ?? false);
 
   function can(action: Action): boolean {
     return roleCan(role.value, action);
@@ -34,10 +36,24 @@ export const useSessionStore = defineStore("session", () => {
     return me.value;
   }
 
-  async function login(body: LoginBody): Promise<void> {
-    await authApi.login(body);
+  /** Returns "mfa" when the password was right and the code step must follow (no session yet). */
+  async function login(body: LoginBody): Promise<"done" | "mfa"> {
+    const res = await authApi.login(body);
+    if (res?.mfa === "required") return "mfa";
     me.value = await authApi.me();
     loaded.value = true;
+    return "done";
+  }
+
+  /** Second step of a TOTP login (`code` = TOTP or a recovery code). */
+  async function loginMfa(code: string): Promise<void> {
+    await authApi.loginMfa(code);
+    me.value = await authApi.me();
+    loaded.value = true;
+  }
+
+  function setMfaEnabled(enabled: boolean): void {
+    if (me.value) me.value.user.mfaEnabled = enabled;
   }
 
   function clear(): void {
@@ -67,5 +83,23 @@ export const useSessionStore = defineStore("session", () => {
     bootFailure.value = boot.status === "ok" ? null : boot;
   }
 
-  return { context, bootFailure, applyBoot, me, loaded, role, isSpace, baseUrl, can, loadMe, login, logout, clear, renameSpace };
+  return {
+    context,
+    bootFailure,
+    applyBoot,
+    me,
+    loaded,
+    role,
+    isSpace,
+    baseUrl,
+    mfaEnabled,
+    can,
+    loadMe,
+    login,
+    loginMfa,
+    setMfaEnabled,
+    logout,
+    clear,
+    renameSpace,
+  };
 });

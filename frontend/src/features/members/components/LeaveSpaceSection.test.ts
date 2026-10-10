@@ -4,7 +4,7 @@ import { i18n } from "@/i18n";
 import AccountView from "@/features/auth/views/AccountView.vue";
 import type { Role } from "@/features/spaces/types";
 import { leaveTo } from "@/lib/navigate";
-import { calls, mockFetchRoutes, reply } from "@/test-utils";
+import { calls, MFA_OFF, mockFetchRoutes, reply } from "@/test-utils";
 import { mountView } from "@/testMount";
 import type { Member } from "../types";
 
@@ -17,6 +17,7 @@ const owner = (userId: string): Member => ({
   role: "owner",
   joinedAt: "2026-10-01T10:00:00Z",
   isSelf: userId === "me",
+  mfaEnabled: false,
 });
 
 describe("Leave space (account page)", () => {
@@ -38,15 +39,15 @@ describe("Leave space (account page)", () => {
   });
 
   it("leaves after confirmation and goes to the base host, without listing members below owner", async () => {
-    const fetch = mockFetchRoutes({ "POST /api/space/leave": reply(204) });
+    const fetch = mockFetchRoutes({ "GET /api/account/mfa": MFA_OFF, "POST /api/space/leave": reply(204) });
     vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
     const { w } = await mountAccount("admin");
     await w.find('[data-test="leave-submit"]').trigger("click");
     await flushPromises();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(calls(fetch)).toEqual(["GET /api/account/mfa"]);
     await w.find('[data-test="leave-submit"]').trigger("click");
     await flushPromises();
-    expect(calls(fetch)).toEqual(["POST /api/space/leave"]);
+    expect(calls(fetch)).toEqual(["GET /api/account/mfa", "POST /api/space/leave"]);
     expect(leaveTo).toHaveBeenCalledWith("http://localhost:3000");
   });
 
