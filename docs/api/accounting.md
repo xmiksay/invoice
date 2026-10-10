@@ -1,4 +1,4 @@
-# Accounting exports: Pohoda XML (3b), Money S3 XML (3c)
+# Accounting exports: settings, Pohoda XML (3b)
 
 Exports for the accountant's program, chosen as a **format** of the 2c accountant export
 ([csv.md](csv.md#get-apiexportaccountantfromyyyy-mm-ddtoyyyy-mm-dddirectionissuedreceivedboth--for-the-accountant)):
@@ -8,7 +8,8 @@ per rate **in CZK** (no lines), like the CSV.
 
 ## Route
 `GET /api/export/accountant?from&to&direction&format=csv|pohoda|money` — `format` default `csv` (2c unchanged).
-`pohoda` → `200 application/xml`, filename `pohoda-{from}-{to}.xml`. `money` → 3c. Unknown format → 422
+`pohoda` → `200 application/xml`, filename `pohoda-{from}-{to}.xml`. `money` → [money.md](money.md) (3c). Unknown
+format → 422
 `format: invalid`.
 
 ## Settings → Accounting (`/api/settings/accounting`)
@@ -24,7 +25,7 @@ AccountingSettings {
     codes: [ { direction, docType, accounting: string|null /* předkontace, typ:ids */,
                classificationVat: string|null /* členění DPH, typ:ids */, numberSeries: string|null /* číselná řada, typ:ids */ } ]
   },
-  money: { codes: [ { direction, docType, … } ] }   // defined in 3c
+  money: { ico, codes: [ … ] }   // 3c, see money.md
 }
 ```
 - `GET` → the full object, every direction × type row present (missing rows → all null).
@@ -133,7 +134,8 @@ Settings
 - **Additive field** `classificationVatNonDeductible: string | null` on every code row (received rows only;
   always null on issued rows): the členění DPH of a received document without the VAT deduction
   (`vatDeductible` false).
-- **Money S3:** the `money` section is omitted until 3c. A `money` key in a PUT is ignored.
+- **Money S3:** the `money` section is omitted until 3c. A `money` key in a PUT is ignored. (3c adds it and changes
+  PUT to replace only the sections present: [money.md](money.md#settings--accounting).)
 - Storage: table `accounting_settings` (singleton `id = 1`, `data jsonb`), migration
   `m20261015_000001_accounting_settings`.
 
