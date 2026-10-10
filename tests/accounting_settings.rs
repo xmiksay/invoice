@@ -9,7 +9,11 @@ use serde_json::{Value, json};
 const URI: &str = "/api/settings/accounting";
 
 fn row(s: &Value, direction: &str, doc_type: &str) -> Value {
-    s["pohoda"]["codes"]
+    section_row(s, "pohoda", direction, doc_type)
+}
+
+fn section_row(s: &Value, section: &str, direction: &str, doc_type: &str) -> Value {
+    s[section]["codes"]
         .as_array()
         .expect("codes")
         .iter()
@@ -36,7 +40,12 @@ async fn get_put_and_validation() {
         json!({ "direction": "issued", "docType": "invoice", "accounting": null,
                 "classificationVat": null, "classificationVatNonDeductible": null, "numberSeries": null })
     );
-    assert!(s.get("money").is_none(), "Money S3 comes in 3c");
+    assert_eq!(s["money"]["ico"], Value::Null);
+    assert_eq!(
+        s["money"]["codes"].as_array().expect("money codes")[11],
+        json!({ "direction": "received", "docType": "simplified", "accounting": null,
+                "classificationVat": null, "classificationVatNonDeductible": null, "numberSeries": null })
+    );
 
     let (status, saved) = call(
         &app,
@@ -89,12 +98,105 @@ async fn get_put_and_validation() {
     let (_, after) = call(&app, Method::GET, URI, None).await;
     assert_eq!(after, saved, "a rejected PUT changes nothing");
 
-    // An empty object clears everything.
-    let (status, cleared) = call(&app, Method::PUT, URI, Some(json!({}))).await;
+    // An empty object changes nothing (absent sections are kept); a
+    // present empty section clears that one.
+    let (status, same) = call(&app, Method::PUT, URI, Some(json!({}))).await;
+    assert_eq!(status, StatusCode::OK, "{same}");
+    assert_eq!(same, saved);
+    let (status, cleared) = call(&app, Method::PUT, URI, Some(json!({ "pohoda": {} }))).await;
     assert_eq!(status, StatusCode::OK, "{cleared}");
     assert_eq!(cleared["pohoda"]["ico"], Value::Null);
     assert_eq!(
         row(&cleared, "received", "simplified")["numberSeries"],
         Value::Null
     );
+}
+
+#[tokio::test]
+async fn money_section() {
+    let db = TestDb::new().await;
+    let app = router(db.conn.clone());
+    let pohoda = json!({ "ico": "44444443", "codes": [
+        { "direction": "issued", "docType": "invoice", "numberSeries": "FV" }] });
+    let (status, saved) = call(
+        &app,
+        Method::PUT,
+        URI,
+        Some(
+            json!({ "pohoda": pohoda, "money": { "ico": " 8765 4326 ", "codes": [
+                { "direction": "received", "docType": "invoice", "accounting": "3Fp",
+                  "classificationVat": "PD", "classificationVatNonDeductible": "PN",
+                  "numberSeries": " FP " },
+            ]}}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    assert_eq!(saved["money"]["ico"], "87654326");
+    assert_eq!(saved["money"]["codes"].as_array().expect("codes").len(), 12);
+    assert_eq!(
+        section_row(&saved, "money", "received", "invoice"),
+        json!({ "direction": "received", "docType": "invoice", "accounting": "3Fp",
+                "classificationVat": "PD", "classificationVatNonDeductible": "PN", "numberSeries": "FP" })
+    );
+
+    // Only Money sent: Pohoda kept; and the other way round.
+    let (status, s) = call(
+        &app,
+        Method::PUT,
+        URI,
+        Some(json!({ "money": { "codes": [
+            { "direction": "issued", "docType": "simplified", "numberSeries": "ZJ" }] }})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{s}");
+    assert_eq!(s["pohoda"], saved["pohoda"], "absent section kept");
+    assert_eq!(s["money"]["ico"], Value::Null, "present section replaced");
+    assert_eq!(
+        section_row(&s, "money", "received", "invoice")["accounting"],
+        Value::Null
+    );
+    assert_eq!(
+        section_row(&s, "money", "issued", "simplified")["numberSeries"],
+        "ZJ"
+    );
+    let (status, s2) = call(&app, Method::PUT, URI, Some(json!({ "pohoda": {} }))).await;
+    assert_eq!(status, StatusCode::OK, "{s2}");
+    assert_eq!(s2["money"], s["money"], "Money kept");
+    let (_, got) = call(&app, Method::GET, URI, None).await;
+    assert_eq!(got, s2);
+
+    let x = |n: usize| "x".repeat(n);
+    let (status, err) = call(
+        &app,
+        Method::PUT,
+        URI,
+        Some(json!({ "money": { "ico": "12345678", "codes": [
+            { "direction": "issued", "docType": "invoice", "accounting": x(11),
+              "classificationVat": x(11), "numberSeries": x(6) },
+            { "direction": "received", "docType": "invoice", "classificationVatNonDeductible": x(11) },
+            { "direction": "issued", "docType": "debit_note", "classificationVatNonDeductible": "PN" },
+            { "direction": "received", "docType": "invoice" },
+            { "direction": "x", "docType": "proforma" },
+        ]}, "pohoda": { "codes": [{ "direction": "issued", "docType": "invoice", "accounting": x(20) }] }})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        err,
+        json!({ "code": "validation", "fields": {
+            "money.ico": "invalid_ico",
+            "money.codes.0.accounting": "too_long",
+            "money.codes.0.classificationVat": "too_long",
+            "money.codes.0.numberSeries": "too_long",
+            "money.codes.1.classificationVatNonDeductible": "too_long",
+            "money.codes.2.classificationVatNonDeductible": "invalid",
+            "money.codes.3.docType": "duplicate",
+            "money.codes.4.direction": "invalid",
+            "money.codes.4.docType": "invalid",
+            "pohoda.codes.0.accounting": "too_long",
+        }})
+    );
+    let (_, after) = call(&app, Method::GET, URI, None).await;
+    assert_eq!(after, s2, "a rejected PUT changes nothing");
 }

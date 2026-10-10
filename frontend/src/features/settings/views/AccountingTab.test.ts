@@ -6,15 +6,13 @@ import { calls, mockFetchRoutes, reply } from "@/test-utils";
 import { ACCOUNTING_DIRECTIONS, ACCOUNTING_DOC_TYPES, type AccountingSettings } from "../types";
 import AccountingTab from "./AccountingTab.vue";
 
-const settings = (): AccountingSettings => ({
-  pohoda: {
-    ico: null,
-    codes: ACCOUNTING_DIRECTIONS.flatMap((direction) =>
-      ACCOUNTING_DOC_TYPES.map((docType) => ({ direction, docType, accounting: null, classificationVat: null, numberSeries: null, classificationVatNonDeductible: null })),
-    ),
-  },
-  money: { codes: [{ direction: "issued", docType: "invoice", opaque: 1 }] },
+const emptySection = () => ({
+  ico: null,
+  codes: ACCOUNTING_DIRECTIONS.flatMap((direction) =>
+    ACCOUNTING_DOC_TYPES.map((docType) => ({ direction, docType, accounting: null, classificationVat: null, numberSeries: null, classificationVatNonDeductible: null })),
+  ),
 });
+const settings = (): AccountingSettings => ({ pohoda: emptySection(), money: emptySection() });
 
 const company = { name: "Acme", ico: "27074358" };
 
@@ -40,7 +38,7 @@ describe("AccountingTab", () => {
 
     expect(input(w, "pohoda-ico").value).toBe("11111111");
     expect(input(w, "pohoda-ico").placeholder).toBe("27074358");
-    expect(w.findAll("thead th").map((th) => th.text())).toEqual([
+    expect(w.findAll('[data-test="pohoda-section"] thead th').map((th) => th.text())).toEqual([
       "Document",
       "Accounting code (předkontace)",
       "VAT classification (členění DPH)",
@@ -57,7 +55,28 @@ describe("AccountingTab", () => {
     expect(w.find("fieldset").attributes("disabled")).toBeUndefined();
   });
 
-  it("saves the edited codes, null for empty, and money as loaded", async () => {
+  it("renders the Money S3 section after Pohoda with its own IČO and table", async () => {
+    const loaded = settings();
+    loaded.money.ico = "22222222";
+    loaded.money.codes[11]!.numberSeries = "ZP";
+    mockFetchRoutes({ "GET /api/settings/accounting": loaded, "GET /api/settings/company": company });
+    const w = await mountTab();
+
+    expect(w.findAll("section").map((s) => s.attributes("data-test"))).toEqual(["pohoda-section", "money-section"]);
+    const money = w.find('[data-test="money-section"]');
+    expect(money.find("h2").text()).toBe("Money S3");
+    expect(money.find('label[for="money-ico"]').text()).toBe("Agenda IČO");
+    expect(input(w, "money-ico").value).toBe("22222222");
+    expect(input(w, "money-ico").placeholder).toBe("27074358");
+    expect(money.findAll("thead th")).toHaveLength(5);
+    expect(money.findAll('[data-test^="money-row-"]')).toHaveLength(12);
+    expect(input(w, "money-11-numberSeries").value).toBe("ZP");
+    expect(input(w, "money-11-numberSeries").getAttribute("aria-label")).toBe("Received documents – Simplified tax document: Number series");
+    expect(w.find('[data-test="money-0-classificationVatNonDeductible-na"]').exists()).toBe(true);
+    expect(w.find('[data-test="money-6-classificationVatNonDeductible"]').exists()).toBe(true);
+  });
+
+  it("saves both sections in one PUT, null for empty", async () => {
     const saved: unknown[] = [];
     const fetch = mockFetchRoutes({
       "GET /api/settings/accounting": settings(),
@@ -72,6 +91,9 @@ describe("AccountingTab", () => {
     await w.find('[data-test="pohoda-0-accounting"]').setValue("3Fv");
     await w.find('[data-test="pohoda-6-numberSeries"]').setValue("FP");
     await w.find('[data-test="pohoda-6-classificationVatNonDeductible"]').setValue("PN");
+    await w.find('[data-test="money-ico"]').setValue("27074358");
+    await w.find('[data-test="money-1-accounting"]').setValue(" 2Dv ");
+    await w.find('[data-test="money-8-classificationVatNonDeductible"]').setValue("PZ");
     await w.find("form").trigger("submit");
     await flushPromises();
 
@@ -88,11 +110,15 @@ describe("AccountingTab", () => {
       numberSeries: "FP",
       classificationVatNonDeductible: "PN",
     });
-    expect(body.money).toEqual(settings().money);
+    expect(body.money.ico).toBe("27074358");
+    expect(body.money.codes).toHaveLength(12);
+    expect(body.money.codes[1]).toEqual({ direction: "issued", docType: "credit_note", accounting: "2Dv", classificationVat: null, numberSeries: null, classificationVatNonDeductible: null });
+    expect(body.money.codes[8]!.classificationVatNonDeductible).toBe("PZ");
+    expect(body.money.codes.filter((c) => c.accounting || c.classificationVat || c.numberSeries || c.classificationVatNonDeductible)).toHaveLength(2);
     expect(w.find('[role="status"]').text()).toBe("Saved.");
   });
 
-  it("does not send money when GET omitted it (before 3c)", async () => {
+  it("sends both sections even when GET lacks money", async () => {
     const { money: _money, ...loaded } = settings();
     const saved: Record<string, unknown>[] = [];
     mockFetchRoutes({
@@ -106,7 +132,7 @@ describe("AccountingTab", () => {
     const w = await mountTab();
     await w.find("form").trigger("submit");
     await flushPromises();
-    expect(Object.keys(saved[0]!)).toEqual(["pohoda"]);
+    expect(Object.keys(saved[0]!)).toEqual(["pohoda", "money"]);
   });
 
   it("shows the server's 422 at the cell and at the IČO", async () => {
@@ -115,7 +141,14 @@ describe("AccountingTab", () => {
       "GET /api/settings/company": company,
       "PUT /api/settings/accounting": reply(422, {
         code: "validation",
-        fields: { "pohoda.ico": "invalid_ico", "pohoda.codes.9.numberSeries": "too_long", "pohoda.codes.2.docType": "duplicate" },
+        fields: {
+          "pohoda.ico": "invalid_ico",
+          "pohoda.codes.9.numberSeries": "too_long",
+          "pohoda.codes.2.docType": "duplicate",
+          "money.ico": "invalid_ico",
+          "money.codes.4.accounting": "too_long",
+          "money.codes.10.direction": "invalid",
+        },
       }),
     });
     const w = await mountTab();
@@ -128,7 +161,13 @@ describe("AccountingTab", () => {
     expect(w.find('[data-test="pohoda-9-numberSeries"]').attributes("aria-invalid")).toBe("true");
     expect(w.find("#pohoda-9-numberSeries-error").text()).toBe(i18n.global.t("validation.too_long"));
     expect(w.find('[data-test="pohoda-row-2"] [data-test="field-error"]').text()).toBe(i18n.global.t("validation.duplicate"));
-    expect(w.findAll('[data-test="field-error"]')).toHaveLength(3);
+    expect(w.find("#money-ico").classes()).toContain("input-error");
+    expect(w.find('[data-test="money-section"] #money-ico-error').text()).toBe(i18n.global.t("validation.invalid_ico"));
+    expect(w.find('[data-test="money-4-accounting"]').attributes("aria-invalid")).toBe("true");
+    expect(w.find("#money-4-accounting-error").text()).toBe(i18n.global.t("validation.too_long"));
+    expect(w.find('[data-test="pohoda-4-accounting"]').classes()).not.toContain("input-error");
+    expect(w.find('[data-test="money-row-10"] [data-test="field-error"]').text()).toBe(i18n.global.t("validation.invalid"));
+    expect(w.findAll('[data-test="field-error"]')).toHaveLength(6);
     expect(w.find('[data-test="accounting-error"]').exists()).toBe(true);
     expect(w.find('[role="status"]').exists()).toBe(false);
   });
@@ -141,6 +180,18 @@ describe("AccountingTab", () => {
     await flushPromises();
     expect(calls(fetch)).not.toContain("PUT /api/settings/accounting");
     expect(w.find('[data-test="pohoda-11-accounting"]').classes()).toContain("input-error");
+  });
+
+  it("checks the Money S3 limits (10, number series 5) before sending", async () => {
+    const fetch = mockFetchRoutes({ "GET /api/settings/accounting": settings(), "GET /api/settings/company": company });
+    const w = await mountTab();
+    await w.find('[data-test="money-0-accounting"]').setValue("x".repeat(10));
+    await w.find('[data-test="money-0-numberSeries"]').setValue("x".repeat(6));
+    await w.find("form").trigger("submit");
+    await flushPromises();
+    expect(calls(fetch)).not.toContain("PUT /api/settings/accounting");
+    expect(w.find('[data-test="money-0-accounting"]').classes()).not.toContain("input-error");
+    expect(w.find('[data-test="money-0-numberSeries"]').classes()).toContain("input-error");
   });
 
   it("keeps the form disabled when the load fails; a company failure only drops the placeholder", async () => {

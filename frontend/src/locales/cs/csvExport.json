@@ -24,11 +24,13 @@
     "format": "Formát",
     "formats": {
       "csv": "CSV",
-      "pohoda": "Pohoda XML"
+      "pohoda": "Pohoda XML",
+      "money": "Money S3 XML"
     },
     "formatHints": {
       "csv": "Hlavička dokladu a rekapitulace DPH v Kč; soubor lze znovu naimportovat.",
-      "pohoda": "Pohoda XML použije předkontace, členění DPH a číselné řady z Nastavení → Účetnictví."
+      "pohoda": "Pohoda XML použije předkontace, členění DPH a číselné řady z Nastavení → Účetnictví.",
+      "money": "Money S3 XML použije předkontace, členění DPH a číselné řady z Nastavení → Účetnictví."
     }
   }
 }

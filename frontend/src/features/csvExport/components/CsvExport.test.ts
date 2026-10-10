@@ -158,7 +158,7 @@ describe("CSV export", () => {
         });
       const fetch = mockFetchRoutes({ "GET /api/export/accountant": xmlReply });
       let w = await openDialog();
-      expect(w.findAll('[data-test="accountant-format"] option').map((o) => o.text())).toEqual(["CSV", "Pohoda XML"]);
+      expect(w.findAll('[data-test="accountant-format"] option').map((o) => o.text())).toEqual(["CSV", "Pohoda XML", "Money S3 XML"]);
       await w.find('[data-test="accountant-format"]').setValue("pohoda");
       expect(w.find('[data-test="accountant-download"]').text()).toBe("Download Pohoda XML");
       expect(w.text()).toContain("Settings → Accounting");
@@ -199,6 +199,36 @@ describe("CSV export", () => {
       expect(w.find('[data-test="error-detail"]').exists()).toBe(false);
       expect(w.findAll('[data-test="field-error"]')).toHaveLength(0);
       expect(downloads).toEqual([]);
+      w.unmount();
+    });
+
+    it("exports Money S3 XML under the server filename, else money-{from}-{to}.xml", async () => {
+      let filename: string | undefined = "money-2026-09-01-2026-09-30.xml";
+      const xmlReply = () =>
+        new Response("<MoneyData/>", {
+          status: 200,
+          headers: { "Content-Type": "application/xml; charset=utf-8", ...(filename ? { "Content-Disposition": `attachment; filename="${filename}"` } : {}) },
+        });
+      const fetch = mockFetchRoutes({ "GET /api/export/accountant": xmlReply });
+      let w = await openDialog();
+      await w.find('[data-test="accountant-format"]').setValue("money");
+      expect(w.find('[data-test="accountant-download"]').text()).toBe("Download Money S3 XML");
+      expect(w.text()).toContain("Money S3 XML uses the accounting codes");
+      await w.find('[data-test="accountant-download"]').trigger("click");
+      await flushPromises();
+      w.unmount();
+
+      filename = undefined;
+      w = await openDialog();
+      await w.find('[data-test="accountant-direction"]').setValue("received");
+      await w.find('[data-test="accountant-format"]').setValue("money");
+      await w.find('[data-test="accountant-download"]').trigger("click");
+      await flushPromises();
+      expect(calls(fetch)).toEqual([
+        "GET /api/export/accountant?from=2026-09-01&to=2026-09-30&direction=both&format=money",
+        "GET /api/export/accountant?from=2026-09-01&to=2026-09-30&direction=received&format=money",
+      ]);
+      expect(downloads).toEqual(["money-2026-09-01-2026-09-30.xml", "money-2026-09-01-2026-09-30.xml"]);
       w.unmount();
     });
 

@@ -42,5 +42,6 @@ describe("accountantFallbackName", () => {
     const period = { from: "2026-09-01", to: "2026-09-30", direction: "both" as const };
     expect(accountantFallbackName({ ...period, format: "csv" })).toBe("ucetni-2026-09-01-2026-09-30.csv");
     expect(accountantFallbackName({ ...period, format: "pohoda" })).toBe("pohoda-2026-09-01-2026-09-30.xml");
+    expect(accountantFallbackName({ ...period, format: "money" })).toBe("money-2026-09-01-2026-09-30.xml");
   });
 });

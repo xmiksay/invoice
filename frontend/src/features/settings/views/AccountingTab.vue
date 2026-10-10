@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import FormField from "@/components/form/FormField.vue";
 import { useFormSubmit } from "@/composables/useFormSubmit";
 import { toAccountingDraft, toAccountingSettings, validateAccounting } from "../accounting";
-import PohodaCodesTable from "../components/PohodaCodesTable.vue";
+import AccountingProgramSection from "../components/AccountingProgramSection.vue";
 import { useAccountingStore, useCompanyStore } from "../stores";
+import { ACCOUNTING_PROGRAMS } from "../types";
 
 const { t } = useI18n();
 const store = useAccountingStore();
@@ -44,30 +44,14 @@ async function onSubmit() {
 <template>
   <form novalidate @submit.prevent="onSubmit">
     <fieldset class="space-y-6" :disabled="!loaded">
-      <section class="card space-y-4" data-test="pohoda-section">
-        <div class="space-y-1">
-          <h2 class="text-lg font-semibold">{{ t("accounting.pohoda.title") }}</h2>
-          <p class="text-sm text-gray-600 dark:text-gray-400">{{ t("accounting.pohoda.intro") }}</p>
-        </div>
-        <FormField
-          class="max-w-xs"
-          :label="t('accounting.pohoda.ico')"
-          for="pohoda-ico"
-          :error="fieldErrors['pohoda.ico']"
-          :hint="t('accounting.pohoda.icoHint')"
-        >
-          <input
-            id="pohoda-ico"
-            v-model="draft.ico"
-            inputmode="numeric"
-            class="input"
-            :class="{ 'input-error': fieldErrors['pohoda.ico'] }"
-            :placeholder="companyStore.company?.ico ?? ''"
-            data-test="pohoda-ico"
-          />
-        </FormField>
-        <PohodaCodesTable v-model="draft.rows" :errors="fieldErrors" />
-      </section>
+      <AccountingProgramSection
+        v-for="program in ACCOUNTING_PROGRAMS"
+        :key="program"
+        v-model="draft[program]"
+        :program="program"
+        :errors="fieldErrors"
+        :ico-placeholder="companyStore.company?.ico ?? ''"
+      />
 
       <p v-if="error" role="alert" class="alert-error" data-test="accounting-error">{{ error }}</p>
       <div class="flex items-center gap-3">

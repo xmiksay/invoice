@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::State;
 
 use super::repo;
-use super::settings::AccountingSettings;
+use super::settings::{AccountingSettings, AccountingUpdate};
 use crate::app::AppState;
 use crate::error::{AppError, ErrorBody};
 use crate::extract::ApiJson;
@@ -14,7 +14,7 @@ use crate::extract::ApiJson;
     path = "/api/settings/accounting",
     tag = "settings",
     security(("bearer" = [])),
-    responses((status = 200, body = AccountingSettings, description = "Every direction × exported type row present (missing ones all null)"))
+    responses((status = 200, body = AccountingSettings, description = "Both sections (`pohoda`, `money`), every direction × exported type row present (missing ones all null)"))
 )]
 pub async fn get(State(state): State<AppState>) -> Result<Json<AccountingSettings>, AppError> {
     Ok(Json(repo::get(&state.db).await?))
@@ -25,16 +25,16 @@ pub async fn get(State(state): State<AppState>) -> Result<Json<AccountingSetting
     path = "/api/settings/accounting",
     tag = "settings",
     security(("bearer" = [])),
-    request_body = AccountingSettings,
+    request_body(content = AccountingUpdate, description = "A section present replaces that section (`{}` clears it); an absent one is kept"),
     responses(
         (status = 200, body = AccountingSettings),
-        (status = 422, description = "`pohoda.ico`: `invalid_ico`; `pohoda.codes.N.direction` / `docType`: `invalid`, `docType`: `duplicate`; `pohoda.codes.N.{accounting|classificationVat|numberSeries}`: `too_long` (> 19)", body = ErrorBody),
+        (status = 422, description = "`{pohoda|money}.ico`: `invalid_ico`; `{pohoda|money}.codes.N.direction` / `docType`: `invalid`, `docType`: `duplicate`; `….classificationVatNonDeductible`: `invalid` on an issued row; `pohoda.codes.N.{accounting|classificationVat|classificationVatNonDeductible|numberSeries}`: `too_long` (> 19); `money.codes.N.{accounting|classificationVat|classificationVatNonDeductible}`: `too_long` (> 10), `money.codes.N.numberSeries`: `too_long` (> 5)", body = ErrorBody),
     )
 )]
 pub async fn put(
     State(state): State<AppState>,
-    ApiJson(input): ApiJson<AccountingSettings>,
+    ApiJson(input): ApiJson<AccountingUpdate>,
 ) -> Result<Json<AccountingSettings>, AppError> {
-    let s = input.validate()?;
-    Ok(Json(repo::put(&state.db, &s).await?))
+    let update = input.validate()?;
+    Ok(Json(repo::update(&state.db, update).await?))
 }

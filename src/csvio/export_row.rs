@@ -46,11 +46,19 @@ pub fn paid_date(
     })
 }
 
+/// A stored counterparty snapshot, decoded (`None` when there is none).
+pub fn snapshot(snapshot: &Option<serde_json::Value>) -> anyhow::Result<Option<PartySnapshot>> {
+    snapshot
+        .as_ref()
+        .map(|v| serde_json::from_value(v.clone()).context("decode counterparty snapshot"))
+        .transpose()
+}
+
 /// The counterparty of a stored snapshot (`None` when there is none).
-pub fn party(snapshot: &Option<serde_json::Value>) -> anyhow::Result<Option<Party>> {
-    let Some(v) = snapshot else { return Ok(None) };
-    let s: PartySnapshot =
-        serde_json::from_value(v.clone()).context("decode counterparty snapshot")?;
+pub fn party(stored: &Option<serde_json::Value>) -> anyhow::Result<Option<Party>> {
+    let Some(s) = snapshot(stored)? else {
+        return Ok(None);
+    };
     Ok(Some(Party {
         name: s.name,
         ico: s.ico,
