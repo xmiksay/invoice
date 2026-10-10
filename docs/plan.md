@@ -12,7 +12,7 @@ no OAuth, no stock/task/cost-center links). Module layout follows the infra
 
 | Topic | Decision |
 |---|---|
-| Users | Single user. One static Bearer token `INVOICE__API_TOKEN`, constant-time compare. SPA asks for it on a login screen and keeps it in `localStorage`. Same token for MCP. |
+| Users | Single user until Phase 4: one static Bearer token `INVOICE__API_TOKEN`. **Since 4a:** spaces, users, sessions and personal API tokens ([api/spaces.md](api/spaces.md), [api/auth.md](api/auth.md)). |
 | Binary | One crate, one binary: `invoice serve` (runs pending migrations on start), `invoice migrate up\|status\|down`. |
 | Frontend | Vue 3 + TS + Vite + Tailwind + Pinia + vue-i18n (cs/en), embedded via rust-embed. |
 | Scope | Czech OSVČ / s.r.o., one own company per instance, CZK + foreign currencies. |
@@ -172,6 +172,21 @@ Order (3 grill): 3a MCP → 3b Pohoda XML → 3c Money S3 XML, one PR each.
   Non-deductible received document with no code → `KodDPH` left out. Any VAT rate maps (`SeznamDalsiSazby`).
   Contract: [`docs/api/money.md`](api/money.md).
 
+### Phase 4 — multi-tenancy (epic #11)
+Order (4 grill): 4a spaces + users + login + personal tokens (#3, #4, #7 and the storage side of #10) → 4b
+invitations + members (#8) → 4c TOTP (#5) → 4d Google (#6) → 4e space settings (accounting currency, rounding,
+defaults; #3 comments) → 4f per-space design versions / preview (rest of #10). One PR each.
+- 4a: one space = one own company. Space per **subdomain** `{slug}.{base host}` of `INVOICE__PUBLIC_URL`
+  (`invoiceapp.cz`); the base host hosts registration, login and the "my spaces" hub. Slug immutable, validated,
+  reserved names. `INVOICE__API_TOKEN` removed; **public registration** (e-mail verification required, SMTP
+  required) behind `INVOICE__REGISTRATION`; no CLI bootstrap, no superadmin, no limit on spaces per user. Sessions
+  host-only (log in again on each space host, no handoff); idle 14 d / absolute 90 d; password ≥ 12, argon2id;
+  reset by e-mail. Roles owner / admin / member / accountant with a fixed matrix; tokens bound to one user + space
+  with role ≤ membership. Root tables carry `space_id`, children via parent, repo API takes `SpaceId`; ČNB rates
+  global. Storage keys and the mdcast design overlay per space under `spaces/{id}/`. No default space, no data
+  migration (no existing data). Owner deletes a space (slug + password), DB rows and storage prefix.
+  Contracts: [`docs/api/spaces.md`](api/spaces.md), [`docs/api/auth.md`](api/auth.md).
+
 ## Out of scope (for now)
 Deployment manifests, VAT return / control statement XML (EPO), automatic payment
-reminders, multiple own companies per instance, Pohoda/Money S3 import.
+reminders, multiple own companies per space (one space = one company; several companies = several spaces), Pohoda/Money S3 import.
