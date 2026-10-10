@@ -69,6 +69,25 @@ pub const RESET_IP: Limit = Limit {
     window: FIFTEEN_MIN,
 };
 
+/// Invitation lookups and accepts per IP (every request counts).
+pub const INVITE_IP: Limit = Limit {
+    name: "invite-ip",
+    max: 20,
+    window: FIFTEEN_MIN,
+};
+
+/// Invitation e-mails (create + resend) per inviting user and per space.
+pub const INVITE_USER: Limit = Limit {
+    name: "invite-user",
+    max: 20,
+    window: HOUR,
+};
+pub const INVITE_SPACE: Limit = Limit {
+    name: "invite-space",
+    max: 50,
+    window: HOUR,
+};
+
 type Key = (&'static str, String);
 
 #[derive(Default)]

@@ -90,23 +90,11 @@ impl TokenInput {
     pub fn validate(self, caller: Role, today: NaiveDate) -> Result<repo::NewToken, AppError> {
         let mut e = FieldErrors::new();
         let name = e.check("name", v::required_text(&self.name, 100));
-        let role = match self.role.as_deref().map(str::trim) {
-            None | Some("") => {
-                e.add("role", "required");
-                None
-            }
-            Some(r) => match Role::parse(r) {
-                None => {
-                    e.add("role", "invalid");
-                    None
-                }
-                Some(r) if r > caller => {
-                    e.add("role", "too_high");
-                    None
-                }
-                Some(r) => Some(r),
-            },
-        };
+        let role = e.check(
+            "role",
+            Role::from_input(self.role.as_deref())
+                .and_then(|r| if r > caller { Err("too_high") } else { Ok(r) }),
+        );
         let expires_at = match self.expires_at.as_deref().map(str::trim) {
             None | Some("") => None,
             Some(s) => match NaiveDate::parse_from_str(s, "%Y-%m-%d") {

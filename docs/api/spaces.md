@@ -51,8 +51,8 @@ member management: [members.md](members.md) (4b).
 |---|---|
 | `accountant` | read everything, PDFs, ISDOC / CSV / Pohoda / Money exports; own tokens (role `accountant`) |
 | `member` | + create / change documents, contacts, catalog, payments, imports, e-mails, MCP writes |
-| `admin` | + everything under Settings (company, accounts, VAT, series, categories, custom fields, design, e-mail, accounting), `PUT /api/space`, list / revoke everyone's tokens |
-| `owner` | + `DELETE /api/space` (members management comes in 4b) |
+| `admin` | + everything under Settings (company, accounts, VAT, series, categories, custom fields, design, e-mail, accounting), `PUT /api/space`, list / revoke everyone's tokens, members and invitations up to `admin` ([members.md](members.md)) |
+| `owner` | + `DELETE /api/space`, grant / change / remove `owner` ([members.md](members.md)) |
 
 - Enforcement is per route by an extractor (minimum role); GET / HEAD routes need `accountant`, every mutation needs
   at least `member`, settings mutations `admin`. POST routes that only read (`/compute`, previews) need `member`.
@@ -167,4 +167,5 @@ For MCP and scripts. A token belongs to **one user in one space** and works only
   returns the item plus `token`. Lists are oldest first. A token created with a token belongs to the token's user.
 - A Bearer request **with** a foreign `Origin` → 403 `csrf` (the stricter reading of auth.md's CSRF rule); without
   `Origin` it is unaffected.
-- 4a has no API to add members; the role tests write `space_members` rows directly.
+- Members are added through invitations since 4b ([members.md](members.md)); the role tests still write
+  `space_members` rows directly (`tests/common/auth.rs::member`), which is simpler.

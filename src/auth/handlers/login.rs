@@ -25,7 +25,7 @@ pub struct LoginInput {
     pub password: String,
 }
 
-fn with_cookie(status: StatusCode, cookie: &str) -> Result<Response, AppError> {
+pub(crate) fn with_cookie(status: StatusCode, cookie: &str) -> Result<Response, AppError> {
     let mut resp = status.into_response();
     let value = HeaderValue::from_str(cookie)
         .map_err(|_| anyhow::anyhow!("session cookie is not a valid header value"))?;

@@ -6,6 +6,13 @@ export const spaceRoutes: RouteRecordRaw[] = [
   ...accountRoutes,
   { path: "/", name: "home", redirect: { name: "invoices" } },
   {
+    // Reached from the invitation e-mail, signed out or as anyone: the page signs the invitee in.
+    path: "/invite",
+    name: "invite",
+    component: () => import("@/features/members/views/InviteAcceptView.vue"),
+    meta: { public: true },
+  },
+  {
     path: "/tokens",
     name: "tokens",
     component: () => import("@/features/tokens/views/TokensView.vue"),
@@ -150,6 +157,11 @@ export const spaceRoutes: RouteRecordRaw[] = [
         path: "accounting",
         name: "settings-accounting",
         component: () => import("@/features/settings/views/AccountingTab.vue"),
+      },
+      {
+        path: "members",
+        name: "settings-members",
+        component: () => import("@/features/members/views/MembersTab.vue"),
       },
       {
         path: "space",

@@ -1,0 +1,58 @@
+{
+  "intro": "Kdo má přístup do tohoto space. Odebraný člen ztratí přístup okamžitě, včetně svých API tokenů; doklady, které vytvořil, zůstanou.",
+  "you": "(vy)",
+  "columns": {
+    "name": "Jméno",
+    "email": "E-mail",
+    "role": "Role",
+    "joined": "Členem od"
+  },
+  "remove": "Odebrat",
+  "confirmRemove": "Opravdu odebrat {name} ze space? Okamžitě ztratí přístup i své API tokeny v tomto space.",
+  "removed": "Člen je odebrán.",
+  "roleChanged": "Role je změněna.",
+  "confirmOwnRole": "Opravdu změnit svou vlastní roli? Můžete přijít o oprávnění, která teď máte.",
+  "invite": {
+    "title": "Pozvat",
+    "email": "E-mail",
+    "role": "Role",
+    "submit": "Pozvat",
+    "submitting": "Zvu…"
+  },
+  "link": {
+    "label": "Odkaz pozvánky pro {email}",
+    "copy": "Kopírovat",
+    "copied": "Zkopírováno.",
+    "emailSent": "E-mail odeslán.",
+    "emailNotSent": "E-mail neodeslán (SMTP není nastaveno) – pošlete odkaz sami.",
+    "hint": "Odkaz platí 7 dní a lze ho použít jen jednou. Znovu ho nezobrazíme; při ztrátě pozvánku pošlete znovu."
+  },
+  "pending": {
+    "title": "Čekající pozvánky",
+    "empty": "Žádné čekající pozvánky.",
+    "invitedBy": "Pozval/a",
+    "expires": "Platí do",
+    "resend": "Poslat znovu",
+    "revoke": "Zrušit",
+    "confirmRevoke": "Opravdu zrušit pozvánku pro {email}? Odkaz přestane fungovat.",
+    "revoked": "Pozvánka je zrušena."
+  },
+  "leave": {
+    "title": "Opustit space",
+    "intro": "Ztratíte přístup do space {name}; vaše přihlášení a API tokeny v něm budou zrušeny. Doklady, které jste vytvořili, zůstanou.",
+    "submit": "Opustit space",
+    "confirm": "Opravdu opustit space {name}? Zpět se dostanete jen na novou pozvánku.",
+    "lastOwner": "Jste jediný vlastník tohoto space, proto ho nemůžete opustit. Nejprve v Nastavení → Členové udělejte vlastníkem dalšího člena, nebo space smažte."
+  },
+  "accept": {
+    "title": "Pozvánka do space",
+    "intro": "Byli jste pozváni do space {name} s rolí {role}.",
+    "existing": "K tomuto e-mailu už účet existuje. Pozvánku přijmete svým heslem.",
+    "new": "K tomuto e-mailu zatím účet není. Založte si ho jménem a heslem.",
+    "submitExisting": "Přijmout pozvánku",
+    "submitNew": "Vytvořit účet a přijmout",
+    "submitting": "Přijímám…",
+    "invalid": "Pozvánka je neplatná, už byla použita, nahrazena novější nebo vypršela. Požádejte o novou.",
+    "toBase": "Přejít na úvodní stránku"
+  }
+}

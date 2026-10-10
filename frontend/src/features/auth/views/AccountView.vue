@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import FormField from "@/components/form/FormField.vue";
 import { useAction } from "@/composables/useAction";
 import { useFormSubmit } from "@/composables/useFormSubmit";
+import LeaveSpaceSection from "@/features/members/components/LeaveSpaceSection.vue";
 import { collectErrors } from "@/lib/formErrors";
 import { useSessionStore } from "@/stores/session";
 import { useToastStore } from "@/stores/toast";
@@ -65,5 +66,7 @@ async function revokeOthers() {
       <p v-if="revoke.error.value" role="alert" class="alert-error">{{ revoke.error.value }}</p>
       <button type="button" class="btn" data-test="revoke-others" @click="revokeOthers">{{ t("account.sessions.revoke") }}</button>
     </section>
+
+    <LeaveSpaceSection v-if="session.role" />
   </section>
 </template>

@@ -13,7 +13,7 @@ pub mod slug;
 use std::fmt;
 
 use axum::Router;
-use axum::routing::get;
+use axum::routing::{get, post};
 use sea_orm::Value;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -71,6 +71,14 @@ impl Role {
         }
     }
 
+    /// The `role` field of a request body: `required` | `invalid`.
+    pub fn from_input(raw: Option<&str>) -> Result<Self, &'static str> {
+        match raw.map(str::trim) {
+            None | Some("") => Err("required"),
+            Some(r) => Self::parse(r).ok_or("invalid"),
+        }
+    }
+
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "accountant" => Some(Self::Accountant),
@@ -89,12 +97,14 @@ pub fn base_router() -> Router<AppState> {
 
 /// Space-host routes relative to `/api/space`.
 pub fn space_router() -> Router<AppState> {
-    Router::new().route(
-        "/",
-        get(handlers::get)
-            .put(handlers::rename)
-            .delete(handlers::delete),
-    )
+    Router::new()
+        .route(
+            "/",
+            get(handlers::get)
+                .put(handlers::rename)
+                .delete(handlers::delete),
+        )
+        .route("/leave", post(crate::members::handlers::leave))
 }
 
 #[cfg(test)]
@@ -110,6 +120,10 @@ mod tests {
             assert_eq!(Role::parse(r.as_str()), Some(r));
         }
         assert_eq!(Role::parse("root"), None);
+        assert_eq!(Role::from_input(Some(" admin ")), Ok(Role::Admin));
+        assert_eq!(Role::from_input(None), Err("required"));
+        assert_eq!(Role::from_input(Some("")), Err("required"));
+        assert_eq!(Role::from_input(Some("boss")), Err("invalid"));
         assert_eq!(Role::Accountant.min(Role::Owner), Role::Accountant);
     }
 

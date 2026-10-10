@@ -16,8 +16,8 @@ use crate::email::Mailer;
 use crate::error::AppError;
 use crate::pdf::PdfRoot;
 use crate::{
-    ares, auth, catalog, cnb, contact, csvio, document, email, health, isdoc, mcp, openapi, pdf,
-    settings, spa, space,
+    ares, auth, catalog, cnb, contact, csvio, document, email, health, isdoc, mcp, members,
+    openapi, pdf, settings, spa, space,
 };
 
 #[derive(Clone)]
@@ -41,8 +41,9 @@ pub struct AppState {
 /// `/api/health` and `/api/openapi.json` answer on any host without auth.
 /// Every other `/api` route is classified by its host first (unknown → 404),
 /// then: the public auth routes; account routes (any known host, auth);
-/// base-host routes (`/api/spaces`); space-host routes (everything of
-/// phases 1–3, `/api/space`, `/api/tokens`, MCP). Non-API paths fall
+/// base-host routes (`/api/spaces`); the public invitation accept routes
+/// (space host); space-host routes (everything of phases 1–3, `/api/space`,
+/// `/api/tokens`, members and invitations, MCP). Non-API paths fall
 /// through to the embedded SPA.
 pub fn router(state: AppState) -> Router {
     let authenticate = || middleware::from_fn_with_state(state.clone(), auth::ctx::authenticate);
@@ -50,6 +51,7 @@ pub fn router(state: AppState) -> Router {
     let space_routes = Router::new()
         .nest("/space", space::space_router())
         .nest("/tokens", auth::tokens::router())
+        .merge(members::router())
         .nest("/settings", settings::router())
         .nest("/settings/email", email::settings_router())
         .nest("/contacts", contact::router())
@@ -70,8 +72,13 @@ pub fn router(state: AppState) -> Router {
         .layer(authenticate())
         .layer(middleware::from_fn(host::base_only));
 
+    let invite_accept = members::public_router()
+        .layer(middleware::from_fn(auth::origin_if_present))
+        .layer(middleware::from_fn(host::space_only));
+
     let hosted = Router::new()
         .merge(auth::public_router())
+        .merge(invite_accept)
         .merge(auth::account_router().layer(authenticate()))
         .merge(base_routes)
         .merge(space_routes)

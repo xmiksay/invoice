@@ -41,6 +41,18 @@ describe("router (space host)", () => {
     expect(router.currentRoute.value.name).toBe("forgot");
   });
 
+  it("serves the invitation page signed out and signed in alike", async () => {
+    me(null);
+    let router = boot(spaceBoot);
+    await router.push("/invite?token=T1");
+    expect(router.currentRoute.value.name).toBe("invite");
+    me("member");
+    setActivePinia(createPinia());
+    router = boot(spaceBoot);
+    await router.push("/invite?token=T1");
+    expect(router.currentRoute.value.name).toBe("invite");
+  });
+
   it("asks /api/auth/me once and sends a signed-in user away from /login", async () => {
     const fetch = me("member");
     const router = boot(spaceBoot);
@@ -76,6 +88,8 @@ describe("router (space host)", () => {
     expect(router.currentRoute.value.name).toBe("invoice-new");
     await router.push("/settings/space");
     expect(router.currentRoute.value.name).toBe("invoices");
+    await router.push("/settings/members");
+    expect(router.currentRoute.value.name).toBe("invoices");
   });
 
   it("resolves feature routes for an admin and redirects /settings to the company tab", async () => {
@@ -87,6 +101,8 @@ describe("router (space host)", () => {
     expect(router.currentRoute.value.name).toBe("settings-space");
     await router.push("/settings/accounting");
     expect(router.currentRoute.value.name).toBe("settings-accounting");
+    await router.push("/settings/members");
+    expect(router.currentRoute.value.name).toBe("settings-members");
     await router.push("/contacts/abc");
     expect(router.currentRoute.value.name).toBe("contact-edit");
     expect(router.currentRoute.value.params.id).toBe("abc");

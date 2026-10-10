@@ -16,5 +16,7 @@
   "taken": "Tato adresa je už obsazená.",
   "mismatch": "Neodpovídá.",
   "too_high": "Vyšší než vaše vlastní role.",
-  "wrong_password": "Nesprávné heslo."
+  "wrong_password": "Nesprávné heslo.",
+  "already_member": "Tento uživatel už je členem space.",
+  "last_owner": "Poslední vlastník musí zůstat vlastníkem."
 }

@@ -6,10 +6,7 @@
 
 use axum::http::{HeaderMap, header};
 use chrono::{DateTime, Duration, FixedOffset, Utc};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    Set,
-};
+use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
 use super::crypto;
@@ -63,7 +60,7 @@ pub fn user_agent(headers: &HeaderMap) -> Option<String> {
 
 /// Start a session; returns the cookie value (shown to nobody else).
 pub async fn create(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     user_id: Uuid,
     space: Option<SpaceId>,
     user_agent: Option<String>,
@@ -87,6 +84,15 @@ pub async fn create(
 
 pub async fn delete(db: &impl ConnectionTrait, id: Uuid) -> Result<(), AppError> {
     Entity::delete_by_id(id).exec(db).await?;
+    Ok(())
+}
+
+/// The session behind a cookie value, if any (whoever it belongs to).
+pub async fn delete_by_cookie(db: &impl ConnectionTrait, cookie: &str) -> Result<(), AppError> {
+    Entity::delete_many()
+        .filter(Column::TokenHash.eq(crypto::digest(cookie)))
+        .exec(db)
+        .await?;
     Ok(())
 }
 

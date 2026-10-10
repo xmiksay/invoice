@@ -16,5 +16,7 @@
   "taken": "This address is already taken.",
   "mismatch": "Does not match.",
   "too_high": "Higher than your own role.",
-  "wrong_password": "Wrong password."
+  "wrong_password": "Wrong password.",
+  "already_member": "This user is already a member of the space.",
+  "last_owner": "The last owner has to stay an owner."
 }
