@@ -1,7 +1,7 @@
 # Users, registration, login and sessions (4a)
 
-Password accounts with server-side sessions; hosts and spaces are in [spaces.md](spaces.md). TOTP (#5) and Google
-(#6) come later.
+Password accounts with server-side sessions; hosts and spaces are in [spaces.md](spaces.md). TOTP (#5, 4c): the
+login code step, step-up codes and `user.mfaEnabled` in [mfa.md](mfa.md). Google (#6) comes later.
 
 ## Config
 - `INVOICE__REGISTRATION` (`true` / `false`, default `false`): public registration on the base host. `true` requires

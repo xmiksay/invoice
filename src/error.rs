@@ -34,6 +34,20 @@ pub enum AppError {
     #[error("e-mail not verified")]
     EmailUnverified,
 
+    /// The space requires TOTP and the user has none (login, invitation
+    /// accept). `account_created`: an invitation created the account
+    /// without a membership (`detail: "account_created"`).
+    #[error("two-factor authentication required")]
+    MfaRequired { account_created: bool },
+
+    /// A wrong second-factor code at the login's code step.
+    #[error("invalid two-factor code")]
+    MfaInvalid,
+
+    /// TOTP setup while it is already on.
+    #[error("two-factor authentication already enabled")]
+    MfaEnabled,
+
     /// A cookie-authenticated mutation without the request's own `Origin`.
     #[error("CSRF origin check failed")]
     Csrf,
@@ -166,6 +180,9 @@ impl AppError {
             Self::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
             Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             Self::EmailUnverified => (StatusCode::FORBIDDEN, "email_unverified"),
+            Self::MfaRequired { .. } => (StatusCode::FORBIDDEN, "mfa_required"),
+            Self::MfaInvalid => (StatusCode::UNAUTHORIZED, "mfa_invalid"),
+            Self::MfaEnabled => (StatusCode::CONFLICT, "mfa_enabled"),
             Self::Csrf => (StatusCode::FORBIDDEN, "csrf"),
             Self::RateLimited(_) => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
@@ -274,7 +291,8 @@ pub struct ErrorBody {
     /// Only for `validation` / `template_invalid`: camelCase field name → reason code.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fields: Option<BTreeMap<String, String>>,
-    /// For `pdf_render_failed` (the render service's message), `smtp_failed`
+    /// For `mfa_required` after an invitation created the account
+    /// (`account_created`), `pdf_render_failed` (the render service's message), `smtp_failed`
     /// (the SMTP server's response), `template_invalid` (line + message) and a
     /// `validation` error that names the offending input part (e.g. the CSV
     /// column of a `missing_column` file error).
@@ -321,6 +339,9 @@ impl AppError {
                 Some(d.clone())
             }
             Self::TemplateInvalid { detail, .. } => Some(detail.clone()),
+            Self::MfaRequired {
+                account_created: true,
+            } => Some("account_created".into()),
             _ => None,
         };
         ErrorBody {

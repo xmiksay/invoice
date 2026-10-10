@@ -42,6 +42,8 @@ pub struct Authed {
     /// `None` on the base host.
     pub space: Option<Membership>,
     pub via: Via,
+    /// The user has TOTP on (`docs/api/mfa.md`).
+    pub mfa_enabled: bool,
 }
 
 impl Authed {
@@ -140,6 +142,7 @@ async fn by_token(state: &AppState, host: &HostCtx, token: &str) -> Result<Authe
         .await?
         .ok_or(AppError::Unauthorized)?;
     let token_role = found.token_role.ok_or(AppError::Unauthorized)?;
+    let mfa_enabled = found.mfa_enabled;
     let (user, member_role) = member(found.user, found.member_role)?;
     Ok(Authed {
         user,
@@ -150,6 +153,7 @@ async fn by_token(state: &AppState, host: &HostCtx, token: &str) -> Result<Authe
             role: token_role.min(member_role),
         }),
         via: Via::Token(found.id),
+        mfa_enabled,
     })
 }
 
@@ -165,8 +169,10 @@ async fn by_session(state: &AppState, host: &HostCtx, cookie: &str) -> Result<Au
             user: found.user,
             space: None,
             via: Via::Session(found.id),
+            mfa_enabled: found.mfa_enabled,
         });
     };
+    let mfa_enabled = found.mfa_enabled;
     let (user, role) = member(found.user, found.member_role)?;
     Ok(Authed {
         user,
@@ -177,6 +183,7 @@ async fn by_session(state: &AppState, host: &HostCtx, cookie: &str) -> Result<Au
             role,
         }),
         via: Via::Session(found.id),
+        mfa_enabled,
     })
 }
 

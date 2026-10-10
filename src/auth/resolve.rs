@@ -19,7 +19,8 @@ use crate::space::{Role, SpaceId};
 const TOUCH_EVERY: Duration = Duration::minutes(1);
 
 const USER_COLUMNS: &str = "u.id AS u_id, u.email, u.display_name, u.password_hash, \
-     u.email_verified_at, u.disabled, u.created_at AS u_created, m.role AS member_role";
+     u.email_verified_at, u.disabled, u.created_at AS u_created, \
+     u.totp_secret IS NOT NULL AS mfa_enabled, m.role AS member_role";
 
 #[derive(Debug, FromQueryResult)]
 struct Row {
@@ -39,6 +40,7 @@ struct Row {
     email_verified_at: Option<DateTime<FixedOffset>>,
     disabled: bool,
     u_created: DateTime<FixedOffset>,
+    mfa_enabled: bool,
 }
 
 /// A live credential with its user and membership.
@@ -51,6 +53,8 @@ pub struct Found {
     pub member_role: Option<Role>,
     /// Tokens only.
     pub token_role: Option<Role>,
+    /// The user has TOTP on.
+    pub mfa_enabled: bool,
 }
 
 impl Row {
@@ -59,6 +63,7 @@ impl Row {
             id: self.cred_id,
             member_role: self.member_role.as_deref().and_then(Role::parse),
             token_role: self.token_role.as_deref().and_then(Role::parse),
+            mfa_enabled: self.mfa_enabled,
             user: user::Model {
                 id: self.u_id,
                 email: self.email,

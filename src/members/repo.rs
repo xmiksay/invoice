@@ -24,6 +24,7 @@ struct Row {
     display_name: String,
     role: String,
     joined_at: DateTime<FixedOffset>,
+    mfa_enabled: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +34,7 @@ pub struct MemberRow {
     pub display_name: String,
     pub role: Role,
     pub joined_at: DateTime<FixedOffset>,
+    pub mfa_enabled: bool,
 }
 
 /// Members of `space` (only `user` when given), by role (owner first),
@@ -42,7 +44,8 @@ async fn query(
     space: SpaceId,
     user: Option<Uuid>,
 ) -> Result<Vec<MemberRow>, AppError> {
-    let sql = "SELECT m.user_id, u.email, u.display_name, m.role, m.created_at AS joined_at \
+    let sql = "SELECT m.user_id, u.email, u.display_name, m.role, m.created_at AS joined_at, \
+         u.totp_secret IS NOT NULL AS mfa_enabled \
          FROM space_members m JOIN users u ON u.id = m.user_id \
          WHERE m.space_id = $1 AND ($2::uuid IS NULL OR m.user_id = $2) \
          ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'member' THEN 2 ELSE 3 END, \
@@ -62,6 +65,7 @@ async fn query(
                 email: r.email,
                 display_name: r.display_name,
                 joined_at: r.joined_at,
+                mfa_enabled: r.mfa_enabled,
             })
         })
         .collect())

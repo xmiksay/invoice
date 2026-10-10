@@ -12,7 +12,7 @@ use crate::auth::ctx::Authed;
 use crate::auth::mail::{self, Mail};
 use crate::auth::ratelimit::RESET_IP;
 use crate::auth::users::{self, TokenKind};
-use crate::auth::{crypto, session};
+use crate::auth::{crypto, mfa, session};
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::ApiJson;
 
@@ -21,6 +21,8 @@ use crate::extract::ApiJson;
 pub struct ChangeInput {
     pub current_password: String,
     pub new_password: String,
+    /// Users with TOTP: a TOTP or recovery code.
+    pub code: Option<String>,
 }
 
 #[utoipa::path(
@@ -32,7 +34,8 @@ pub struct ChangeInput {
     responses(
         (status = 204, description = "Changed; the user's other sessions are revoked"),
         (status = 403, description = "`forbidden` with a token", body = ErrorBody),
-        (status = 422, description = "`currentPassword: invalid`, `newPassword: too_short | too_long`", body = ErrorBody),
+        (status = 422, description = "`currentPassword: invalid`, `newPassword: too_short | too_long`, `code: required | invalid` (users with TOTP)", body = ErrorBody),
+        (status = 429, description = "`rate_limited` (login bucket)", body = ErrorBody),
     )
 )]
 pub async fn change(
@@ -46,6 +49,8 @@ pub async fn change(
     if !super::check_password(&state, &authed.user, input.current_password).await? {
         e.add("currentPassword", "invalid");
     }
+    let code = input.code.as_deref();
+    mfa::step_up(&state, &authed.user, authed.mfa_enabled, code, &mut e).await?;
     e.into_result()?;
     let hash = crypto::hash_password(input.new_password).await?;
     users::set_password(&state.db, authed.user.id, hash).await?;

@@ -161,6 +161,7 @@ async fn serve() -> Result<()> {
         public: cfg.public.clone(),
         registration: cfg.registration,
         trust_forwarded: cfg.trust_forwarded,
+        secret_key: cfg.secret_key.clone(),
         limiter: RateLimiter::default(),
     };
     let listener = tokio::net::TcpListener::bind(&cfg.bind)

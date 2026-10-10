@@ -36,6 +36,7 @@ Later phases add more codes (`document_locked`, `invalid_state`, `cnb_unavailabl
 | [spaces.md](spaces.md) | hosts, spaces, roles, data scoping, personal API tokens (4a) |
 | [auth.md](auth.md) | users, registration, login, sessions, password reset, CSRF (4a) |
 | [members.md](members.md) | members, roles management, invitations, leaving a space (4b) |
+| [mfa.md](mfa.md) | TOTP second factor, recovery codes, space MFA policy, step-up (4c) |
 
 Each part ends with a "Clarifications (as implemented)" section — the authoritative record of behaviour beyond the
 original contract. Keep every file under 400 lines; add a new part rather than growing one past the cap.

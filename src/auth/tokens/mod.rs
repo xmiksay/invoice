@@ -2,19 +2,21 @@
 
 pub mod repo;
 
-use axum::Json;
 use axum::Router;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::{delete, get};
+use axum::{Extension, Json};
 use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::app::AppState;
-use crate::auth::ctx::Read;
+use crate::auth::ctx::{Authed, Read};
 use crate::auth::entity::{api_token, user};
+use crate::auth::host::HostCtx;
+use crate::auth::mfa;
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::{ApiJson, ApiPath};
 use crate::space::Role;
@@ -84,6 +86,8 @@ pub struct TokenInput {
     pub role: Option<String>,
     /// `YYYY-MM-DD`, today or later; null = no expiry.
     pub expires_at: Option<String>,
+    /// Users with TOTP: a TOTP or recovery code.
+    pub code: Option<String>,
 }
 
 impl TokenInput {
@@ -145,16 +149,39 @@ pub async fn list(
     request_body = TokenInput,
     responses(
         (status = 201, body = CreatedToken),
-        (status = 422, description = "Validation failed (`role: too_high`, …)", body = ErrorBody),
+        (status = 403, description = "`mfa_required`: the space requires TOTP and the caller has none", body = ErrorBody),
+        (status = 422, description = "Validation failed (`role: too_high`, …; `code: required | invalid` for a user with TOTP)", body = ErrorBody),
+        (status = 429, description = "`rate_limited` (login bucket, code checks)", body = ErrorBody),
     )
 )]
 pub async fn create(
     State(state): State<AppState>,
     access: Read,
-    ApiJson(input): ApiJson<TokenInput>,
+    authed: Authed,
+    Extension(host): Extension<HostCtx>,
+    ApiJson(mut input): ApiJson<TokenInput>,
 ) -> Result<(StatusCode, Json<CreatedToken>), AppError> {
     let s = access.scope;
-    let new = input.validate(s.role, Utc::now().date_naive())?;
+    // Minting a credential counts as a new login: the space's policy applies.
+    if host.requires_mfa() && !authed.mfa_enabled {
+        return Err(AppError::MfaRequired {
+            account_created: false,
+        });
+    }
+    let code = input.code.take();
+    let mfa_on = authed.mfa_enabled;
+    let new = match input.validate(s.role, Utc::now().date_naive()) {
+        Ok(new) => new,
+        Err(AppError::Validation(mut e)) => {
+            // Adds only `code: required` here (nothing is spent on a failing request).
+            mfa::step_up(&state, &authed.user, mfa_on, code.as_deref(), &mut e).await?;
+            return Err(AppError::Validation(e));
+        }
+        Err(other) => return Err(other),
+    };
+    let mut e = FieldErrors::new();
+    mfa::step_up(&state, &authed.user, mfa_on, code.as_deref(), &mut e).await?;
+    e.into_result()?;
     let (row, token) = repo::create(&state.db, s.space, s.user_id, new).await?;
     Ok((
         StatusCode::CREATED,
@@ -200,6 +227,7 @@ mod tests {
             name: name.into(),
             role: Some(role.into()),
             expires_at: exp.map(str::to_string),
+            code: None,
         }
     }
 

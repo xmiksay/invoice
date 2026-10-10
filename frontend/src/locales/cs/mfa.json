@@ -1,0 +1,45 @@
+{
+  "title": "Dvoufázové ověření",
+  "password": "Vaše heslo",
+  "off": "Vypnuto. Kromě hesla můžete při přihlášení vyžadovat i kód z aplikace (Google Authenticator, Aegis, 1Password…).",
+  "on": "Zapnuto. Zbývající záchranné kódy: {count}.",
+  "codesLow": "Záchranných kódů vám dochází. Vygenerujte si nové.",
+  "requiredHint": "Vyžadují ho tyto spaces: {spaces}. Bez něj se do nich nepřihlásíte.",
+  "code": {
+    "totp": "Kód z aplikace",
+    "recovery": "Záchranný kód",
+    "anyHint": "Nebo jeden ze záchranných kódů."
+  },
+  "enable": {
+    "open": "Zapnout dvoufázové ověření",
+    "passwordIntro": "Pro zapnutí potvrďte své heslo.",
+    "continue": "Pokračovat",
+    "scan": "Naskenujte QR kód v aplikaci pro ověřování, nebo do ní zadejte klíč ručně. Pak opište 6místný kód, který aplikace ukáže.",
+    "qrAlt": "QR kód pro aplikaci pro ověřování",
+    "manualKey": "Klíč pro ruční zadání",
+    "submit": "Zapnout",
+    "expired": "Nastavení vypršelo (platí 10 minut). Zadejte heslo a začněte znovu."
+  },
+  "codes": {
+    "title": "Záchranné kódy",
+    "warning": "Uložte si je na bezpečné místo. Každý kód lze použít jednou místo kódu z aplikace, např. při ztrátě telefonu. Znovu je už nezobrazíme.",
+    "copy": "Kopírovat",
+    "copied": "Zkopírováno.",
+    "download": "Stáhnout .txt",
+    "saved": "Uložil(a) jsem je.",
+    "close": "Hotovo",
+    "fileHeader": "Záchranné kódy Invoice pro {email}. Každý lze použít jen jednou."
+  },
+  "regenerate": {
+    "open": "Nové záchranné kódy",
+    "intro": "Vygeneruje 10 nových záchranných kódů; dosavadní přestanou platit.",
+    "submit": "Vygenerovat"
+  },
+  "disable": {
+    "open": "Vypnout",
+    "intro": "Přihlášení pak bude chránit jen heslo.",
+    "requiredBy": "Tyto spaces dvoufázové ověření vyžadují. Po vypnutí budete z nich ihned odhlášeni, vaše API tokeny v nich přestanou fungovat a znovu se do nich přihlásíte až po opětovném zapnutí:",
+    "submit": "Vypnout dvoufázové ověření",
+    "done": "Dvoufázové ověření je vypnuté."
+  }
+}

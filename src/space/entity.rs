@@ -11,6 +11,8 @@ pub mod space {
         pub slug: String,
         pub name: String,
         pub created_at: DateTimeWithTimeZone,
+        /// Logins on this host need TOTP (`docs/api/mfa.md`).
+        pub require_mfa: bool,
     }
 
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

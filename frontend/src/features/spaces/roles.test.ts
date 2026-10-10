@@ -7,9 +7,9 @@ const MATRIX: Record<Role, Action[]> = {
   accountant: ["read"],
   member: ["read", "write"],
   admin: ["read", "write", "settings", "viewAllTokens"],
-  owner: ["read", "write", "settings", "viewAllTokens", "deleteSpace"],
+  owner: ["read", "write", "settings", "viewAllTokens", "deleteSpace", "spacePolicy"],
 };
-const ACTIONS: Action[] = ["read", "write", "settings", "viewAllTokens", "deleteSpace"];
+const ACTIONS: Action[] = ["read", "write", "settings", "viewAllTokens", "deleteSpace", "spacePolicy"];
 
 describe("can()", () => {
   it.each(ROLES)("%s may do exactly its row of the matrix", (role) => {

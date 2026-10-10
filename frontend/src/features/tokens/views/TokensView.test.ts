@@ -100,4 +100,46 @@ describe("TokensView", () => {
     expect(calls(fetch)).toEqual(["GET /api/tokens", "DELETE /api/tokens/t1"]);
     expect(w.findAll('[data-test="token-row"]').map((r) => r.find("td").text())).toEqual(["Token t2"]);
   });
+
+  describe("step-up code", () => {
+    const open = async (mfaEnabled: boolean) => {
+      const r = await mountView(TokensView, { path: "/tokens", role: "member", mfaEnabled });
+      await r.w.find('[data-test="new-token"]').trigger("click");
+      await r.w.find('[data-test="token-name"]').setValue("MCP");
+      return r;
+    };
+    const submit = async (w: Awaited<ReturnType<typeof open>>["w"]) => {
+      await w.find('[data-test="token-dialog"] form').trigger("submit");
+      await flushPromises();
+    };
+
+    it("is absent without TOTP", async () => {
+      mockFetchRoutes({ "GET /api/tokens": [] });
+      const { w } = await open(false);
+      expect(w.find('[data-test="token-code"]').exists()).toBe(false);
+    });
+
+    it("is required with TOTP, sent with the token and a wrong one is shown at the field", async () => {
+      const fetch = mockFetchRoutes({ "GET /api/tokens": [], "POST /api/tokens": reply(422, { code: "validation", fields: { code: "invalid" } }) });
+      const { w } = await open(true);
+      await submit(w);
+      expect(calls(fetch)).toEqual(["GET /api/tokens"]);
+      expect(w.find("#token-code-error").text()).toBe(i18n.global.t("validation.required"));
+      await w.find('[data-test="token-code"]').setValue(" 123456 ");
+      await submit(w);
+      expect(sentRequest(fetch, 1).body).toEqual({ name: "MCP", role: "accountant", expiresAt: null, code: "123456" });
+      expect(w.find("#token-code-error").text()).toBe("Wrong code.");
+      expect(w.find('[data-test="token-secret"]').exists()).toBe(false);
+    });
+
+    it("explains 403 mfa_required with a link to the account on the base host", async () => {
+      mockFetchRoutes({ "GET /api/tokens": [], "POST /api/tokens": reply(403, { code: "mfa_required" }) });
+      const { w } = await open(false);
+      await submit(w);
+      expect(w.find('[data-test="token-mfa-required"]').text()).toContain("This space requires two-factor authentication");
+      expect(w.find('[data-test="token-mfa-link"]').attributes("href")).toBe("http://localhost:3000/account");
+      expect(w.find('[data-test="token-error"]').exists()).toBe(false);
+      expect(w.find('[data-test="token-secret"]').exists()).toBe(false);
+    });
+  });
 });

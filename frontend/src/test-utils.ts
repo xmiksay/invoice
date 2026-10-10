@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { Me } from "@/features/auth/types";
+import type { Me, MfaStatus } from "@/features/auth/types";
 import type { AppContext, Role } from "@/features/spaces/types";
 import { useSessionStore } from "@/stores/session";
 
@@ -100,10 +100,13 @@ export const SPACE_CONTEXT: AppContext = {
   baseUrl: "http://localhost:3000",
 };
 
+/** `GET /api/account/mfa` of a user without TOTP (the account page loads it). */
+export const MFA_OFF: MfaStatus = { enabled: false, recoveryCodesLeft: 0, requiredBy: [] };
+
 /** `GET /api/auth/me` body; `role` null = a base-host session. */
-export function meFixture(role: Role | null = "owner", emailVerified = true): Me {
+export function meFixture(role: Role | null = "owner", emailVerified = true, mfaEnabled = false): Me {
   return {
-    user: { id: "u1", email: "jana@example.cz", displayName: "Jana", emailVerified },
+    user: { id: "u1", email: "jana@example.cz", displayName: "Jana", emailVerified, mfaEnabled },
     space: role ? { slug: "firma", name: "Firma s.r.o.", role } : null,
   };
 }

@@ -19,25 +19,33 @@ pub const IDLE: Duration = Duration::days(14);
 pub const ABSOLUTE: Duration = Duration::days(90);
 const USER_AGENT_MAX: usize = 200;
 
-/// `Set-Cookie` for a new session.
-pub fn set_cookie(value: &str, secure: bool) -> String {
+/// A host-only `Set-Cookie` (`HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure`
+/// on https); `max_age` 0 with an empty value removes the cookie.
+pub fn cookie(name: &str, value: &str, max_age: Duration, secure: bool) -> String {
     format!(
-        "{COOKIE}={value}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}{}",
-        ABSOLUTE.num_seconds(),
+        "{name}={value}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}{}",
+        max_age.num_seconds(),
         if secure { "; Secure" } else { "" }
     )
+}
+
+/// `Set-Cookie` for a new session.
+pub fn set_cookie(value: &str, secure: bool) -> String {
+    cookie(COOKIE, value, ABSOLUTE, secure)
 }
 
 /// `Set-Cookie` that removes the cookie.
 pub fn clear_cookie(secure: bool) -> String {
-    format!(
-        "{COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0{}",
-        if secure { "; Secure" } else { "" }
-    )
+    cookie(COOKIE, "", Duration::zero(), secure)
 }
 
 /// The `invoice_session` value of the request, if any.
 pub fn cookie_value(headers: &HeaderMap) -> Option<String> {
+    named_cookie(headers, COOKIE)
+}
+
+/// The non-empty value of cookie `name` in the request, if any.
+pub fn named_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
         .get_all(header::COOKIE)
         .iter()
@@ -45,7 +53,7 @@ pub fn cookie_value(headers: &HeaderMap) -> Option<String> {
         .flat_map(|v| v.split(';'))
         .find_map(|part| {
             part.trim()
-                .strip_prefix(COOKIE)
+                .strip_prefix(name)
                 .and_then(|rest| rest.strip_prefix('='))
                 .filter(|v| !v.is_empty())
                 .map(str::to_string)
@@ -96,12 +104,18 @@ pub async fn delete_by_cookie(db: &impl ConnectionTrait, cookie: &str) -> Result
     Ok(())
 }
 
-/// Every session of the user except `keep` (all hosts).
+/// Every session of the user except `keep` (all hosts), and every pending
+/// TOTP login of the user (a password change / reset or "sign out
+/// elsewhere" must also end a half-finished login).
 pub async fn delete_others(
     db: &impl ConnectionTrait,
     user_id: Uuid,
     keep: Option<Uuid>,
 ) -> Result<(), AppError> {
+    super::entity::mfa_login::Entity::delete_many()
+        .filter(super::entity::mfa_login::Column::UserId.eq(user_id))
+        .exec(db)
+        .await?;
     let mut q = Entity::delete_many().filter(Column::UserId.eq(user_id));
     if let Some(id) = keep {
         q = q.filter(Column::Id.ne(id));

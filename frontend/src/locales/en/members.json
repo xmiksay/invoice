@@ -5,7 +5,8 @@
     "name": "Name",
     "email": "E-mail",
     "role": "Role",
-    "joined": "Member since"
+    "joined": "Member since",
+    "mfa": "MFA"
   },
   "remove": "Remove",
   "confirmRemove": "Really remove {name} from the space? They lose access and their API tokens in this space at once.",
@@ -53,6 +54,22 @@
     "submitNew": "Create account and accept",
     "submitting": "Accepting…",
     "invalid": "The invitation is invalid, already used, replaced by a newer one or expired. Ask for a new one.",
-    "toBase": "Go to the home page"
+    "toBase": "Go to the home page",
+    "requireMfaExisting": "This space requires two-factor authentication. If you have it on, enter the code from your app as well.",
+    "requireMfaNew": "This space requires two-factor authentication. After creating the account you will have to turn it on before joining.",
+    "mfa": {
+      "existing": "The space {name} requires two-factor authentication, which your account does not have. The invitation stays valid.",
+      "created": "Your account is created. The space {name} requires two-factor authentication, so you have not joined yet. The invitation stays valid.",
+      "link": "Go to your account on the main site",
+      "steps": {
+        "login": "Sign in on the main site with your e-mail and password.",
+        "enable": "Turn on two-factor authentication in your account.",
+        "reopen": "Open the invitation link again."
+      }
+    }
+  },
+  "mfa": {
+    "on": "on",
+    "off": "off"
   }
 }

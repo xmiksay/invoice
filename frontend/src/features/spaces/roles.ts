@@ -1,7 +1,7 @@
 import { ROLES, type Role } from "./types";
 
 /** What the UI shows or hides per role; the server enforces the same matrix (docs/api/spaces.md). */
-export type Action = "read" | "write" | "settings" | "viewAllTokens" | "deleteSpace";
+export type Action = "read" | "write" | "settings" | "viewAllTokens" | "deleteSpace" | "spacePolicy";
 
 const MIN_ROLE: Record<Action, Role> = {
   read: "accountant",
@@ -9,6 +9,8 @@ const MIN_ROLE: Record<Action, Role> = {
   settings: "admin",
   viewAllTokens: "admin",
   deleteSpace: "owner",
+  /** The "require TOTP" switch (docs/api/mfa.md). */
+  spacePolicy: "owner",
 };
 
 const rank = (role: Role) => ROLES.indexOf(role);

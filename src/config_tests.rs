@@ -1,12 +1,48 @@
 use super::*;
 
+const KEY: &str = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+
+/// `pairs` plus a valid `INVOICE__SECRET_KEY` unless `pairs` sets one.
 fn env(pairs: &[(&str, &str)]) -> Option<HashMap<String, String>> {
-    Some(
-        pairs
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect(),
-    )
+    let mut map: HashMap<String, String> = pairs
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    map.entry("INVOICE__SECRET_KEY".into())
+        .or_insert_with(|| KEY.into());
+    Some(map)
+}
+
+#[test]
+fn secret_key_is_required_and_checked() {
+    let base = [
+        ("INVOICE__DATABASE_URL", "postgres://x"),
+        ("INVOICE__PUBLIC_URL", "http://localhost:3000"),
+    ];
+    let cfg = Config::from_source(env(&base)).expect("valid config");
+    assert_eq!(cfg.secret_key.bytes()[1], 1);
+    assert!(!format!("{cfg:?}").contains(KEY));
+    for bad in [
+        "",
+        " ",
+        "short",
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHg==",
+    ] {
+        let mut pairs = base.to_vec();
+        pairs.push(("INVOICE__SECRET_KEY", bad));
+        let err = Config::from_source(env(&pairs)).expect_err(bad);
+        assert!(
+            format!("{err:#}").contains("INVOICE__SECRET_KEY"),
+            "{err:#}"
+        );
+    }
+    let mut map = env(&base).unwrap_or_default();
+    map.remove("INVOICE__SECRET_KEY");
+    let err = Config::from_source(Some(map)).expect_err("missing key");
+    assert!(
+        format!("{err:#}").contains("INVOICE__SECRET_KEY"),
+        "{err:#}"
+    );
 }
 
 #[test]

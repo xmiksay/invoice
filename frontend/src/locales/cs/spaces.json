@@ -44,5 +44,17 @@
     "password": "Vaše heslo",
     "submit": "Nevratně smazat space",
     "submitting": "Mažu…"
+  },
+  "mfa": {
+    "title": "Dvoufázové ověření",
+    "toggle": "Vyžadovat dvoufázové ověření",
+    "intro": "Platí od příštího přihlášení: člen bez dvoufázového ověření se do tohoto space nepřihlásí. Stávající přihlášení a API tokeny fungují dál, dokud nevyprší nebo nejsou zrušeny.",
+    "ownerFirst": "Nejprve si dvoufázové ověření zapněte ve svém účtu.",
+    "toAccount": "Přejít do účtu",
+    "lockedOut": "Tito členové nemají dvoufázové ověření a při příštím přihlášení budou odmítnuti, dokud si ho nezapnou:",
+    "allSet": "Všichni členové mají dvoufázové ověření zapnuté.",
+    "enable": "Zapnout požadavek",
+    "disableIntro": "Členové se pak budou moci přihlásit i bez dvoufázového ověření.",
+    "disable": "Vypnout požadavek"
   }
 }

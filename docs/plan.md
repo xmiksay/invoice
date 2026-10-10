@@ -192,6 +192,12 @@ defaults; #3 comments) → 4f per-space design versions / preview (rest of #10).
   on the space host (existing account: password; new account: name + password, verified, works with registration
   off) → membership + session. Members list admin+ only; anyone may leave. Removal / leave deletes the member's
   sessions and tokens in that space at once. Contract: [`docs/api/members.md`](api/members.md).
+- 4c grill: TOTP per user, secrets encrypted with the new required `INVOICE__SECRET_KEY` (AES-256-GCM), 10 recovery
+  codes. Owner can require MFA per space: a member without TOTP is refused at login (enrol on the base host), the
+  policy applies from the next login (existing sessions / tokens keep working). Disabling TOTP is allowed but drops
+  the user's sessions and tokens in requiring spaces at once. Invitations into such a space need TOTP enabled
+  first. Step-up code for password change, space delete, token create, invite accept, MFA management. No "trust
+  this browser". Contract: [`docs/api/mfa.md`](api/mfa.md).
 - As implemented (4a): migration `m20261016_000001_spaces` (refuses existing data), modules `src/auth/` (hosts,
   sessions, tokens, CSRF, rate limits) and `src/space/` (`SpaceId`, roles, per-space seeds), storage scoped to
   `spaces/{id}/`; details in the Clarifications of [spaces.md](api/spaces.md) and [auth.md](api/auth.md).

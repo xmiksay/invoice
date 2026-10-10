@@ -53,6 +53,7 @@ async function remove(member: Member) {
               <th>{{ t("members.columns.name") }}</th>
               <th>{{ t("members.columns.email") }}</th>
               <th>{{ t("members.columns.role") }}</th>
+              <th>{{ t("members.columns.mfa") }}</th>
               <th>{{ t("members.columns.joined") }}</th>
               <th><span class="sr-only">{{ t("common.actions") }}</span></th>
             </tr>
@@ -76,6 +77,10 @@ async function remove(member: Member) {
                   <option v-for="r in rolesFor(member)" :key="r" :value="r">{{ t(`spaces.roles.${r}`) }}</option>
                 </select>
                 <span v-else data-test="member-role-text">{{ t(`spaces.roles.${member.role}`) }}</span>
+              </td>
+              <td data-test="member-mfa">
+                <span v-if="member.mfaEnabled" class="badge">{{ t("members.mfa.on") }}</span>
+                <span v-else class="text-gray-500">{{ t("members.mfa.off") }}</span>
               </td>
               <td class="whitespace-nowrap">{{ formatDate(member.joinedAt, locale) }}</td>
               <td class="text-right">

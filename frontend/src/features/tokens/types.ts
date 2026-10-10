@@ -25,4 +25,6 @@ export interface CreateTokenBody {
   name: string;
   role: Role;
   expiresAt: string | null;
+  /** Step-up, only for a user with TOTP. */
+  code?: string;
 }

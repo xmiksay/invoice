@@ -27,6 +27,8 @@ pub struct Member {
     pub joined_at: DateTime<FixedOffset>,
     /// The caller's own row.
     pub is_self: bool,
+    /// The member has TOTP on (who a space policy would lock out).
+    pub mfa_enabled: bool,
 }
 
 fn item(m: MemberRow, me: Uuid) -> Member {
@@ -37,6 +39,7 @@ fn item(m: MemberRow, me: Uuid) -> Member {
         display_name: m.display_name,
         role: m.role,
         joined_at: m.joined_at,
+        mfa_enabled: m.mfa_enabled,
     }
 }
 

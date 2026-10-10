@@ -1,5 +1,5 @@
 //! `/api/spaces` (base host: my spaces, create) and `/api/space` (space
-//! host: the current space, rename, delete).
+//! host: the current space, update (name, TOTP policy), delete).
 
 use axum::Json;
 use axum::extract::State;
@@ -11,18 +11,21 @@ use super::entity::space;
 use super::{Role, repo, slug};
 use crate::app::AppState;
 use crate::auth::handlers::check_password;
-use crate::auth::{Authed, Manage, Own, Read};
+use crate::auth::{Authed, Manage, Own, Read, mfa};
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::ApiJson;
 use crate::validation as v;
 
 #[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct SpaceInfo {
     pub slug: String,
     pub name: String,
     pub role: Role,
     /// `{scheme}://{slug}.{base host}{:port}`.
     pub url: String,
+    /// New logins on this host need TOTP (`docs/api/mfa.md`).
+    pub require_mfa: bool,
 }
 
 fn info(state: &AppState, s: space::Model, role: Role) -> SpaceInfo {
@@ -31,6 +34,7 @@ fn info(state: &AppState, s: space::Model, role: Role) -> SpaceInfo {
         slug: s.slug,
         name: s.name,
         role,
+        require_mfa: s.require_mfa,
     }
 }
 
@@ -113,9 +117,15 @@ pub async fn get(State(state): State<AppState>, access: Read) -> Result<Json<Spa
 }
 
 #[derive(Debug, Default, Deserialize, ToSchema)]
-#[serde(default)]
-pub struct RenameInput {
-    pub name: String,
+#[serde(rename_all = "camelCase", default)]
+pub struct UpdateInput {
+    /// Omitted → unchanged.
+    pub name: Option<String>,
+    /// Owner only, session only, needs the owner's own TOTP and a step-up
+    /// `code` (on and off). Omitted → unchanged.
+    pub require_mfa: Option<bool>,
+    /// TOTP or recovery code; required with `requireMfa`.
+    pub code: Option<String>,
 }
 
 #[utoipa::path(
@@ -123,20 +133,41 @@ pub struct RenameInput {
     path = "/api/space",
     tag = "spaces",
     security(("cookie" = []), ("bearer" = [])),
-    request_body = RenameInput,
+    request_body = UpdateInput,
     responses(
         (status = 200, body = SpaceInfo),
-        (status = 403, description = "`forbidden` below admin", body = ErrorBody),
-        (status = 422, description = "`name: required | too_long`", body = ErrorBody),
+        (status = 403, description = "`forbidden` below admin, or `requireMfa` sent by a non-owner or with a token", body = ErrorBody),
+        (status = 422, description = "`name: required | too_long`, `requireMfa: mfa_not_enabled`, `code: required | invalid`", body = ErrorBody),
+        (status = 429, description = "`rate_limited` (login bucket, code checks)", body = ErrorBody),
     )
 )]
-pub async fn rename(
+pub async fn update(
     State(state): State<AppState>,
     access: Manage,
-    ApiJson(input): ApiJson<RenameInput>,
+    authed: Authed,
+    ApiJson(input): ApiJson<UpdateInput>,
 ) -> Result<Json<SpaceInfo>, AppError> {
-    let name = v::required_text(&input.name, 200).map_err(|r| AppError::field("name", r))?;
-    let row = repo::rename(&state.db, access.space(), name).await?;
+    if input.require_mfa.is_some() {
+        if access.scope.role < Role::Owner {
+            return Err(AppError::Forbidden);
+        }
+        authed.require_session()?;
+    }
+    let mut e = FieldErrors::new();
+    let name = match input.name.as_deref() {
+        Some(raw) => e.check("name", v::required_text(raw, 200)),
+        None => None,
+    };
+    if input.require_mfa.is_some() {
+        if authed.mfa_enabled {
+            let code = input.code.as_deref();
+            mfa::step_up(&state, &authed.user, true, code, &mut e).await?;
+        } else {
+            e.add("requireMfa", "mfa_not_enabled");
+        }
+    }
+    e.into_result()?;
+    let row = repo::update(&state.db, access.space(), name, input.require_mfa).await?;
     Ok(Json(info(&state, row, access.scope.role)))
 }
 
@@ -145,6 +176,8 @@ pub async fn rename(
 pub struct DeleteInput {
     pub slug: String,
     pub password: String,
+    /// Users with TOTP: a TOTP or recovery code.
+    pub code: Option<String>,
 }
 
 #[utoipa::path(
@@ -156,7 +189,8 @@ pub struct DeleteInput {
     responses(
         (status = 204, description = "The space, all its data and files are deleted"),
         (status = 403, description = "`forbidden`: not the owner, or a token", body = ErrorBody),
-        (status = 422, description = "`slug: mismatch`, `password: invalid`", body = ErrorBody),
+        (status = 422, description = "`slug: mismatch`, `password: invalid`, `code: required | invalid` (users with TOTP)", body = ErrorBody),
+        (status = 429, description = "`rate_limited` (login bucket)", body = ErrorBody),
     )
 )]
 pub async fn delete(
@@ -174,6 +208,8 @@ pub async fn delete(
     if !check_password(&state, &authed.user, input.password).await? {
         e.add("password", "invalid");
     }
+    let code = input.code.as_deref();
+    mfa::step_up(&state, &authed.user, authed.mfa_enabled, code, &mut e).await?;
     e.into_result()?;
     let space = access.space();
     repo::delete(&state.db, space).await?;

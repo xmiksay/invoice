@@ -250,7 +250,7 @@ async fn current_space_get_and_rename() {
     assert_eq!(s, StatusCode::OK);
     assert_eq!(
         j,
-        json!({ "slug": "acme", "name": "Space acme", "role": "owner", "url": "http://acme.localhost:3000" })
+        json!({ "slug": "acme", "name": "Space acme", "role": "owner", "url": "http://acme.localhost:3000", "requireMfa": false })
     );
     let (s, j) = on(
         &app,

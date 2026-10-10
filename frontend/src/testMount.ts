@@ -26,10 +26,12 @@ export interface MountOptions {
   /** Signed-in space role; `null` = base-host user; `"guest"` = signed out. */
   role?: Role | null | "guest";
   context?: AppContext;
+  /** The signed-in user has TOTP on (step-up code fields appear). */
+  mfaEnabled?: boolean;
 }
 
 /** Mounts a routed view with pinia, i18n and stub routes for every link target it may use. */
-export async function mountView(component: Component, { path = "/", role = "guest", context }: MountOptions = {}) {
+export async function mountView(component: Component, { path = "/", role = "guest", context, mfaEnabled = false }: MountOptions = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const ctx = context ?? (role === null || role === "guest" ? BASE_CONTEXT : SPACE_CONTEXT);
@@ -38,7 +40,7 @@ export async function mountView(component: Component, { path = "/", role = "gues
     session.applyBoot({ status: "ok", context: structuredClone(ctx) });
     session.loaded = true;
   } else {
-    signIn(role, ctx);
+    signIn(role, ctx).setMfaEnabled(mfaEnabled);
   }
   const bare = path.split("?")[0];
   const own = STUB_ROUTES.find((r) => r.path === bare);

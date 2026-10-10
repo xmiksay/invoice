@@ -101,7 +101,7 @@ pub fn space_router() -> Router<AppState> {
         .route(
             "/",
             get(handlers::get)
-                .put(handlers::rename)
+                .put(handlers::update)
                 .delete(handlers::delete),
         )
         .route("/leave", post(crate::members::handlers::leave))

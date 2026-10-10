@@ -87,6 +87,7 @@ pub async fn create(
         slug: Set(slug),
         name: Set(name),
         created_at: Set(now.into()),
+        require_mfa: Set(false),
     }
     .insert(&txn)
     .await;
@@ -110,16 +111,23 @@ pub async fn create(
     Ok(row)
 }
 
-pub async fn rename(
+/// Set the name and / or the TOTP policy (`None` = unchanged).
+pub async fn update(
     db: &DatabaseConnection,
     space: SpaceId,
-    name: String,
+    name: Option<String>,
+    require_mfa: Option<bool>,
 ) -> Result<space::Model, AppError> {
-    space::Entity::update_many()
-        .col_expr(space::Column::Name, Expr::value(name))
-        .filter(space::Column::Id.eq(space))
-        .exec(db)
-        .await?;
+    if name.is_some() || require_mfa.is_some() {
+        let mut q = space::Entity::update_many().filter(space::Column::Id.eq(space));
+        if let Some(name) = name {
+            q = q.col_expr(space::Column::Name, Expr::value(name));
+        }
+        if let Some(on) = require_mfa {
+            q = q.col_expr(space::Column::RequireMfa, Expr::value(on));
+        }
+        q.exec(db).await?;
+    }
     find(db, space).await?.ok_or(AppError::NotFound)
 }
 

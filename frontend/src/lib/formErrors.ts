@@ -22,6 +22,8 @@ export const REASON_CODES = [
   "wrong_password",
   "already_member",
   "last_owner",
+  "wrong_code",
+  "expired",
 ] as const;
 
 /** Field errors of a 422 `validation` response, or null for any other failure. */
@@ -74,7 +76,15 @@ const KNOWN_CODES: Record<string, string> = {
   invalid_credentials: "errors.invalidCredentials",
   // 409 on removing / the leave of the last owner (the 422 field reason is `validation.last_owner`).
   last_owner: "errors.lastOwner",
+  mfa_invalid: "errors.mfaInvalid",
+  mfa_required: "errors.mfaRequired",
+  mfa_enabled: "errors.mfaEnabled",
 };
+
+/** The error is this API answer (`status` + `code`). */
+export function isApiError(err: unknown, status: number, code: string): err is ApiError {
+  return err instanceof ApiError && err.status === status && err.code === code;
+}
 
 /** i18n key + params for a non-field error message. */
 export function errorMessageKey(err: unknown): { key: string; params?: Record<string, string> } {
