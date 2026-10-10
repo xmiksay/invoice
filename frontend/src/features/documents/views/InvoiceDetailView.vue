@@ -23,8 +23,10 @@ import TotalsPanel from "../components/TotalsPanel.vue";
 import { detailLocation, listLocation } from "../routes";
 import { useDocumentStore } from "../store";
 import type { PartySnapshot } from "../types";
+import { useSessionStore } from "@/stores/session";
 
 const { t } = useI18n();
+const session = useSessionStore();
 const route = useRoute();
 const router = useRouter();
 const store = useDocumentStore();
@@ -87,9 +89,9 @@ const hasPayments = computed(() => !isDraft.value && doc.value?.docType !== "adv
 
       <SimplifiedLimitNote :doc-type="doc.docType" :currency="doc.currency" :totals="doc.totals" />
 
-      <DocumentActions :doc="doc" />
+      <DocumentActions v-if="session.can('write')" :doc="doc" />
       <div v-if="!isDraft" class="flex flex-wrap items-center gap-2">
-        <SendEmailButton :document-id="doc.id" />
+        <SendEmailButton v-if="session.can('write')" :document-id="doc.id" />
         <IsdocDownloadButton v-if="doc.number" :id="doc.id" :number="doc.number" />
       </div>
       <!-- An imported document is never rendered with our design: its PDF is the uploaded original. -->

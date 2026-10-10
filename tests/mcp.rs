@@ -55,7 +55,7 @@ async fn get_and_delete_are_not_allowed() {
         let req = Request::builder()
             .method(method.clone())
             .uri("/api/mcp")
-            .header("host", "invoice.example.test")
+            .header("host", common::TEST_HOST)
             .header("accept", "application/json, text/event-stream")
             .header("authorization", format!("Bearer {TEST_TOKEN}"))
             .body(Body::empty())

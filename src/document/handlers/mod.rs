@@ -19,9 +19,10 @@ use uuid::Uuid;
 use crate::app::AppState;
 use crate::document::repo::{query, view};
 use crate::error::AppError;
+use crate::space::SpaceId;
 use crate::time::today;
 
 /// Re-read a document and build its response.
-pub async fn fetch(state: &AppState, id: Uuid) -> Result<dto::Document, AppError> {
-    view::document(query::load(&state.db, id).await?, today())
+pub async fn fetch(state: &AppState, space: SpaceId, id: Uuid) -> Result<dto::Document, AppError> {
+    view::document(query::load(&state.db, space, id).await?, today())
 }

@@ -1,22 +1,27 @@
 use anyhow::Context;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, ConnectionTrait, DatabaseConnection, EntityTrait, Set};
 
 use crate::error::AppError;
-use crate::settings::entity::company::{self, SINGLETON_ID};
+use crate::settings::entity::company;
 use crate::settings::handlers::company::Company;
+use crate::space::SpaceId;
 
-pub async fn get(db: &DatabaseConnection) -> Result<company::Model, AppError> {
-    let row = company::Entity::find_by_id(SINGLETON_ID)
+pub async fn get<C: ConnectionTrait>(db: &C, space: SpaceId) -> Result<company::Model, AppError> {
+    let row = company::Entity::find_by_id(space.uuid())
         .one(db)
         .await?
-        .context("company singleton row missing (migration seeds it)")?;
+        .context("company row of the space missing (created with the space)")?;
     Ok(row)
 }
 
 /// Replace every field of the singleton with the (validated) input.
-pub async fn update(db: &DatabaseConnection, c: Company) -> Result<company::Model, AppError> {
+pub async fn update(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    c: Company,
+) -> Result<company::Model, AppError> {
     let row = company::ActiveModel {
-        id: Set(SINGLETON_ID),
+        space_id: Set(space.uuid()),
         name: Set(c.name),
         ico: Set(c.ico),
         dic: Set(c.dic),

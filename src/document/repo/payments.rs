@@ -19,6 +19,7 @@ use crate::document::entity::payment::{self, ActiveModel, Column, Entity};
 use crate::document::line::{MAX_AMOUNT, Status};
 use crate::document::state::NO_PAYMENTS_DOC_TYPE;
 use crate::error::AppError;
+use crate::space::SpaceId;
 
 pub struct NewPayment {
     pub date: NaiveDate,
@@ -31,8 +32,12 @@ pub struct NewPayment {
 /// A payment and the DDPP it created, if any.
 pub type WithAdvance = (payment::Model, Option<Uuid>);
 
-pub async fn list(db: &DatabaseConnection, id: Uuid) -> Result<Vec<WithAdvance>, AppError> {
-    query::find(db, id).await?;
+pub async fn list(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<Vec<WithAdvance>, AppError> {
+    query::find(db, space, id).await?;
     let rows = Entity::find()
         .filter(Column::DocumentId.eq(id))
         .order_by_asc(Column::Date)
@@ -59,11 +64,12 @@ pub async fn list(db: &DatabaseConnection, id: Uuid) -> Result<Vec<WithAdvance>,
 pub async fn create(
     db: &DatabaseConnection,
     cnb: &CnbClient,
+    space: SpaceId,
     id: Uuid,
     p: NewPayment,
     today: NaiveDate,
 ) -> Result<WithAdvance, AppError> {
-    let doc = query::find(db, id).await?;
+    let doc = query::find(db, space, id).await?;
     // Resolved up front: no ČNB call while the row is locked, and no payment
     // stored when the DDPP cannot get a rate.
     let rate = if ddpp::needed(&doc) {
@@ -74,7 +80,7 @@ pub async fn create(
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let doc = locked_issued(txn, id).await?;
+                let doc = locked_issued(txn, space, id).await?;
                 // `documents.paid` is numeric(18,2) too: the new sum must fit.
                 if doc
                     .paid
@@ -110,11 +116,16 @@ pub async fn create(
 /// Deleting a proforma payment cancels its DDPP; refused while that DDPP — or,
 /// non-payer form, the proforma itself — is deducted by an invoice
 /// (`advance_settled` when issued, `advance_in_use` for a draft).
-pub async fn delete(db: &DatabaseConnection, id: Uuid, payment_id: Uuid) -> Result<(), AppError> {
+pub async fn delete(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    id: Uuid,
+    payment_id: Uuid,
+) -> Result<(), AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let doc = locked_issued(txn, id).await?;
+                let doc = locked_issued(txn, space, id).await?;
                 let exists = Entity::find_by_id(payment_id)
                     .filter(Column::DocumentId.eq(id))
                     .one(txn)
@@ -135,8 +146,12 @@ pub async fn delete(db: &DatabaseConnection, id: Uuid, payment_id: Uuid) -> Resu
 }
 
 /// Lock the row; payments need an issued document that is not a DDPP.
-async fn locked_issued(txn: &DatabaseTransaction, id: Uuid) -> Result<document::Model, AppError> {
-    let doc = query::lock(txn, id).await?;
+async fn locked_issued(
+    txn: &DatabaseTransaction,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<document::Model, AppError> {
+    let doc = query::lock(txn, space, id).await?;
     if view::status(&doc)? != Status::Issued || doc.doc_type == NO_PAYMENTS_DOC_TYPE {
         return Err(AppError::InvalidState);
     }

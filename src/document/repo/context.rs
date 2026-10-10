@@ -16,6 +16,7 @@ use crate::error::AppError;
 use crate::settings::doc_type::{DocType, ISSUED};
 use crate::settings::entity::{bank_account, vat_rate};
 use crate::settings::repo::company;
+use crate::space::SpaceId;
 
 /// What validation needs to know about a stored draft.
 pub fn existing(doc: &document::Model) -> Result<Existing, AppError> {
@@ -37,36 +38,58 @@ pub fn existing(doc: &document::Model) -> Result<Existing, AppError> {
 /// `doc`: the stored draft a `PUT` replaces.
 pub async fn load(
     db: &DatabaseConnection,
+    space: SpaceId,
     input: &DocumentInput,
     today: chrono::NaiveDate,
     doc: Option<&document::Model>,
 ) -> Result<Context, AppError> {
     let existing = doc.map(existing).transpose()?;
     let contact = match input.contact_id {
-        Some(id) => contact::Entity::find_by_id(id).one(db).await?,
+        Some(id) => contact(db, space, id).await?,
         None => None,
     };
     let related = match input.related_document_id {
-        Some(id) => document::Entity::find_by_id(id).one(db).await?,
+        Some(id) => {
+            document::Entity::find_by_id(id)
+                .filter(document::Column::SpaceId.eq(space))
+                .one(db)
+                .await?
+        }
         None => None,
     };
     Ok(Context {
         today,
         // POST fills defaults; PUT (an existing draft) replaces every field.
         apply_defaults: existing.is_none(),
-        company: company::get(db).await?,
+        company: company::get(db, space).await?,
         contact,
-        default_vat_rate: default_vat_rate(db).await?,
-        advances: advance_sources::load(db, &input.advance_ids()).await?,
+        default_vat_rate: default_vat_rate(db, space).await?,
+        advances: advance_sources::load(db, space, &input.advance_ids()).await?,
         related,
-        meta: meta::load(db, ISSUED, input.category_id, doc).await?,
+        meta: meta::load(db, space, ISSUED, input.category_id, doc).await?,
         exact: ddpp_correction::basis_for(db, existing.as_ref()).await?,
         existing,
     })
 }
 
-pub async fn default_vat_rate<C: ConnectionTrait>(db: &C) -> Result<Option<Decimal>, AppError> {
+/// A contact of `space` (another space's id: `None`, as if unknown).
+pub async fn contact<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<Option<contact::Model>, AppError> {
+    Ok(contact::Entity::find_by_id(id)
+        .filter(contact::Column::SpaceId.eq(space))
+        .one(db)
+        .await?)
+}
+
+pub async fn default_vat_rate<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+) -> Result<Option<Decimal>, AppError> {
     Ok(vat_rate::Entity::find()
+        .filter(vat_rate::Column::SpaceId.eq(space))
         .filter(vat_rate::Column::IsDefault.eq(true))
         .one(db)
         .await?
@@ -75,25 +98,31 @@ pub async fn default_vat_rate<C: ConnectionTrait>(db: &C) -> Result<Option<Decim
 
 pub async fn bank_account<C: ConnectionTrait>(
     db: &C,
+    space: SpaceId,
     id: Uuid,
 ) -> Result<Option<bank_account::Model>, AppError> {
-    Ok(bank_account::Entity::find_by_id(id).one(db).await?)
+    Ok(bank_account::Entity::find_by_id(id)
+        .filter(bank_account::Column::SpaceId.eq(space))
+        .one(db)
+        .await?)
 }
 
 /// The named bank account must exist and match the currency; with defaults
 /// on, a missing one becomes the currency's default account (if any).
 pub async fn resolve_bank(
     db: &DatabaseConnection,
+    space: SpaceId,
     data: &mut DocumentData,
     apply_defaults: bool,
 ) -> Result<(), AppError> {
     match data.bank_account_id {
-        Some(id) => match bank_account(db, id).await? {
+        Some(id) => match bank_account(db, space, id).await? {
             Some(acc) if acc.currency == data.currency => Ok(()),
             _ => Err(AppError::field("bankAccountId", "invalid")),
         },
         None if apply_defaults => {
             data.bank_account_id = bank_account::Entity::find()
+                .filter(bank_account::Column::SpaceId.eq(space))
                 .filter(bank_account::Column::Currency.eq(data.currency.as_str()))
                 .filter(bank_account::Column::IsDefault.eq(true))
                 .one(db)
@@ -108,13 +137,14 @@ pub async fn resolve_bank(
 /// `from` + the (contact ?? company) default due days, for server-created drafts.
 pub async fn due_date(
     db: &DatabaseConnection,
+    space: SpaceId,
     contact_id: Option<Uuid>,
     from: chrono::NaiveDate,
 ) -> Result<chrono::NaiveDate, AppError> {
     let contact = match contact_id {
-        Some(id) => contact::Entity::find_by_id(id).one(db).await?,
+        Some(id) => contact(db, space, id).await?,
         None => None,
     };
-    let company = company::get(db).await?;
+    let company = company::get(db, space).await?;
     Ok(defaults::due_date(contact.as_ref(), &company, from))
 }

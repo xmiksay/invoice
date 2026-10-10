@@ -10,5 +10,11 @@
   "mixed_vat": "All items of a group must share one VAT rate.",
   "unknown": "Unknown field.",
   "inactive": "An inactive value cannot be newly assigned.",
-  "template_invalid": "The template cannot be rendered."
+  "template_invalid": "The template cannot be rendered.",
+  "too_short": "The value is too short.",
+  "reserved": "This address is reserved.",
+  "taken": "This address is already taken.",
+  "mismatch": "Does not match.",
+  "too_high": "Higher than your own role.",
+  "wrong_password": "Wrong password."
 }

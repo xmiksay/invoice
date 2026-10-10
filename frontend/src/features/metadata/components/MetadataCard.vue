@@ -8,11 +8,13 @@ import type { Document } from "@/features/documents/types";
 import { toMetadataDraft, toMetadataInput, validateMetadata, type MetadataDraft } from "../metadata";
 import { useMetadataSettings } from "../useMetadataSettings";
 import MetadataFields from "./MetadataFields.vue";
+import { useSessionStore } from "@/stores/session";
 
 /** Detail panel: category, custom fields and internal note stay editable in every status (`PUT …/metadata`). */
 const props = defineProps<{ doc: Document }>();
 
 const { t } = useI18n();
+const session = useSessionStore();
 const store = useDocumentStore();
 const settings = useMetadataSettings(() => props.doc.direction);
 const { error: loadError, run } = useAction();
@@ -70,7 +72,7 @@ async function onSubmit() {
         :errors="fieldErrors"
         id-prefix="meta"
       />
-      <div class="flex items-center gap-3">
+      <div v-if="session.can('write')" class="flex items-center gap-3">
         <button type="submit" class="btn btn-sm" :disabled="submitting || !dirty" data-test="save-metadata">{{ t("common.save") }}</button>
         <span v-if="saved && !dirty" class="text-xs text-green-700 dark:text-green-400">{{ t("common.saved") }}</span>
       </div>

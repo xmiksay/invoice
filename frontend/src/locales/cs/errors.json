@@ -1,5 +1,4 @@
 {
-  "invalidToken": "Neplatný token.",
   "unreachable": "Server je nedostupný. Zkuste to později.",
   "unexpected": "Neočekávaná chyba ({code}).",
   "notFound": "Záznam nebyl nalezen.",
@@ -23,5 +22,10 @@
   "exceedsOriginal": "Storno nelze provést: dobropisy by v některé sazbě DPH přesáhly původní doklad navýšený o vrubopisy.",
   "smtpFailed": "Odeslání e-mailu selhalo – SMTP server zprávu odmítl nebo není dostupný.",
   "smtpNotConfigured": "Odesílání e-mailů není nastaveno (SMTP server chybí v konfiguraci).",
-  "templateInvalid": "Šablona e-mailu obsahuje chybu."
+  "templateInvalid": "Šablona e-mailu obsahuje chybu.",
+  "forbidden": "K této akci nemáte oprávnění.",
+  "csrf": "Požadavek byl odmítnut (neplatný původ). Obnovte stránku a zkuste to znovu.",
+  "rateLimited": "Příliš mnoho pokusů. Zkuste to později.",
+  "emailUnverified": "Nejprve ověřte svůj e-mail.",
+  "invalidCredentials": "Nesprávný e-mail nebo heslo."
 }

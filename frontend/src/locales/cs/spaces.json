@@ -1,0 +1,48 @@
+{
+  "title": "Moje spaces",
+  "intro": "Space je jedna vlastní firma s vlastními doklady. Každý space má svou adresu a vlastní přihlášení.",
+  "empty": "Zatím nemáte žádný space.",
+  "open": "Otevřít",
+  "roles": {
+    "accountant": "Účetní",
+    "member": "Člen",
+    "admin": "Správce",
+    "owner": "Vlastník"
+  },
+  "create": {
+    "title": "Nový space",
+    "name": "Název",
+    "slug": "Adresa (slug)",
+    "slugHint": "3–30 znaků: malá písmena, číslice a pomlčka (ne na začátku a konci). Později ji nelze změnit.",
+    "preview": "Adresa space:",
+    "submit": "Založit space",
+    "submitting": "Zakládám…",
+    "created": "Space {name} je založený."
+  },
+  "unverified": "Než založíte space, ověřte svůj e-mail.",
+  "unverifiedAction": "Ověřit e-mail",
+  "notFound": {
+    "title": "Space nenalezen",
+    "text": "Na této adrese žádný space není. Zkontrolujte adresu, nebo přejděte na úvodní stránku.",
+    "link": "Přejít na úvodní stránku"
+  },
+  "bootError": {
+    "title": "Server je nedostupný",
+    "text": "Aplikaci se nepodařilo načíst. Zkuste to za chvíli znovu.",
+    "retry": "Zkusit znovu"
+  },
+  "settings": {
+    "intro": "Název space se zobrazuje v záhlaví aplikace.",
+    "slug": "Adresa",
+    "saved": "Název je uložen."
+  },
+  "delete": {
+    "title": "Smazat space",
+    "warning": "Smazání nevratně odstraní všechny doklady, kontakty, nastavení, API tokeny a uložené soubory tohoto space. Daňové doklady musíte ze zákona archivovat (zpravidla 10 let) – před smazáním si je vyexportujte.",
+    "exportHint": "Doklady za zvolené období stáhnete exportem pro účetní:",
+    "confirmSlug": "Pro potvrzení napište adresu space ({slug})",
+    "password": "Vaše heslo",
+    "submit": "Nevratně smazat space",
+    "submitting": "Mažu…"
+  }
+}

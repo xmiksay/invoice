@@ -16,6 +16,7 @@ use crate::document::handlers::input::{self, DocumentData};
 use crate::document::line::{AdvanceData, LineData, PaymentMethod, Status};
 use crate::error::AppError;
 use crate::settings::doc_type::{DocType, ISSUED};
+use crate::space::SpaceId;
 
 /// Whether a non-cancelled invoice settles the proforma `id`.
 async fn settled<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<bool, AppError> {
@@ -63,16 +64,17 @@ async fn advances(db: &DatabaseConnection, p: &document::Model) -> Result<Vec<Uu
 
 pub async fn settle(
     db: &DatabaseConnection,
+    space: SpaceId,
     proforma_id: Uuid,
     today: NaiveDate,
 ) -> Result<Uuid, AppError> {
-    let p = query::find(db, proforma_id).await?;
+    let p = query::find(db, space, proforma_id).await?;
     settleable(&p)?;
     if settled(db, proforma_id).await? {
         return Err(AppError::InvalidState);
     }
     let ids = advances(db, &p).await?;
-    let sources = advance_sources::load(db, &ids).await?;
+    let sources = advance_sources::load(db, space, &ids).await?;
     let mut lines = query::load_lines(db, proforma_id).await?;
     // A DDPP the user already put on another invoice stays there; a fully
     // corrected one has nothing left to deduct.
@@ -91,7 +93,7 @@ pub async fn settle(
                 })
             }),
     );
-    let due_date = context::due_date(db, p.contact_id, today).await?;
+    let due_date = context::due_date(db, space, p.contact_id, today).await?;
     let mut data = DocumentData {
         doc_type: DocType::Invoice,
         related_document_id: Some(p.id),
@@ -136,12 +138,12 @@ pub async fn settle(
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let p = query::lock(txn, proforma_id).await?;
+                let p = query::lock(txn, space, proforma_id).await?;
                 settleable(&p)?;
                 if settled(txn, proforma_id).await? {
                     return Err(AppError::InvalidState);
                 }
-                write::create_in(txn, data, totals).await
+                write::create_in(txn, space, data, totals).await
             })
         })
         .await?)

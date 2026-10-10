@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use super::args::{input, parse};
 use super::result::{respond, to_value, written};
-use super::{InvoiceMcp, document_value, params};
+use super::{InvoiceMcp, document_value, in_space, params};
 use crate::app::AppState;
 use crate::contact::handlers::dto::{Contact, ContactInput};
 use crate::contact::repo::contacts as contact_repo;
@@ -26,7 +26,10 @@ use crate::document::repo::{issue, query, view};
 use crate::document::state::document_payment_state;
 use crate::error::AppError;
 use crate::settings::doc_type::{DocType, ISSUED};
+use crate::space::{Role, SpaceId};
 use crate::time::today;
+use axum::http::request::Parts;
+use rmcp::handler::server::tool::Extension;
 
 #[tool_router(router = write_tools, vis = "pub(super)")]
 impl InvoiceMcp {
@@ -40,8 +43,17 @@ impl InvoiceMcp {
             open_world_hint = false
         )
     )]
-    async fn create_contact(&self, args: JsonObject) -> CallToolResult {
-        respond(create_contact(&self.state, args).await)
+    async fn create_contact(
+        &self,
+        Extension(parts): Extension<Parts>,
+        args: JsonObject,
+    ) -> CallToolResult {
+        respond(
+            in_space(&parts, Role::Member, |space| {
+                create_contact(&self.state, space, args)
+            })
+            .await,
+        )
     }
 
     #[tool(
@@ -54,8 +66,17 @@ impl InvoiceMcp {
             open_world_hint = false
         )
     )]
-    async fn create_draft(&self, args: JsonObject) -> CallToolResult {
-        respond(create(&self.state, args).await)
+    async fn create_draft(
+        &self,
+        Extension(parts): Extension<Parts>,
+        args: JsonObject,
+    ) -> CallToolResult {
+        respond(
+            in_space(&parts, Role::Member, |space| {
+                create(&self.state, space, args)
+            })
+            .await,
+        )
     }
 
     #[tool(
@@ -68,8 +89,17 @@ impl InvoiceMcp {
             open_world_hint = false
         )
     )]
-    async fn update_draft(&self, args: JsonObject) -> CallToolResult {
-        respond(update(&self.state, args).await)
+    async fn update_draft(
+        &self,
+        Extension(parts): Extension<Parts>,
+        args: JsonObject,
+    ) -> CallToolResult {
+        respond(
+            in_space(&parts, Role::Member, |space| {
+                update(&self.state, space, args)
+            })
+            .await,
+        )
     }
 
     #[tool(
@@ -82,8 +112,17 @@ impl InvoiceMcp {
             open_world_hint = false
         )
     )]
-    async fn issue_document(&self, args: JsonObject) -> CallToolResult {
-        respond(issue_document(&self.state, args).await)
+    async fn issue_document(
+        &self,
+        Extension(parts): Extension<Parts>,
+        args: JsonObject,
+    ) -> CallToolResult {
+        respond(
+            in_space(&parts, Role::Member, |space| {
+                issue_document(&self.state, space, args)
+            })
+            .await,
+        )
     }
 
     #[tool(
@@ -96,8 +135,17 @@ impl InvoiceMcp {
             open_world_hint = false
         )
     )]
-    async fn add_payment(&self, args: JsonObject) -> CallToolResult {
-        respond(add_payment(&self.state, args).await)
+    async fn add_payment(
+        &self,
+        Extension(parts): Extension<Parts>,
+        args: JsonObject,
+    ) -> CallToolResult {
+        respond(
+            in_space(&parts, Role::Member, |space| {
+                add_payment(&self.state, space, args)
+            })
+            .await,
+        )
     }
 
     #[tool(
@@ -110,8 +158,17 @@ impl InvoiceMcp {
             open_world_hint = false
         )
     )]
-    async fn mark_sent(&self, args: JsonObject) -> CallToolResult {
-        respond(mark_sent(&self.state, args).await)
+    async fn mark_sent(
+        &self,
+        Extension(parts): Extension<Parts>,
+        args: JsonObject,
+    ) -> CallToolResult {
+        respond(
+            in_space(&parts, Role::Member, |space| {
+                mark_sent(&self.state, space, args)
+            })
+            .await,
+        )
     }
 }
 
@@ -127,8 +184,8 @@ fn in_scope(direction: &str, doc_type: &str, imported: bool, related: bool) -> b
 }
 
 /// The document `id`; a draft outside the MCP scope → `invalid_state`.
-async fn scoped(state: &AppState, id: Uuid) -> Result<document::Model, AppError> {
-    let doc = query::find(&state.db, id).await?;
+async fn scoped(state: &AppState, space: SpaceId, id: Uuid) -> Result<document::Model, AppError> {
+    let doc = query::find(&state.db, space, id).await?;
     let related = doc.related_document_id.is_some();
     if doc.status == Status::Draft.as_str()
         && !in_scope(&doc.direction, &doc.doc_type, doc.imported, related)
@@ -138,24 +195,28 @@ async fn scoped(state: &AppState, id: Uuid) -> Result<document::Model, AppError>
     Ok(doc)
 }
 
-async fn create_contact(state: &AppState, args: JsonObject) -> Result<Contact, AppError> {
+async fn create_contact(
+    state: &AppState,
+    space: SpaceId,
+    args: JsonObject,
+) -> Result<Contact, AppError> {
     let input: ContactInput = parse(args)?;
-    Ok(contact_repo::create(&state.db, input.validate()?)
+    Ok(contact_repo::create(&state.db, space, input.validate()?)
         .await?
         .into())
 }
 
-async fn create(state: &AppState, args: JsonObject) -> Result<Value, AppError> {
+async fn create(state: &AppState, space: SpaceId, args: JsonObject) -> Result<Value, AppError> {
     let input: DocumentInput = parse(args)?;
     // Imported documents (own number, no rendering) are out of the MCP scope.
     if input.imported == Some(true) {
         return Err(AppError::field("imported", "invalid"));
     }
-    let id = create_draft(state, input).await?;
-    Ok(written(id, document_value(state, id).await))
+    let id = create_draft(state, space, input).await?;
+    Ok(written(id, document_value(state, space, id).await))
 }
 
-async fn update(state: &AppState, mut args: JsonObject) -> Result<Value, AppError> {
+async fn update(state: &AppState, space: SpaceId, mut args: JsonObject) -> Result<Value, AppError> {
     // Parsed apart so field paths inside the (flattened) document survive.
     let id_only: JsonObject = args
         .remove("id")
@@ -164,21 +225,26 @@ async fn update(state: &AppState, mut args: JsonObject) -> Result<Value, AppErro
         .collect();
     let params::Id { id } = parse(id_only)?;
     let input: DocumentInput = parse(args)?;
-    let doc = scoped(state, id).await?;
-    update_draft(state, &doc, input).await?;
-    Ok(written(id, document_value(state, id).await))
+    let doc = scoped(state, space, id).await?;
+    update_draft(state, space, &doc, input).await?;
+    Ok(written(id, document_value(state, space, id).await))
 }
 
-async fn issue_document(state: &AppState, args: JsonObject) -> Result<Value, AppError> {
+async fn issue_document(
+    state: &AppState,
+    space: SpaceId,
+    args: JsonObject,
+) -> Result<Value, AppError> {
     let params::Id { id } = parse(args)?;
-    scoped(state, id).await?;
-    issue::issue(&state.db, &state.cnb, &state.pdf, id, today()).await?;
-    Ok(written(id, document_value(state, id).await))
+    scoped(state, space, id).await?;
+    let pdf = state.pdf.space(space)?;
+    issue::issue(&state.db, &state.cnb, &pdf, space, id, today()).await?;
+    Ok(written(id, document_value(state, space, id).await))
 }
 
 /// The derived `paymentState` from the document row alone.
-async fn payment_state(state: &AppState, id: Uuid) -> Result<Value, AppError> {
-    let doc = query::find(&state.db, id).await?;
+async fn payment_state(state: &AppState, space: SpaceId, id: Uuid) -> Result<Value, AppError> {
+    let doc = query::find(&state.db, space, id).await?;
     let status = view::status(&doc)?;
     to_value(&document_payment_state(
         &doc.doc_type,
@@ -188,7 +254,11 @@ async fn payment_state(state: &AppState, id: Uuid) -> Result<Value, AppError> {
     ))
 }
 
-async fn add_payment(state: &AppState, args: JsonObject) -> Result<Value, AppError> {
+async fn add_payment(
+    state: &AppState,
+    space: SpaceId,
+    args: JsonObject,
+) -> Result<Value, AppError> {
     let p: params::AddPayment = parse(args)?;
     let input = PaymentInput {
         date: Some(p.date),
@@ -196,8 +266,8 @@ async fn add_payment(state: &AppState, args: JsonObject) -> Result<Value, AppErr
         note: p.note,
         exchange_rate: p.exchange_rate,
     };
-    let payment = to_value(&payments::add(state, p.id, input).await?)?;
-    Ok(match payment_state(state, p.id).await {
+    let payment = to_value(&payments::add(state, space, p.id, input).await?)?;
+    Ok(match payment_state(state, space, p.id).await {
         Ok(ps) => json!({ "payment": payment, "paymentState": ps }),
         Err(e) => {
             e.log();
@@ -206,10 +276,10 @@ async fn add_payment(state: &AppState, args: JsonObject) -> Result<Value, AppErr
     })
 }
 
-async fn mark_sent(state: &AppState, args: JsonObject) -> Result<Value, AppError> {
+async fn mark_sent(state: &AppState, space: SpaceId, args: JsonObject) -> Result<Value, AppError> {
     let p: params::MarkSent = parse(args)?;
-    mark_sent_at(state, p.id, p.sent_at).await?;
-    Ok(written(p.id, document_value(state, p.id).await))
+    mark_sent_at(state, space, p.id, p.sent_at).await?;
+    Ok(written(p.id, document_value(state, space, p.id).await))
 }
 
 #[cfg(test)]

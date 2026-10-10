@@ -5,6 +5,8 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "number_series")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
+    pub space_id: Uuid,
     pub doc_type: String,
     pub pattern: String,
 }

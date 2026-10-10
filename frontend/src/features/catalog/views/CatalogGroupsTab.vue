@@ -7,8 +7,10 @@ import CatalogGroupForm from "../components/CatalogGroupForm.vue";
 import CatalogSearch from "../components/CatalogSearch.vue";
 import { useCatalogGroupsStore } from "../store";
 import type { CatalogGroup } from "../types";
+import { useSessionStore } from "@/stores/session";
 
 const { t, locale } = useI18n();
+const session = useSessionStore();
 const store = useCatalogGroupsStore();
 const { error, run } = useAction();
 /** null = form closed, "new" = create, otherwise the group being edited. */
@@ -35,7 +37,7 @@ const summary = (g: CatalogGroup) =>
     <CatalogGroupForm v-if="editing" :key="editing === 'new' ? 'new' : editing.id" :group="editing === 'new' ? undefined : editing" @done="editing = null" />
     <div v-else class="flex flex-wrap items-center justify-between gap-3">
       <CatalogSearch id="catalog-groups-search" :initial="store.q" :placeholder="t('catalog.groups.searchPlaceholder')" @search="(q) => run(() => store.search(q))" />
-      <button type="button" class="btn btn-primary" data-test="add-group" @click="editing = 'new'">{{ t("catalog.groups.add") }}</button>
+      <button type="button" v-if="session.can('write')" class="btn btn-primary" data-test="add-group" @click="editing = 'new'">{{ t("catalog.groups.add") }}</button>
     </div>
 
     <div class="card overflow-x-auto !p-0">
@@ -56,7 +58,7 @@ const summary = (g: CatalogGroup) =>
             </td>
             <td class="hidden text-sm text-gray-600 sm:table-cell dark:text-gray-400">{{ summary(g) }}</td>
             <td class="whitespace-nowrap">
-              <div class="flex gap-1">
+              <div v-if="session.can('write')" class="flex gap-1">
                 <button type="button" class="btn btn-sm" @click="editing = g">{{ t("common.edit") }}</button>
                 <button type="button" class="btn btn-sm btn-danger" @click="onDelete(g)">{{ t("common.delete") }}</button>
               </div>

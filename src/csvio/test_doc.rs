@@ -30,6 +30,7 @@ pub fn snapshot(name: &str, ico: &str) -> serde_json::Value {
 pub fn doc() -> document::Model {
     document::Model {
         id: Uuid::new_v4(),
+        space_id: Uuid::nil(),
         direction: "issued".into(),
         doc_type: "invoice".into(),
         status: "issued".into(),

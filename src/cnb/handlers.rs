@@ -7,6 +7,7 @@ use utoipa::{IntoParams, ToSchema};
 
 use super::repo;
 use crate::app::AppState;
+use crate::auth::Read;
 use crate::error::{AppError, ErrorBody};
 use crate::extract::{ApiPath, ApiQuery};
 use crate::time::today;
@@ -33,7 +34,7 @@ pub struct RateQuery {
     get,
     path = "/api/exchange-rates/{currency}",
     tag = "exchange-rates",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("currency" = String, Path, description = "ISO 4217 code"), RateQuery),
     responses(
         (status = 200, body = ExchangeRate),
@@ -43,6 +44,7 @@ pub struct RateQuery {
 )]
 pub async fn get_rate(
     State(state): State<AppState>,
+    _: Read,
     ApiPath(currency): ApiPath<String>,
     ApiQuery(query): ApiQuery<RateQuery>,
 ) -> Result<Json<ExchangeRate>, AppError> {

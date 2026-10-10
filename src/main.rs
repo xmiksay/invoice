@@ -1,21 +1,28 @@
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use invoice::app::{self, AppState};
 use invoice::ares::AresClient;
+use invoice::auth::ratelimit::RateLimiter;
 use invoice::cnb::CnbClient;
 use invoice::config::{Config, DbConfig};
 use invoice::email::Mailer;
 use invoice::migration::{Migrator, MigratorTrait};
-use invoice::pdf::{PdfService, design};
+use invoice::pdf::{PdfRoot, design};
+use invoice::space;
 use invoice::storage::transfer::{self, Report};
 use invoice::storage::{DESIGN_PREFIX, Storage, StorageConfig};
 use sea_orm::{Database, DatabaseConnection};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "invoice", version, about = "Single-user invoice management")]
+#[command(
+    name = "invoice",
+    version,
+    about = "Invoice management (spaces, Czech VAT)"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -35,7 +42,7 @@ enum Command {
         #[command(subcommand)]
         action: StorageAction,
     },
-    /// PDF design overrides kept in the storage under `design/`.
+    /// PDF design overrides of one space (storage `spaces/{id}/design/`).
     Design {
         #[command(subcommand)]
         action: DesignAction,
@@ -59,17 +66,42 @@ enum StorageAction {
 
 #[derive(Subcommand)]
 enum DesignAction {
-    /// Upload every file of DIR to `design/…` (changed files replaced).
-    Push { dir: PathBuf },
-    /// Download every `design/…` file into DIR.
-    Pull { dir: PathBuf },
-    /// List the effective design: custom files and the built-in defaults.
-    Ls,
+    /// Upload every file of DIR to the space's `design/…` (changed files replaced).
+    Push {
+        dir: PathBuf,
+        /// The space slug.
+        #[arg(long)]
+        space: String,
+    },
+    /// Download every `design/…` file of the space into DIR.
+    Pull {
+        dir: PathBuf,
+        #[arg(long)]
+        space: String,
+    },
+    /// List the effective design of the space: custom files and the built-in defaults.
+    Ls {
+        #[arg(long)]
+        space: String,
+    },
     /// Remove custom design files (the built-in default shows through again).
     Rm {
         #[arg(required = true)]
         paths: Vec<String>,
+        #[arg(long)]
+        space: String,
     },
+}
+
+impl DesignAction {
+    fn space(&self) -> &str {
+        match self {
+            Self::Push { space, .. }
+            | Self::Pull { space, .. }
+            | Self::Ls { space }
+            | Self::Rm { space, .. } => space,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -118,21 +150,25 @@ async fn serve() -> Result<()> {
     tokio::spawn(probe(storage.clone()));
     let state = AppState {
         db,
-        api_token: cfg.api_token,
         ares: AresClient::new(&cfg.ares_url)?,
         cnb: CnbClient::new(&cfg.cnb_url)?,
-        pdf: PdfService::new(
+        pdf: PdfRoot::new(
             &cfg.mdcast_url,
             cfg.mdcast_token.as_ref().map(|t| t.expose().as_str()),
             storage,
         )?,
         email: cfg.smtp.as_ref().map(Mailer::new).transpose()?,
+        public: cfg.public.clone(),
+        registration: cfg.registration,
+        trust_forwarded: cfg.trust_forwarded,
+        limiter: RateLimiter::default(),
     };
     let listener = tokio::net::TcpListener::bind(&cfg.bind)
         .await
         .with_context(|| format!("bind {}", cfg.bind))?;
-    tracing::info!(bind = %cfg.bind, "listening");
-    axum::serve(listener, app::router(state))
+    tracing::info!(bind = %cfg.bind, base_url = %cfg.public.base_url(), "listening");
+    let app = app::router(state).into_make_service_with_connect_info::<SocketAddr>();
+    axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await
         .context("http server")
@@ -152,12 +188,8 @@ async fn migrate(action: MigrateAction) -> Result<()> {
 /// Startup reachability check. Only logs: requests touching the storage
 /// answer 503 `storage_unavailable` while it is down.
 async fn probe(storage: Storage) {
-    match storage.list(DESIGN_PREFIX).await {
-        Ok(design) => tracing::info!(
-            kind = storage.kind(),
-            design_files = design.len(),
-            "storage reachable"
-        ),
+    match storage.head("reachability-probe").await {
+        Ok(_) => tracing::info!(kind = storage.kind(), "storage reachable"),
         Err(e) => tracing::error!(kind = storage.kind(), error = %e, "storage unreachable"),
     }
 }
@@ -190,21 +222,33 @@ async fn storage_cmd(action: StorageAction) -> Result<()> {
     }
 }
 
+/// The storage of the space `slug` (looked up in the database).
+async fn space_storage(slug: &str) -> Result<Storage> {
+    let cfg = DbConfig::from_env()?;
+    let db = connect(cfg.database_url.expose()).await?;
+    let space = space::repo::find_by_slug(&db, slug)
+        .await
+        .map_err(|e| anyhow::anyhow!("look up space {slug}: {e}"))?
+        .with_context(|| format!("no space with slug {slug}"))?;
+    let prefix = space::SpaceId(space.id).storage_prefix();
+    Ok(open_storage()?.scoped(&prefix)?)
+}
+
 async fn design_cmd(action: DesignAction) -> Result<()> {
-    let storage = open_storage()?;
+    let storage = space_storage(action.space()).await?;
     match action {
-        DesignAction::Push { dir } => {
+        DesignAction::Push { dir, .. } => {
             let mut report = Report::default();
             transfer::copy_tree(&storage, &dir, Some(DESIGN_PREFIX), true, &mut report).await?;
             finish(&report)
         }
-        DesignAction::Pull { dir } => {
+        DesignAction::Pull { dir, .. } => {
             for rel in transfer::pull(&storage, DESIGN_PREFIX, &dir).await? {
                 println!("{rel}");
             }
             Ok(())
         }
-        DesignAction::Ls => {
+        DesignAction::Ls { .. } => {
             for f in design::list(&storage).await? {
                 let source = match f.source {
                     design::Source::Custom => "custom",
@@ -214,7 +258,7 @@ async fn design_cmd(action: DesignAction) -> Result<()> {
             }
             Ok(())
         }
-        DesignAction::Rm { paths } => {
+        DesignAction::Rm { paths, .. } => {
             let mut missing = 0;
             for path in paths {
                 if design::remove(&storage, &path).await? {
@@ -295,17 +339,26 @@ mod tests {
         ));
         assert!(Cli::try_parse_from(["invoice", "storage", "migrate"]).is_err());
         assert!(matches!(
-            Cli::try_parse_from(["invoice", "design", "push", "./my-design"]).map(|c| c.command),
+            Cli::try_parse_from([
+                "invoice",
+                "design",
+                "push",
+                "./my-design",
+                "--space",
+                "firma"
+            ])
+            .map(|c| c.command),
             Ok(Command::Design {
                 action: DesignAction::Push { .. }
             })
         ));
         assert!(matches!(
-            Cli::try_parse_from(["invoice", "design", "ls"]).map(|c| c.command),
+            Cli::try_parse_from(["invoice", "design", "ls", "--space", "firma"]).map(|c| c.command),
             Ok(Command::Design {
-                action: DesignAction::Ls
-            })
+                action: DesignAction::Ls { space }
+            }) if space == "firma"
         ));
+        assert!(Cli::try_parse_from(["invoice", "design", "ls"]).is_err());
         assert!(Cli::try_parse_from(["invoice", "design", "rm"]).is_err());
     }
 }

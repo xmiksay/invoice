@@ -12,15 +12,17 @@ import { detailLocation } from "../routes";
 import { useDocumentStore } from "../store";
 import type { Document, Payment } from "../types";
 import { useIndicativeRate } from "../useIndicativeRate";
+import { useSessionStore } from "@/stores/session";
 
 const props = defineProps<{ doc: Document }>();
 
 const { t, locale } = useI18n();
+const session = useSessionStore();
 const store = useDocumentStore();
 const { fieldErrors, error, submitting, submit } = useFormSubmit();
 const { error: removeError, run } = useAction();
 
-const editable = computed(() => props.doc.status === "issued");
+const editable = computed(() => props.doc.status === "issued" && session.can("write"));
 // A settled invoice rarely takes another payment; the form (defaulting to 0.00) stays behind a toggle.
 const settled = computed(() => props.doc.paymentState === "paid" || props.doc.paymentState === "overpaid");
 const addAnother = ref(false);

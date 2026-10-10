@@ -49,7 +49,7 @@ pub async fn render<C: ConnectionTrait>(
     pdf: &PdfService,
     id: Uuid,
 ) -> Result<(document::Model, Bytes), AppError> {
-    let src = source::load(db, id).await?;
+    let src = source::load(db, pdf.space_id(), id).await?;
     let data = payload::build(&src.input()?)?;
     let bytes = pdf.render(data).await?;
     Ok((src.row, Bytes::from(bytes)))
@@ -129,7 +129,7 @@ pub async fn archive_missing(
         return Ok(bytes);
     }
     // The losing UPDATE waited for the winner's commit, so its path is set.
-    let row = query::find(db, id).await?;
+    let row = query::find(db, pdf.space_id(), id).await?;
     let rel = row
         .pdf_path
         .with_context(|| format!("document {id} lost the archive race but has no archive"))?;
@@ -165,7 +165,7 @@ pub async fn document_pdf(
     pdf: &PdfService,
     id: Uuid,
 ) -> Result<(document::Model, PdfBody), AppError> {
-    let row = query::find(db, id).await?;
+    let row = query::find(db, pdf.space_id(), id).await?;
     if serves_original(&row.direction, row.imported) {
         let rel = row.original_path.as_deref().ok_or(AppError::PdfMissing)?;
         let body = PdfBody::Stored(pdf.storage().get_stream(rel).await?);

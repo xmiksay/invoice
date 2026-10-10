@@ -4,12 +4,13 @@ import { createPinia, setActivePinia } from "pinia";
 import { i18n } from "@/i18n";
 import { useDocumentStore } from "@/features/documents/store";
 import { document } from "@/features/documents/testData";
-import { mockFetchRoutes } from "@/test-utils";
+import { mockFetchRoutes, signIn } from "@/test-utils";
 import MetadataCard from "./MetadataCard.vue";
 
 async function mountCard() {
   const pinia = createPinia();
   setActivePinia(pinia);
+  signIn("owner");
   const store = useDocumentStore();
   store.doc = document({ status: "issued", internalNote: "stored" });
   const w = mount({ components: { MetadataCard }, template: '<MetadataCard v-if="store.doc" :doc="store.doc" />', setup: () => ({ store }) }, { global: { plugins: [pinia, i18n] } });

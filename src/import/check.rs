@@ -8,6 +8,7 @@ use sea_orm::DatabaseConnection;
 use super::lookup;
 use super::model::{Code, Plan};
 use crate::error::AppError;
+use crate::space::SpaceId;
 
 pub const RELATED_NOT_FOUND: Code = "related_not_found";
 pub const CONTACT_CREATED: Code = "contact_created";
@@ -34,6 +35,7 @@ pub struct Checked {
 /// with an earlier one's identity being its duplicate.
 pub async fn check(
     db: &DatabaseConnection,
+    space: SpaceId,
     entries: &[(&str, Option<&Plan>)],
     only: Option<&HashSet<String>>,
 ) -> Result<Vec<Option<Checked>>, AppError> {
@@ -60,16 +62,20 @@ pub async fn check(
             continue;
         }
         let mut warnings = Vec::new();
-        let duplicate = in_batch || lookup::duplicate(db, plan).await?;
+        let duplicate = in_batch || lookup::duplicate(db, space, plan).await?;
         let contact_exists = match plan.counterparty() {
-            Some(p) => Some(lookup::contact(db, p, plan.contact_rule).await?.is_some()),
+            Some(p) => Some(
+                lookup::contact(db, space, p, plan.contact_rule)
+                    .await?
+                    .is_some(),
+            ),
             None => None,
         };
         if contact_exists == Some(false) {
             warnings.push(CONTACT_CREATED);
         }
         let related_found = plan.original_ref.is_some()
-            && (lookup::related(db, plan).await?.is_some()
+            && (lookup::related(db, space, plan).await?.is_some()
                 || plans
                     .iter()
                     .any(|o| !std::ptr::eq(*o, *plan) && lookup::is_original_of(plan, o)));

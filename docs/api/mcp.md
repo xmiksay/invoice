@@ -8,7 +8,9 @@ invoices. It is a thin layer over the same services as the REST API — no busin
 - **Streamable HTTP, stateless** at `POST /api/mcp` (crate `rmcp`, server side, `stateful_mode = false`): no
   `Mcp-Session-Id`, no server → client notifications, every request stands alone (works behind a proxy / with
   replicas). `GET` / `DELETE /api/mcp` → 405.
-- Behind the same Bearer token as every `/api/*` route (`src/auth.rs`); without it → 401 before MCP handling.
+- On a space host, behind the auth middleware like every space route (`src/auth/ctx.rs`): a personal API token
+  of that space (or a session cookie); without it → 401 before MCP handling. Read tools need the role `accountant`,
+  write tools `member`; a call below that is the tool error `{"code":"forbidden"}` (4a, [spaces.md](spaces.md)).
 - `initialize` answers `serverInfo { name: "invoice", version: <crate version> }`, capabilities `tools` only, and
   `instructions`: a short English description of the domain (directions, document types, statuses, money as decimal
   strings, how to issue an invoice: find / create the contact → create a draft → check totals → issue).
@@ -76,7 +78,7 @@ create / edit, imports / exports, settings changes.
   `stateful_mode` is called `legacy_session_mode` in rmcp 3 and is `false`; responses are `application/json` (no SSE,
   no keep-alive pings), notifications (e.g. `notifications/initialized`) → 202 with an empty body. The client must
   send `Accept: application/json, text/event-stream` and a `Host` header. rmcp's loopback-only `Host` allowlist
-  (DNS-rebinding guard for local servers) is disabled: the instance runs on its own public host and the Bearer
+  (DNS-rebinding guard for local servers) is disabled: the instance runs on its own public hosts and the auth
   middleware runs first (401 `{"code":"unauthorized"}` + `WWW-Authenticate: Bearer` before any MCP handling).
   No `Mcp-Session-Id` is ever issued; every request may go to any replica.
 - **HTTP-level errors** keep the API shape: rmcp's plain-text rejections are rewritten by a response layer on the

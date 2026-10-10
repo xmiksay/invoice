@@ -84,4 +84,49 @@ Nothing secret (password, cookie, token, reset / verify token) is ever logged.
 - E-mails through the mock SMTP; the verify / reset tokens read from the captured mail.
 
 ## Clarifications (as implemented)
-(filled during the 4a implementation)
+- Config: `INVOICE__PUBLIC_URL` = `http(s)://host[:port]` with an optional trailing `/` (no path, user info or IP
+  literal; host lowercased). `INVOICE__REGISTRATION` / `INVOICE__TRUST_FORWARDED` accept `true` / `false` / `1` /
+  `0`, empty = `false`, anything else refuses the start. A leftover `INVOICE__API_TOKEN` is ignored.
+- E-mails are lowercased + trimmed everywhere (register, login, resend, reset). An e-mail over 200 chars →
+  `email: invalid`. Passwords are never trimmed; length counts characters.
+- Register: validation (422) runs before the rate limit, so invalid bodies do not count. A known e-mail gets the
+  "already registered" mail with a 1 h reset link (`{baseUrl}/reset?token=…`) — not when that account is disabled
+  (no mail, like a reset request). Both paths hash the password. Account e-mails (verify, already registered,
+  reset) are sent in a background task: every branch answers 202 at once, so the timing does not show whether an
+  account exists; a failed send is logged at `error`. On a space host → 404.
+- `verify` and `verify/resend` are base-host routes that also work while registration is off (pending users can
+  finish). Resend mails only unverified, non-disabled users. Every e-mail body accepts `locale` (`cs` default,
+  `en`); the links always point to the base host.
+- Login: one attempt is **reserved** in the e-mail and the IP bucket at once (check + record under one lock,
+  before the argon2 verification), so a parallel burst cannot pass the limit (12 parallel wrong logins → 5 × 401,
+  7 × 429); a successful login gives its reservation back, so only failures count. One argon2 verification always
+  runs (a dummy hash for unknown or empty e-mails).
+- Sessions: the cookie has `Max-Age` = 90 days; the DB keeps sha256 (hex) of the cookie value and `user_agent`
+  cut to 200 characters. Expired sessions are deleted when presented. A session row stores the space of its host
+  (`NULL` = base host) and is refused on any other host (401).
+- `logout` with a token → 204 (nothing to delete, the cookie is cleared anyway). `sessions/revoke-others` and
+  `account/password` are **session only** (a token → 403 `forbidden`); revoke-others keeps the current session.
+- Password change reports `currentPassword: invalid` and `newPassword: too_short | too_long` together; it keeps the
+  current session and deletes the user's others. Reset confirm validates the password before consuming the token
+  (a too-short password does not burn it), then consumes the token (single-use update, row-locked) **before**
+  hashing — argon2 runs only for a live token; request and confirm work on any known host; disabled users get no
+  mail. Confirm is limited to 20 requests / 15 min per IP (every request counts).
+- The own-password checks (`currentPassword` of a password change, `password` of `DELETE /api/space`) count a
+  failure in the user's login bucket (5 / 15 min, shared with login, keyed by the user's e-mail); used up → 429.
+- Verify / reset tokens of one kind are refused by the other route (`token: invalid`). Several live tokens may
+  exist (each resend / request issues a new one); each is single use.
+- CSRF: `Origin` is compared case-insensitively with `{scheme of INVOICE__PUBLIC_URL}://{request host incl. port}`;
+  `Origin: null` is foreign. GET / HEAD / OPTIONS are never checked. The public auth routes (`login`, `register`,
+  `verify*`, `password-reset*`) and Bearer requests are checked only when `Origin` is sent.
+- Rate limits: `register`, `verify/resend` and `password-reset` share one per-IP bucket (5 / h) and one per-e-mail
+  bucket (3 / h); every request counts there (not only failures). `Retry-After` is in whole seconds (≥ 1). Without
+  `INVOICE__TRUST_FORWARDED` the socket address is the IP; with it the **last** `X-Forwarded-For` hop (the one the
+  trusted proxy appended — earlier hops are client-controlled; the proxy must append, not pass through). The
+  limiter is bounded: keys (cut to 320 bytes) are swept in insertion order a few per request once their newest
+  event is older than an hour, and above 100 000 keys the oldest-inserted are dropped.
+- Each authenticated request resolves the cookie / token, its user and the membership in one joined query (plus
+  the host's slug lookup); `last_seen_at` / `last_used_at` are written at most once a minute.
+- Request logs record method + path only (never the query string: the SPA's `/verify?token=…` / `/reset?token=…`
+  pages); no password, cookie, token or verify / reset token is logged anywhere.
+- New error codes: 401 `invalid_credentials`, 403 `forbidden`, `email_unverified`, `csrf`, 429 `rate_limited`.
+- `GET /api/auth/check` (the old token check) is removed; the SPA uses `GET /api/auth/me`.

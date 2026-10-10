@@ -11,14 +11,16 @@ use crate::catalog::entity::member;
 use crate::catalog::handlers::dto::ItemData;
 use crate::contact::handlers::dto::like_pattern;
 use crate::error::AppError;
+use crate::space::SpaceId;
 
 /// Items matching `q` (name, case-insensitive) and `active`, by name.
 pub async fn list(
     db: &DatabaseConnection,
+    space: SpaceId,
     q: Option<&str>,
     active: Option<bool>,
 ) -> Result<Vec<item::Model>, AppError> {
-    let mut select = Entity::find();
+    let mut select = Entity::find().filter(Column::SpaceId.eq(space));
     if let Some(term) = q {
         select = select.filter(Expr::col(Column::Name).ilike(like_pattern(term)));
     }
@@ -32,8 +34,13 @@ pub async fn list(
         .await?)
 }
 
-pub async fn get(db: &DatabaseConnection, id: Uuid) -> Result<item::Model, AppError> {
+pub async fn get(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<item::Model, AppError> {
     Entity::find_by_id(id)
+        .filter(Column::SpaceId.eq(space))
         .one(db)
         .await?
         .ok_or(AppError::NotFound)
@@ -49,10 +56,15 @@ fn apply(row: &mut ActiveModel, d: ItemData) {
     row.note = Set(d.note);
 }
 
-pub async fn create(db: &DatabaseConnection, data: ItemData) -> Result<item::Model, AppError> {
+pub async fn create(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    data: ItemData,
+) -> Result<item::Model, AppError> {
     let now = chrono::Utc::now().into();
     let mut row = ActiveModel {
         id: Set(Uuid::new_v4()),
+        space_id: Set(space.uuid()),
         created_at: Set(now),
         updated_at: Set(now),
         ..Default::default()
@@ -80,8 +92,13 @@ async fn group_mates<C: ConnectionTrait>(
 }
 
 /// The item row locked against concurrent group writes (which share-lock it).
-async fn locked<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<item::Model, AppError> {
+async fn locked<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<item::Model, AppError> {
     Entity::find_by_id(id)
+        .filter(Column::SpaceId.eq(space))
         .lock_exclusive()
         .one(db)
         .await?
@@ -92,13 +109,14 @@ async fn locked<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<item::Model, App
 /// (`vatRate: mixed_vat`).
 pub async fn update(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     data: ItemData,
 ) -> Result<item::Model, AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let existing = locked(txn, id).await?;
+                let existing = locked(txn, space, id).await?;
                 if existing.vat_rate != data.vat_rate {
                     let others: Vec<Uuid> = group_mates(txn, id)
                         .await?
@@ -127,11 +145,11 @@ pub async fn update(
 
 /// Group memberships go with the item (FK cascade), except that a group may
 /// not lose its last member (`catalog_item_in_use`).
-pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<(), AppError> {
+pub async fn delete(db: &DatabaseConnection, space: SpaceId, id: Uuid) -> Result<(), AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                locked(txn, id).await?;
+                locked(txn, space, id).await?;
                 let mates = group_mates(txn, id).await?;
                 let sole_member = mates
                     .iter()

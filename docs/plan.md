@@ -186,6 +186,9 @@ defaults; #3 comments) → 4f per-space design versions / preview (rest of #10).
   global. Storage keys and the mdcast design overlay per space under `spaces/{id}/`. No default space, no data
   migration (no existing data). Owner deletes a space (slug + password), DB rows and storage prefix.
   Contracts: [`docs/api/spaces.md`](api/spaces.md), [`docs/api/auth.md`](api/auth.md).
+- As implemented (4a): migration `m20261016_000001_spaces` (refuses existing data), modules `src/auth/` (hosts,
+  sessions, tokens, CSRF, rate limits) and `src/space/` (`SpaceId`, roles, per-space seeds), storage scoped to
+  `spaces/{id}/`; details in the Clarifications of [spaces.md](api/spaces.md) and [auth.md](api/auth.md).
 
 ## Out of scope (for now)
 Deployment manifests, VAT return / control statement XML (EPO), automatic payment

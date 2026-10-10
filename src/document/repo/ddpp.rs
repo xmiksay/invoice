@@ -20,6 +20,7 @@ use crate::document::line::{ItemData, LineData, MAX_INPUT, Status};
 use crate::error::{AppError, number_violation};
 use crate::settings::doc_type::{DocType, ISSUED};
 use crate::settings::repo::number_series;
+use crate::space::SpaceId;
 
 /// Whether a payment on `doc` must issue a DDPP: a native issued proforma
 /// (never a received or imported one) whose supplier was a VAT payer, in
@@ -80,7 +81,9 @@ pub async fn issue(
     let totals =
         ddpp::totals(&shares, rate.rate).map_err(|o| AppError::field(o.field(), "invalid"))?;
     let year = payment.date.year();
-    let (number, seq) = number_series::allocate_number(txn, DocType::AdvanceTaxDoc, year).await?;
+    let space = SpaceId(proforma.space_id);
+    let (number, seq) =
+        number_series::allocate_number(txn, space, DocType::AdvanceTaxDoc, year).await?;
     let proforma_number = proforma.number.clone().unwrap_or_default();
     let lines = item_lines(
         &shares,
@@ -90,6 +93,7 @@ pub async fn issue(
     let now = chrono::Utc::now().into();
     let mut row = document::ActiveModel {
         id: Set(id),
+        space_id: Set(proforma.space_id),
         direction: Set("issued".into()),
         doc_type: Set(DocType::AdvanceTaxDoc.as_str().into()),
         status: Set(Status::Issued.as_str().into()),

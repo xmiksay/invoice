@@ -39,13 +39,13 @@ async fn openapi_is_public() {
     assert_eq!(resp.status(), StatusCode::OK);
     let doc = json(resp).await;
     assert!(doc["paths"]["/api/health"].is_object());
-    assert!(doc["paths"]["/api/auth/check"].is_object());
+    assert!(doc["paths"]["/api/auth/me"].is_object());
 }
 
 #[tokio::test]
-async fn auth_check_without_token_is_401() {
+async fn me_without_token_is_401() {
     let db = TestDb::new().await;
-    let resp = send(router(db.conn.clone()), get("/api/auth/check", None)).await;
+    let resp = send(router(db.conn.clone()), get("/api/auth/me", None)).await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(
         resp.headers()
@@ -57,11 +57,11 @@ async fn auth_check_without_token_is_401() {
 }
 
 #[tokio::test]
-async fn auth_check_with_wrong_token_is_401() {
+async fn me_with_wrong_token_is_401() {
     let db = TestDb::new().await;
     let resp = send(
         router(db.conn.clone()),
-        get("/api/auth/check", Some("wrong-token")),
+        get("/api/auth/me", Some("wrong-token")),
     )
     .await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
@@ -69,14 +69,20 @@ async fn auth_check_with_wrong_token_is_401() {
 }
 
 #[tokio::test]
-async fn auth_check_with_right_token_is_204() {
+async fn me_with_right_token_is_200() {
     let db = TestDb::new().await;
     let resp = send(
         router(db.conn.clone()),
-        get("/api/auth/check", Some(TEST_TOKEN)),
+        get("/api/auth/me", Some(TEST_TOKEN)),
     )
     .await;
-    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    assert_eq!(resp.status(), StatusCode::OK);
+    let me = json(resp).await;
+    assert_eq!(me["user"]["email"], "owner@example.com");
+    assert_eq!(
+        me["space"],
+        json!({ "slug": "acme", "name": "Space acme", "role": "owner" })
+    );
 }
 
 #[tokio::test]
@@ -92,9 +98,16 @@ async fn unknown_api_path_is_404_json() {
 }
 
 #[tokio::test]
-async fn unknown_api_path_still_requires_token() {
+async fn unknown_api_path_is_404_without_token_too() {
     let db = TestDb::new().await;
     let resp = send(router(db.conn.clone()), get("/api/does-not-exist", None)).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn business_route_without_token_is_401() {
+    let db = TestDb::new().await;
+    let resp = send(router(db.conn.clone()), get("/api/contacts", None)).await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 

@@ -14,6 +14,12 @@ export const REASON_CODES = [
   "unknown",
   "inactive",
   "template_invalid",
+  "too_short",
+  "reserved",
+  "taken",
+  "mismatch",
+  "too_high",
+  "wrong_password",
 ] as const;
 
 /** Field errors of a 422 `validation` response, or null for any other failure. */
@@ -59,6 +65,11 @@ const KNOWN_CODES: Record<string, string> = {
   smtp_failed: "errors.smtpFailed",
   smtp_not_configured: "errors.smtpNotConfigured",
   template_invalid: "errors.templateInvalid",
+  forbidden: "errors.forbidden",
+  csrf: "errors.csrf",
+  rate_limited: "errors.rateLimited",
+  email_unverified: "errors.emailUnverified",
+  invalid_credentials: "errors.invalidCredentials",
 };
 
 /** i18n key + params for a non-field error message. */

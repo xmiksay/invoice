@@ -6,8 +6,10 @@ import { useErrorText } from "@/composables/useAction";
 import ContactForm from "../components/ContactForm.vue";
 import { useContactsStore } from "../store";
 import type { Contact } from "../types";
+import { useSessionStore } from "@/stores/session";
 
 const { t } = useI18n();
+const session = useSessionStore();
 const route = useRoute();
 const router = useRouter();
 const store = useContactsStore();
@@ -67,10 +69,10 @@ async function onDelete() {
     <p v-if="error" role="alert" class="alert-error">{{ error }}</p>
     <p v-if="loading" class="text-sm text-gray-500">{{ t("common.loading") }}</p>
 
-    <ContactForm v-if="!id || contact" :key="contact?.id ?? 'new'" :contact="contact" @saved="onSaved">
+    <ContactForm v-if="!id || contact" :key="contact?.id ?? 'new'" :contact="contact" :readonly="!session.can('write')" @saved="onSaved">
       <template #actions>
         <RouterLink :to="{ name: 'contacts' }" class="btn">{{ t("common.cancel") }}</RouterLink>
-        <button v-if="contact" type="button" class="btn btn-danger ml-auto" @click="onDelete">
+        <button v-if="contact && session.can('write')" type="button" class="btn btn-danger ml-auto" @click="onDelete">
           {{ t("common.delete") }}
         </button>
       </template>

@@ -4,14 +4,14 @@ use axum::Json;
 use axum::extract::State;
 use chrono::{DateTime, FixedOffset, SubsecRound};
 use minijinja::Value;
-use sea_orm::{DatabaseConnection, EntityTrait};
+use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use super::{mailer, reply_to};
 use crate::app::AppState;
-use crate::contact::entity::contact;
+use crate::auth::{Read, Write};
 use crate::document::entity::document;
 use crate::document::line::Status;
 use crate::document::repo::{lifecycle, query};
@@ -23,10 +23,12 @@ use crate::email::templates;
 use crate::error::{AppError, ErrorBody};
 use crate::extract::{ApiJson, ApiPath, ApiQuery};
 use crate::isdoc::export;
+use crate::pdf::PdfService;
 use crate::pdf::format::Locale;
 use crate::pdf::{archive, source};
 use crate::settings::doc_type::ISSUED;
 use crate::settings::repo::company;
+use crate::space::SpaceId;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
@@ -78,13 +80,13 @@ fn pdf_available(row: &document::Model) -> bool {
 
 async fn live_contact_email(
     db: &DatabaseConnection,
+    space: SpaceId,
     contact_id: Option<Uuid>,
 ) -> Result<Option<String>, AppError> {
     let Some(cid) = contact_id else {
         return Ok(None);
     };
-    Ok(contact::Entity::find_by_id(cid)
-        .one(db)
+    Ok(crate::document::repo::context::contact(db, space, cid)
         .await?
         .and_then(|c| c.email))
 }
@@ -93,7 +95,7 @@ async fn live_contact_email(
     get,
     path = "/api/documents/{id}/email",
     tag = "email",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path), PrefillQuery),
     responses(
         (status = 200, body = Prefill),
@@ -105,19 +107,22 @@ async fn live_contact_email(
 )]
 pub async fn prefill(
     State(state): State<AppState>,
+    access: Read,
     ApiPath(id): ApiPath<Uuid>,
     ApiQuery(q): ApiQuery<PrefillQuery>,
 ) -> Result<Json<Prefill>, AppError> {
-    let src = source::load(&state.db, id).await?;
+    let space = access.space();
+    let pdf = state.pdf.space(space)?;
+    let src = source::load(&state.db, space, id).await?;
     check_sendable(&src.row)?;
     let locale = match q.locale.as_deref() {
         Some(l) => Locale::parse(l).ok_or(AppError::field("locale", "invalid"))?,
         None => Locale::parse(&src.row.locale).unwrap_or(Locale::Cs),
     };
     let (company, (template, _), live_email) = tokio::try_join!(
-        company::get(&state.db),
-        templates::load(state.pdf.storage(), locale),
-        live_contact_email(&state.db, src.row.contact_id),
+        company::get(&state.db, space),
+        templates::load(pdf.storage(), locale),
+        live_contact_email(&state.db, space, src.row.contact_id),
     )?;
     let ctx = context::build(
         &src.input()?,
@@ -158,6 +163,7 @@ pub async fn prefill(
 /// The files to attach, prepared (concurrently) before anything is sent.
 async fn files(
     state: &AppState,
+    pdf_service: &PdfService,
     row: &document::Model,
     input: &SendInput,
 ) -> Result<Vec<File>, AppError> {
@@ -165,7 +171,7 @@ async fn files(
         if !input.attach_pdf {
             return Ok(None);
         }
-        let (_, body) = archive::document_pdf(&state.db, &state.pdf, row.id).await?;
+        let (_, body) = archive::document_pdf(&state.db, pdf_service, row.id).await?;
         Ok::<_, AppError>(Some(File {
             filename: format!("{}.pdf", export::stem(row)),
             content_type: "application/pdf",
@@ -176,7 +182,7 @@ async fn files(
         if !input.attach_isdoc {
             return Ok(None);
         }
-        let x = export::plain(&state.db, row.id).await?;
+        let x = export::plain(&state.db, pdf_service.space_id(), row.id).await?;
         Ok::<_, AppError>(Some(File {
             filename: x.filename,
             content_type: x.content_type,
@@ -191,6 +197,7 @@ async fn files(
 /// response, or the user would send a delivered e-mail again.
 async fn record_sent(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     entry: &EmailLogEntry,
     sent_at: DateTime<FixedOffset>,
@@ -198,7 +205,7 @@ async fn record_sent(
     if let Err(e) = log::insert(db, id, entry).await {
         tracing::error!(document = %id, message_id = ?entry.message_id, error = %e, "e-mail sent but not logged");
     }
-    if let Err(e) = lifecycle::email_sent(db, id, sent_at).await {
+    if let Err(e) = lifecycle::email_sent(db, space, id, sent_at).await {
         tracing::error!(document = %id, error = %e, "e-mail sent but sentAt not updated");
     }
 }
@@ -207,7 +214,7 @@ async fn record_sent(
     post,
     path = "/api/documents/{id}/email",
     tag = "email",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     request_body = SendInput,
     responses(
@@ -221,14 +228,20 @@ async fn record_sent(
 )]
 pub async fn send(
     State(state): State<AppState>,
+    access: Write,
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<SendInput>,
 ) -> Result<Json<EmailLogEntry>, AppError> {
-    let row = query::find(&state.db, id).await?;
+    let space = access.space();
+    let row = query::find(&state.db, space, id).await?;
     check_sendable(&row)?;
     let mailer = mailer(&state)?;
     let v = validate(&input, pdf_available(&row)).map_err(AppError::Validation)?;
-    let (files, company) = tokio::try_join!(files(&state, &row, &input), company::get(&state.db))?;
+    let pdf = state.pdf.space(space)?;
+    let (files, company) = tokio::try_join!(
+        files(&state, &pdf, &row, &input),
+        company::get(&state.db, space)
+    )?;
     let attempt = Attempt {
         to: v.to.texts,
         cc: v.cc.texts,
@@ -254,7 +267,7 @@ pub async fn send(
     match result {
         Ok(()) => {
             let entry = log::entry(attempt, now, None, Some(message_id));
-            record_sent(&state.db, id, &entry, now).await;
+            record_sent(&state.db, space, id, &entry, now).await;
             Ok(Json(entry))
         }
         Err(AppError::SmtpFailed(detail)) => {
@@ -272,7 +285,7 @@ pub async fn send(
     get,
     path = "/api/documents/{id}/emails",
     tag = "email",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     responses(
         (status = 200, description = "Newest first", body = [EmailLogEntry]),
@@ -281,9 +294,10 @@ pub async fn send(
 )]
 pub async fn history(
     State(state): State<AppState>,
+    access: Read,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<EmailLogEntry>>, AppError> {
-    let row = query::find(&state.db, id).await?;
+    let row = query::find(&state.db, access.space(), id).await?;
     if row.direction != ISSUED {
         return Err(AppError::NotFound);
     }

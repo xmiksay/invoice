@@ -1,11 +1,11 @@
 use sea_orm::entity::prelude::*;
 
-/// The own company profile — a singleton row with `id = 1`, seeded by the migration.
+/// The own company profile — one row per space, created with the space.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "company")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: i16,
+    pub space_id: Uuid,
     pub name: String,
     pub ico: Option<String>,
     pub dic: Option<String>,
@@ -22,8 +22,6 @@ pub struct Model {
     pub default_locale: String,
     pub updated_at: DateTimeWithTimeZone,
 }
-
-pub const SINGLETON_ID: i16 = 1;
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}

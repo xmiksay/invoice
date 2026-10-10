@@ -1,5 +1,4 @@
 {
-  "invalidToken": "Invalid token.",
   "unreachable": "The server is unreachable. Try again later.",
   "unexpected": "Unexpected error ({code}).",
   "notFound": "Record not found.",
@@ -23,5 +22,10 @@
   "exceedsOriginal": "Cannot cancel: the credit notes would exceed the original document plus its debit notes for some VAT rate.",
   "smtpFailed": "Sending the e-mail failed – the SMTP server rejected the message or is unreachable.",
   "smtpNotConfigured": "E-mail sending is not configured (no SMTP server in the configuration).",
-  "templateInvalid": "The e-mail template contains an error."
+  "templateInvalid": "The e-mail template contains an error.",
+  "forbidden": "You are not allowed to do this.",
+  "csrf": "The request was refused (invalid origin). Reload the page and try again.",
+  "rateLimited": "Too many attempts. Please try again later.",
+  "emailUnverified": "Verify your e-mail first.",
+  "invalidCredentials": "Wrong e-mail or password."
 }

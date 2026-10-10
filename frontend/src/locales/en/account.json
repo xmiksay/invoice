@@ -1,0 +1,19 @@
+{
+  "title": "Account",
+  "name": "Name",
+  "email": "E-mail",
+  "password": {
+    "title": "Change password",
+    "current": "Current password",
+    "new": "New password",
+    "submit": "Change password",
+    "changed": "The password is changed. Other sessions were signed out."
+  },
+  "sessions": {
+    "title": "Sessions",
+    "intro": "Signs out every other device and browser on every space. This session stays.",
+    "revoke": "Log out other sessions",
+    "confirm": "Really sign out every other session?",
+    "revoked": "Other sessions were signed out."
+  }
+}

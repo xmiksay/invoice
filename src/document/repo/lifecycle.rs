@@ -9,6 +9,7 @@ use crate::document::entity::document;
 use crate::document::line::Status;
 use crate::error::AppError;
 use crate::settings::doc_type::ISSUED;
+use crate::space::SpaceId;
 
 const ISSUED_ONLY: &[Status] = &[Status::Issued];
 
@@ -16,6 +17,7 @@ const ISSUED_ONLY: &[Status] = &[Status::Issued];
 /// Anything else is `invalid_state`.
 async fn on_status(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     statuses: &'static [Status],
     allowed: fn(&document::Model) -> bool,
@@ -24,7 +26,7 @@ async fn on_status(
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let doc = locked(txn, id, statuses, allowed).await?;
+                let doc = locked(txn, space, id, statuses, allowed).await?;
                 apply(txn, doc, f).await
             })
         })
@@ -35,11 +37,12 @@ async fn on_status(
 /// / e-mail).
 async fn locked(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     id: Uuid,
     statuses: &[Status],
     allowed: fn(&document::Model) -> bool,
 ) -> Result<document::Model, AppError> {
-    let doc = query::lock(txn, id).await?;
+    let doc = query::lock(txn, space, id).await?;
     if !statuses.contains(&view::status(&doc)?) || doc.direction != ISSUED || !allowed(&doc) {
         return Err(AppError::InvalidState);
     }
@@ -74,13 +77,14 @@ fn cancellable(doc: &document::Model) -> bool {
 /// (imported) DDPP only without live corrections.
 pub async fn cancel(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     reason: Option<String>,
 ) -> Result<(), AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let doc = locked(txn, id, ISSUED_ONLY, cancellable).await?;
+                let doc = locked(txn, space, id, ISSUED_ONLY, cancellable).await?;
                 match doc.doc_type.as_str() {
                     "debit_note" => credit::check_debit_cancel(txn, &doc).await?,
                     "advance_credit_note" => ddpp_correction::check_linked(txn, &doc).await?,
@@ -101,11 +105,13 @@ pub async fn cancel(
 /// Idempotent: a repeated call overwrites `sent_at`.
 pub async fn mark_sent(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     sent_at: DateTime<FixedOffset>,
 ) -> Result<(), AppError> {
     on_status(
         db,
+        space,
         id,
         ISSUED_ONLY,
         |_| true,
@@ -118,11 +124,13 @@ pub async fn mark_sent(
 /// (which can still be e-mailed) counts too.
 pub async fn email_sent(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     sent_at: DateTime<FixedOffset>,
 ) -> Result<(), AppError> {
     on_status(
         db,
+        space,
         id,
         &[Status::Issued, Status::Cancelled],
         |_| true,
@@ -134,10 +142,11 @@ pub async fn email_sent(
 /// Allowed in every status.
 pub async fn set_internal_note(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     note: Option<String>,
 ) -> Result<(), AppError> {
-    let doc = query::find(db, id).await?;
+    let doc = query::find(db, space, id).await?;
     let mut row: document::ActiveModel = doc.into();
     row.internal_note = Set(note);
     row.updated_at = Set(chrono::Utc::now().into());

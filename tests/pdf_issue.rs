@@ -41,7 +41,7 @@ async fn issue_archives_the_pdf() {
     let path = env
         .storage
         .path()
-        .join(format!("documents/2026/{}.pdf", id(&doc)));
+        .join(db.key(&format!("documents/2026/{}.pdf", id(&doc))));
     let stored = std::fs::read(&path).expect("archived file exists");
     assert_eq!(stored, render.pdf);
     let sha = doc["pdf"]["sha256"].as_str().expect("sha256");
@@ -129,7 +129,7 @@ async fn render_error_is_502_with_detail() {
     );
     assert_eq!(get_doc(&app, &id(&draft)).await["status"], "draft");
     assert!(
-        !env.storage.path().join("documents").exists(),
+        !env.storage.path().join(db.key("documents")).exists(),
         "nothing archived"
     );
 }
@@ -191,7 +191,7 @@ async fn qr_only_for_bank_transfer_with_iban() {
         format!("inline; filename=\"draft-{short}.pdf\"").as_str()
     );
     assert_eq!(get_doc(&app, &id(&draft)).await["pdf"], Value::Null);
-    let year_dir = env.storage.path().join("documents/2026");
+    let year_dir = env.storage.path().join(db.key("documents/2026"));
     let files = std::fs::read_dir(year_dir).expect("archive dir").count();
     assert_eq!(files, 2, "only the two issued documents are archived");
 }

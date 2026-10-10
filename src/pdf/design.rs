@@ -1,5 +1,5 @@
 //! The design file set: the default design embedded from `design/`,
-//! overridden file by file by the storage keys `design/…` (listed on every
+//! overridden file by file by the space's storage keys `design/…` (listed on every
 //! render; file contents cached by key + version, so unchanged files are not
 //! downloaded again).
 
@@ -145,9 +145,11 @@ impl Cache {
         map.insert(key, (version, bytes));
     }
 
-    fn retain(&self, keys: &[&str]) {
+    /// Drop the entries of `scope` whose key is not in `keys` (other
+    /// scopes untouched).
+    fn retain(&self, scope: &str, keys: &[String]) {
         let mut map = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        map.retain(|k, _| keys.contains(&k.as_str()));
+        map.retain(|k, _| !k.starts_with(&format!("{scope}|")) || keys.contains(k));
     }
 
     /// Cached files (tests check what was downloaded).
@@ -155,17 +157,22 @@ impl Cache {
         self.0.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 
-    async fn fetch(&self, storage: &Storage, o: &Object) -> Result<Bytes, AppError> {
-        if let Some(bytes) = self.hit(&o.key, &o.version) {
+    async fn fetch(&self, storage: &Storage, scope: &str, o: &Object) -> Result<Bytes, AppError> {
+        let cache_key = scoped_key(scope, &o.key);
+        if let Some(bytes) = self.hit(&cache_key, &o.version) {
             return Ok(bytes);
         }
         // Cached under the listed version (a GET reports e.g. a coarser
         // Last-Modified): a file replaced between the listing and this read
         // no longer matches the next listing and is fetched again.
         let bytes = storage.get(&o.key).await?;
-        self.store(o.key.clone(), o.version.clone(), bytes.clone());
+        self.store(cache_key, o.version.clone(), bytes.clone());
         Ok(bytes)
     }
+}
+
+fn scoped_key(scope: &str, key: &str) -> String {
+    format!("{scope}|{key}")
 }
 
 /// A loaded design, ready to go into a render request.
@@ -209,10 +216,10 @@ fn too_large(path: &str, size: u64) -> Result<(), AppError> {
 /// Read the effective set. A file over 10 MB fails the render
 /// (`pdf_render_failed`, checked before any download); an unreachable
 /// storage is `storage_unavailable`.
-pub async fn load(storage: &Storage, cache: &Cache) -> Result<Design, AppError> {
+pub async fn load(storage: &Storage, cache: &Cache, scope: &str) -> Result<Design, AppError> {
     let custom = custom(storage).await?;
-    let keys: Vec<&str> = custom.values().map(|o| o.key.as_str()).collect();
-    cache.retain(&keys);
+    let keys: Vec<String> = custom.values().map(|o| scoped_key(scope, &o.key)).collect();
+    cache.retain(scope, &keys);
     let mut files = BTreeMap::new();
     for (path, size) in embedded() {
         if path == QR_IMAGE || custom.contains_key(&path) {
@@ -227,7 +234,7 @@ pub async fn load(storage: &Storage, cache: &Cache) -> Result<Design, AppError> 
             continue;
         }
         too_large(path, o.version.size)?;
-        files.insert(path.clone(), cache.fetch(storage, o).await?);
+        files.insert(path.clone(), cache.fetch(storage, scope, o).await?);
     }
     let template = files
         .remove(TEMPLATE)

@@ -8,11 +8,13 @@ use super::dto::{Payment, PaymentInput};
 use super::input::exchange_rate;
 use super::line_input::decimal;
 use crate::app::AppState;
+use crate::auth::{Read, Write};
 use crate::document::line::MAX_AMOUNT;
 use crate::document::repo::payments::{self as repo, NewPayment, WithAdvance};
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::{ApiJson, ApiPath};
 use crate::pdf::archive;
+use crate::space::SpaceId;
 use crate::time::today;
 use crate::validation as v;
 
@@ -63,15 +65,16 @@ impl PaymentInput {
     get,
     path = "/api/documents/{id}/payments",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     responses((status = 200, body = Vec<Payment>), (status = 404, body = ErrorBody))
 )]
 pub async fn list(
     State(state): State<AppState>,
+    access: Read,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<Payment>>, AppError> {
-    let rows = repo::list(&state.db, id).await?;
+    let rows = repo::list(&state.db, access.space(), id).await?;
     Ok(Json(rows.into_iter().map(Into::into).collect()))
 }
 
@@ -79,7 +82,7 @@ pub async fn list(
     post,
     path = "/api/documents/{id}/payments",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     request_body = PaymentInput,
     responses(
@@ -91,18 +94,27 @@ pub async fn list(
 )]
 pub async fn create(
     State(state): State<AppState>,
+    access: Write,
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<PaymentInput>,
 ) -> Result<(StatusCode, Json<Payment>), AppError> {
-    Ok((StatusCode::CREATED, Json(add(&state, id, input).await?)))
+    Ok((
+        StatusCode::CREATED,
+        Json(add(&state, access.space(), id, input).await?),
+    ))
 }
 
 /// Record a payment; on a VAT payer's proforma this issues its DDPP, whose
 /// PDF is archived in the background (never failing the payment).
-pub async fn add(state: &AppState, id: Uuid, input: PaymentInput) -> Result<Payment, AppError> {
-    let row = repo::create(&state.db, &state.cnb, id, input.validate()?, today()).await?;
+pub async fn add(
+    state: &AppState,
+    space: SpaceId,
+    id: Uuid,
+    input: PaymentInput,
+) -> Result<Payment, AppError> {
+    let row = repo::create(&state.db, &state.cnb, space, id, input.validate()?, today()).await?;
     if let Some(ddpp) = row.1 {
-        archive::spawn_archive_ddpp(state.db.clone(), state.pdf.clone(), ddpp);
+        archive::spawn_archive_ddpp(state.db.clone(), state.pdf.space(space)?, ddpp);
     }
     Ok(row.into())
 }
@@ -111,7 +123,7 @@ pub async fn add(state: &AppState, id: Uuid, input: PaymentInput) -> Result<Paym
     delete,
     path = "/api/documents/{id}/payments/{paymentId}",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path), ("paymentId" = Uuid, Path)),
     responses(
         (status = 204),
@@ -121,8 +133,9 @@ pub async fn add(state: &AppState, id: Uuid, input: PaymentInput) -> Result<Paym
 )]
 pub async fn delete(
     State(state): State<AppState>,
+    access: Write,
     ApiPath((id, payment_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<StatusCode, AppError> {
-    repo::delete(&state.db, id, payment_id).await?;
+    repo::delete(&state.db, access.space(), id, payment_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

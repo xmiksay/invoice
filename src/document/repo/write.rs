@@ -12,6 +12,7 @@ use crate::document::entity::document::{ActiveModel, Entity};
 use crate::document::handlers::input::DocumentData;
 use crate::document::line::Status;
 use crate::error::{AppError, number_violation};
+use crate::space::SpaceId;
 
 /// Header fields an edit sets, shared by create and update.
 fn apply(row: &mut ActiveModel, d: &DocumentData) {
@@ -64,16 +65,18 @@ pub fn apply_totals(row: &mut ActiveModel, t: &Totals) {
 /// `data` and `totals` must already be validated / computed.
 pub async fn create(
     db: &DatabaseConnection,
+    space: SpaceId,
     data: DocumentData,
     totals: Totals,
 ) -> Result<Uuid, AppError> {
     Ok(db
-        .transaction(|txn| Box::pin(create_in(txn, data, totals)))
+        .transaction(|txn| Box::pin(create_in(txn, space, data, totals)))
         .await?)
 }
 
 pub async fn create_in(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     data: DocumentData,
     totals: Totals,
 ) -> Result<Uuid, AppError> {
@@ -81,6 +84,7 @@ pub async fn create_in(
     let now = chrono::Utc::now().into();
     let mut row = ActiveModel {
         id: Set(id),
+        space_id: Set(space.uuid()),
         direction: Set("issued".into()),
         doc_type: Set(data.doc_type.as_str().into()),
         status: Set(Status::Draft.as_str().into()),
@@ -101,7 +105,7 @@ pub async fn create_in(
     };
     apply(&mut row, &data);
     apply_totals(&mut row, &totals);
-    advance_sources::lock_and_recheck(txn, id, &data.lines).await?;
+    advance_sources::lock_and_recheck(txn, space, id, &data.lines).await?;
     row.insert(txn).await.map_err(duplicate_number)?;
     lines::replace(txn, id, &data.lines).await?;
     lines::replace_recap(txn, id, &totals).await?;
@@ -111,23 +115,25 @@ pub async fn create_in(
 /// Replace a draft; anything else is [`AppError::DocumentLocked`].
 pub async fn update(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     data: DocumentData,
     totals: Totals,
 ) -> Result<(), AppError> {
     Ok(db
-        .transaction(|txn| Box::pin(update_in(txn, id, data, totals)))
+        .transaction(|txn| Box::pin(update_in(txn, space, id, data, totals)))
         .await?)
 }
 
 async fn update_in(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     id: Uuid,
     data: DocumentData,
     totals: Totals,
 ) -> Result<(), AppError> {
-    let doc = locked_draft(txn, id).await?;
-    advance_sources::lock_and_recheck(txn, id, &data.lines).await?;
+    let doc = locked_draft(txn, space, id).await?;
+    advance_sources::lock_and_recheck(txn, space, id, &data.lines).await?;
     let mut row: ActiveModel = doc.into();
     apply(&mut row, &data);
     apply_totals(&mut row, &totals);
@@ -140,11 +146,15 @@ async fn update_in(
 
 /// Returns the uploaded original's path (imported drafts) for the caller to
 /// remove once the delete committed.
-pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<Option<String>, AppError> {
+pub async fn delete(
+    db: &DatabaseConnection,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<Option<String>, AppError> {
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                let doc = locked_draft(txn, id).await?;
+                let doc = locked_draft(txn, space, id).await?;
                 Entity::delete_by_id(id).exec(txn).await?;
                 Ok(doc.original_path)
             })
@@ -154,9 +164,10 @@ pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<Option<String>,
 
 async fn locked_draft(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     id: Uuid,
 ) -> Result<crate::document::entity::document::Model, AppError> {
-    let doc = query::lock(txn, id).await?;
+    let doc = query::lock(txn, space, id).await?;
     if view::status(&doc)? != Status::Draft {
         return Err(AppError::DocumentLocked);
     }

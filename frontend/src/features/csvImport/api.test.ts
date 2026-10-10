@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import { useAuthStore } from "@/stores/auth";
 import { mockFetch, sentHeaders } from "@/test-utils";
 import { csvImportApi } from "./api";
 import { csvFile } from "./testData";
@@ -31,12 +30,11 @@ describe("csvImportApi", () => {
     expect(JSON.parse(body.get("options") as string)).toEqual({ selected: ["row:2"] });
   });
 
-  it("downloads the sample with the token, accepting CSV", async () => {
-    useAuthStore().token = "t";
+  it("downloads the sample with the session cookie, accepting CSV", async () => {
     const fetch = mockFetch(200, {});
     await csvImportApi.sample();
     expect(fetch.mock.calls[0]![0]).toBe("/api/import/csv/sample");
     expect(sentHeaders(fetch).get("Accept")).toContain("text/csv");
-    expect(sentHeaders(fetch).get("Authorization")).toBe("Bearer t");
+    expect(fetch.mock.calls[0]![1]?.credentials).toBe("same-origin");
   });
 });

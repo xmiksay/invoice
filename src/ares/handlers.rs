@@ -3,6 +3,7 @@ use axum::extract::State;
 
 use super::AresSubject;
 use crate::app::AppState;
+use crate::auth::Read;
 use crate::error::{AppError, ErrorBody};
 use crate::extract::ApiPath;
 use crate::validation::opt_ico;
@@ -11,7 +12,7 @@ use crate::validation::opt_ico;
     get,
     path = "/api/ares/{ico}",
     tag = "ares",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("ico" = String, Path, description = "8-digit IČO")),
     responses(
         (status = 200, body = AresSubject),
@@ -22,6 +23,7 @@ use crate::validation::opt_ico;
 )]
 pub async fn lookup(
     State(state): State<AppState>,
+    _: Read,
     ApiPath(ico): ApiPath<String>,
 ) -> Result<Json<AresSubject>, AppError> {
     Ok(Json(lookup_ico(&state, &ico).await?))

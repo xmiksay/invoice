@@ -1,15 +1,18 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
+import type { Role } from "@/features/spaces/types";
 import { i18n } from "@/i18n";
+import { signIn } from "@/test-utils";
 import InvoiceDetailView from "./InvoiceDetailView.vue";
 
 const stub = { template: "<div />" };
 
-/** Mounts the detail view at `/invoices/{id}`; the router is returned to assert navigation. */
-export async function mountDetail(id = "d1") {
+/** Mounts the detail view at `/invoices/{id}` as `role`; the router is returned to assert navigation. */
+export async function mountDetail(id = "d1", role: Role = "owner") {
   const pinia = createPinia();
   setActivePinia(pinia);
+  signIn(role);
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [

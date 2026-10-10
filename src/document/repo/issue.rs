@@ -2,9 +2,7 @@
 
 use chrono::{DateTime, Datelike, FixedOffset, NaiveDate};
 use rust_decimal::Decimal;
-use sea_orm::{
-    ActiveModelTrait, DatabaseConnection, DatabaseTransaction, EntityTrait, Set, TransactionTrait,
-};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, DatabaseTransaction, Set, TransactionTrait};
 use uuid::Uuid;
 
 use anyhow::Context as _;
@@ -24,6 +22,7 @@ use crate::pdf::{PdfService, archive};
 use crate::settings::doc_type::{DocType, ISSUED};
 use crate::settings::entity::{bank_account, company};
 use crate::settings::repo::{company as company_repo, number_series};
+use crate::space::SpaceId;
 
 /// The exchange rate an issued document uses.
 pub struct Rate {
@@ -91,16 +90,17 @@ pub async fn issue(
     db: &DatabaseConnection,
     cnb: &CnbClient,
     pdf: &PdfService,
+    space: SpaceId,
     id: Uuid,
     today: NaiveDate,
 ) -> Result<(), AppError> {
-    let doc = query::find(db, id).await?;
+    let doc = query::find(db, space, id).await?;
     if view::status(&doc)? != Status::Draft {
         return Err(AppError::InvalidState);
     }
     let doc_type = context::existing(&doc)?.doc_type;
     let mut lines = query::load_lines(db, id).await?;
-    let (customer, bank) = check(db, &doc, doc_type, &lines).await?;
+    let (customer, bank) = check(db, space, &doc, doc_type, &lines).await?;
     // A native correction keeps the rate of the document it corrects.
     let rate = if doc_type.is_correction() && !doc.imported {
         Rate {
@@ -120,7 +120,7 @@ pub async fn issue(
         round_total: doc.round_total,
     };
     // Re-resolve deductions: the stored amounts are a draft-time snapshot.
-    let sources = advance_sources::load(db, &advance::referenced_ids(&lines)).await?;
+    let sources = advance_sources::load(db, space, &advance::referenced_ids(&lines)).await?;
     let adv = AdvanceCtx {
         doc_type,
         vat_mode,
@@ -138,13 +138,13 @@ pub async fn issue(
         seen_updated_at: doc.updated_at,
         customer,
         bank,
-        company: company_repo::get(db).await?,
+        company: company_repo::get(db, space).await?,
         rate,
         params,
         evaluated,
     };
     let txn = db.begin().await?;
-    let stored = match issue_in(&txn, id, prepared, pdf).await {
+    let stored = match issue_in(&txn, space, id, prepared, pdf).await {
         Ok(stored) => stored,
         Err(e) => {
             if let Err(r) = txn.rollback().await {
@@ -165,16 +165,17 @@ pub async fn issue(
 /// The issue validations (422 with every failing field).
 async fn check(
     db: &DatabaseConnection,
+    space: SpaceId,
     doc: &document::Model,
     doc_type: DocType,
     lines: &[LineData],
 ) -> Result<(Option<contact::Model>, Option<bank_account::Model>), AppError> {
     let mut e = FieldErrors::new();
     let customer = match doc.contact_id {
-        Some(cid) => contact::Entity::find_by_id(cid).one(db).await?,
+        Some(cid) => context::contact(db, space, cid).await?,
         None => None,
     };
-    if customer.is_none() && !customer_optional(db, doc, doc_type).await? {
+    if customer.is_none() && !customer_optional(db, space, doc, doc_type).await? {
         e.add("contactId", "required");
     }
     if !lines.iter().any(|l| matches!(l, LineData::Item(_))) {
@@ -185,7 +186,7 @@ async fn check(
     }
     // Definitions may have changed since the draft was saved.
     let stored = meta::stored_fields(doc);
-    let defs = meta::defs(db, ISSUED).await?;
+    let defs = meta::defs(db, space, ISSUED).await?;
     custom_fields::validate(&stored, &defs, &stored, &mut e);
     match (doc_type, doc.tax_point_date) {
         (DocType::Proforma, Some(_)) => e.add("taxPointDate", "invalid"),
@@ -197,7 +198,7 @@ async fn check(
         e.add("correctionReason", "required");
     }
     let bank = match doc.bank_account_id {
-        Some(bid) => context::bank_account(db, bid).await?,
+        Some(bid) => context::bank_account(db, space, bid).await?,
         None => None,
     };
     match &bank {
@@ -215,13 +216,14 @@ async fn check(
 /// debit note of one issued without a customer (it is bound to that null).
 async fn customer_optional(
     db: &DatabaseConnection,
+    space: SpaceId,
     doc: &document::Model,
     doc_type: DocType,
 ) -> Result<bool, AppError> {
     Ok(match (doc_type, doc.related_document_id) {
         (DocType::Simplified, _) => true,
         (DocType::CreditNote | DocType::DebitNote, Some(orig)) if !doc.imported => {
-            let orig = query::find(db, orig).await?;
+            let orig = query::find(db, space, orig).await?;
             orig.doc_type == DocType::Simplified.as_str() && orig.customer_snapshot.is_none()
         }
         _ => false,
@@ -274,11 +276,12 @@ fn json<T: serde::Serialize>(v: &T) -> Result<serde_json::Value, AppError> {
 
 async fn issue_in(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     id: Uuid,
     p: Prepared,
     pdf: &PdfService,
 ) -> Result<Option<String>, AppError> {
-    let doc = query::lock(txn, id).await?;
+    let doc = query::lock(txn, space, id).await?;
     if view::status(&doc)? != Status::Draft {
         return Err(AppError::InvalidState);
     }
@@ -287,20 +290,21 @@ async fn issue_in(
         return Err(AppError::Conflict("document changed while issuing".into()));
     }
     let mut totals = p.evaluated.totals;
-    advance_sources::lock_and_recheck(txn, id, &p.lines).await?;
+    advance_sources::lock_and_recheck(txn, space, id, &p.lines).await?;
     // An imported correction documents amounts as they were: no cap.
     if p.doc_type.is_correction() && !doc.imported {
         let original = doc
             .related_document_id
             .context("correction without its original")?;
         match p.doc_type {
-            DocType::CreditNote => credit::check_cap(txn, id, original, &totals).await?,
+            DocType::CreditNote => credit::check_cap(txn, space, id, original, &totals).await?,
             // No cap, but the original must still be correctable.
             DocType::DebitNote => {
-                credit::locked_original(txn, original).await?;
+                credit::locked_original(txn, space, original).await?;
             }
             DocType::AdvanceCreditNote => {
-                ddpp_correction::check_issue(txn, id, original, &mut totals, p.params).await?
+                ddpp_correction::check_issue(txn, space, id, original, &mut totals, p.params)
+                    .await?
             }
             _ => {}
         }
@@ -314,7 +318,8 @@ async fn issue_in(
         (None, true) => return Err(AppError::field("number", "required")),
         (_, false) => {
             let (n, seq) =
-                number_series::allocate_number(txn, p.doc_type, doc.issue_date.year()).await?;
+                number_series::allocate_number(txn, space, p.doc_type, doc.issue_date.year())
+                    .await?;
             (n, Some(seq))
         }
     };

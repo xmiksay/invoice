@@ -13,6 +13,7 @@ use super::format::Locale;
 use super::payload;
 use super::preview::Sample;
 use crate::app::AppState;
+use crate::auth::Read;
 use crate::document::line::Status;
 use crate::error::{AppError, ErrorBody};
 use crate::extract::{ApiPath, ApiQuery};
@@ -79,7 +80,7 @@ fn pdf_response(body: PdfBody, stem: &str, download: bool) -> Response {
     get,
     path = "/api/documents/{id}/pdf",
     tag = "pdf",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path), DownloadQuery),
     responses(
         (status = 200, description = "The PDF: received / imported → the uploaded original; a draft rendered live (watermark, no QR, never stored); otherwise the archive", content_type = "application/pdf"),
@@ -90,10 +91,12 @@ fn pdf_response(body: PdfBody, stem: &str, download: bool) -> Response {
 )]
 pub async fn document_pdf(
     State(state): State<AppState>,
+    access: Read,
     ApiPath(id): ApiPath<Uuid>,
     ApiQuery(q): ApiQuery<DownloadQuery>,
 ) -> Result<Response, AppError> {
-    let (row, body) = archive::document_pdf(&state.db, &state.pdf, id).await?;
+    let pdf = state.pdf.space(access.space())?;
+    let (row, body) = archive::document_pdf(&state.db, &pdf, id).await?;
     // An imported draft already has its own number.
     let unnumbered = row.status == Status::Draft.as_str() && !row.imported;
     let stem = match (&row.number, unnumbered) {
@@ -108,7 +111,7 @@ pub async fn document_pdf(
     get,
     path = "/api/pdf/preview",
     tag = "pdf",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(PreviewQuery),
     responses(
         (status = 200, description = "A sample invoice in the current design", content_type = "application/pdf"),
@@ -119,15 +122,20 @@ pub async fn document_pdf(
 )]
 pub async fn preview(
     State(state): State<AppState>,
+    access: Read,
     ApiQuery(q): ApiQuery<PreviewQuery>,
 ) -> Result<Response, AppError> {
-    let company = company::get(&state.db).await?;
+    let company = company::get(&state.db, access.space()).await?;
     let locale = match q.locale.as_deref() {
         Some(l) => Locale::parse(l).ok_or(AppError::field("locale", "invalid"))?,
         None => Locale::parse(&company.default_locale).unwrap_or(Locale::Cs),
     };
     let sample = Sample::load(&state.db, &company, locale).await?;
-    let bytes = state.pdf.render(payload::build(&sample.input())?).await?;
+    let bytes = state
+        .pdf
+        .space(access.space())?
+        .render(payload::build(&sample.input())?)
+        .await?;
     Ok(pdf_response(
         PdfBody::Rendered(bytes.into()),
         "preview",
@@ -139,14 +147,18 @@ pub async fn preview(
     get,
     path = "/api/pdf/design",
     tag = "pdf",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     responses(
         (status = 200, body = DesignListing),
         (status = 503, description = "`storage_unavailable`", body = ErrorBody),
     )
 )]
-pub async fn design(State(state): State<AppState>) -> Result<Json<DesignListing>, AppError> {
-    let storage = state.pdf.storage();
+pub async fn design(
+    State(state): State<AppState>,
+    access: Read,
+) -> Result<Json<DesignListing>, AppError> {
+    let pdf = state.pdf.space(access.space())?;
+    let storage = pdf.storage();
     let files = design::list(storage).await?;
     Ok(Json(DesignListing {
         storage: storage.kind().to_string(),

@@ -9,6 +9,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::app::AppState;
+use crate::auth::{Manage, Read};
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::{ApiJson, ApiPath};
 use crate::settings::entity::vat_rate;
@@ -108,11 +109,14 @@ impl VatRateInput {
     get,
     path = "/api/settings/vat-rates",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     responses((status = 200, body = Vec<VatRate>))
 )]
-pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<VatRate>>, AppError> {
-    let rows = repo::vat_rates::list(&state.db).await?;
+pub async fn list(
+    State(state): State<AppState>,
+    access: Read,
+) -> Result<Json<Vec<VatRate>>, AppError> {
+    let rows = repo::vat_rates::list(&state.db, access.space()).await?;
     Ok(Json(rows.into_iter().map(Into::into).collect()))
 }
 
@@ -120,7 +124,7 @@ pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<VatRate>>, A
     post,
     path = "/api/settings/vat-rates",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body = VatRateInput,
     responses(
         (status = 201, body = VatRate),
@@ -129,9 +133,10 @@ pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<VatRate>>, A
 )]
 pub async fn create(
     State(state): State<AppState>,
+    access: Manage,
     ApiJson(input): ApiJson<VatRateInput>,
 ) -> Result<(StatusCode, Json<VatRate>), AppError> {
-    let row = repo::vat_rates::create(&state.db, input.validate()?).await?;
+    let row = repo::vat_rates::create(&state.db, access.space(), input.validate()?).await?;
     Ok((StatusCode::CREATED, Json(row.into())))
 }
 
@@ -139,7 +144,7 @@ pub async fn create(
     put,
     path = "/api/settings/vat-rates/{id}",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     request_body = VatRateInput,
     responses(
@@ -150,10 +155,11 @@ pub async fn create(
 )]
 pub async fn update(
     State(state): State<AppState>,
+    access: Manage,
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<VatRateInput>,
 ) -> Result<Json<VatRate>, AppError> {
-    let row = repo::vat_rates::update(&state.db, id, input.validate()?).await?;
+    let row = repo::vat_rates::update(&state.db, access.space(), id, input.validate()?).await?;
     Ok(Json(row.into()))
 }
 
@@ -161,15 +167,16 @@ pub async fn update(
     delete,
     path = "/api/settings/vat-rates/{id}",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     responses((status = 204), (status = 404, body = ErrorBody))
 )]
 pub async fn delete(
     State(state): State<AppState>,
+    access: Manage,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    repo::vat_rates::delete(&state.db, id).await?;
+    repo::vat_rates::delete(&state.db, access.space(), id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -213,6 +220,7 @@ mod tests {
     fn rate_serializes_as_normalized_string() {
         let dto = VatRate::from(vat_rate::Model {
             id: Uuid::nil(),
+            space_id: Uuid::nil(),
             rate: Decimal::new(2100, 2),
             label: "Základní".into(),
             is_default: true,

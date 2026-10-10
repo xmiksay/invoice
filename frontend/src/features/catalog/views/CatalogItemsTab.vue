@@ -7,8 +7,10 @@ import CatalogItemForm from "../components/CatalogItemForm.vue";
 import CatalogSearch from "../components/CatalogSearch.vue";
 import { useCatalogItemsStore } from "../store";
 import type { CatalogItem } from "../types";
+import { useSessionStore } from "@/stores/session";
 
 const { t, locale } = useI18n();
+const session = useSessionStore();
 const store = useCatalogItemsStore();
 const { error, run } = useAction();
 /** null = form closed, "new" = create, otherwise the item being edited. */
@@ -29,7 +31,7 @@ function onDelete(item: CatalogItem) {
     <CatalogItemForm v-if="editing" :key="editing === 'new' ? 'new' : editing.id" :item="editing === 'new' ? undefined : editing" @done="editing = null" />
     <div v-else class="flex flex-wrap items-center justify-between gap-3">
       <CatalogSearch id="catalog-items-search" :initial="store.q" :placeholder="t('catalog.items.searchPlaceholder')" @search="(q) => run(() => store.search(q))" />
-      <button type="button" class="btn btn-primary" data-test="add-item" @click="editing = 'new'">{{ t("catalog.items.add") }}</button>
+      <button type="button" v-if="session.can('write')" class="btn btn-primary" data-test="add-item" @click="editing = 'new'">{{ t("catalog.items.add") }}</button>
     </div>
 
     <div class="card overflow-x-auto !p-0">
@@ -55,7 +57,7 @@ function onDelete(item: CatalogItem) {
             </td>
             <td class="hidden text-right sm:table-cell">{{ i.vatRate }} %</td>
             <td class="whitespace-nowrap">
-              <div class="flex gap-1">
+              <div v-if="session.can('write')" class="flex gap-1">
                 <button type="button" class="btn btn-sm" @click="editing = i">{{ t("common.edit") }}</button>
                 <button type="button" class="btn btn-sm btn-danger" @click="onDelete(i)">{{ t("common.delete") }}</button>
               </div>

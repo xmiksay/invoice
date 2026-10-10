@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use axum::Json;
 use axum::extract::multipart::MultipartRejection;
 use axum::extract::{Multipart, State};
-use sea_orm::EntityTrait;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -13,6 +13,7 @@ use uuid::Uuid;
 use super::analyze::{self, Analyzed, Ready, Status};
 use super::parse::Code;
 use crate::app::AppState;
+use crate::auth::Write;
 use crate::cnb;
 use crate::document::repo::issue::Rate;
 use crate::error::{AppError, ErrorBody};
@@ -20,8 +21,10 @@ use crate::import::category::CategoryRef;
 use crate::import::store::{self, Options};
 use crate::import::wire::{self, Confirmed, PreviewEntry};
 use crate::import::{form, lookup};
+use crate::pdf::PdfService;
 use crate::settings::doc_type::RECEIVED;
 use crate::settings::entity::category;
+use crate::space::SpaceId;
 use crate::time::today;
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -55,7 +58,7 @@ fn entry(a: &Analyzed) -> PreviewEntry {
     post,
     path = "/api/import/isdoc/preview",
     tag = "import",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body(content_type = "multipart/form-data", description = "`files` parts: `.isdoc`, `.isdocx` or `.zip` (≤ 50 MiB together)"),
     responses(
         (status = 200, body = Preview),
@@ -65,19 +68,28 @@ fn entry(a: &Analyzed) -> PreviewEntry {
 )]
 pub async fn preview(
     State(state): State<AppState>,
+    access: Write,
     form: Result<Multipart, MultipartRejection>,
 ) -> Result<Json<Preview>, AppError> {
     let (files, _) = form::read(form, "files").await?;
-    let analyzed = analyze::analyze(&state.db, files, None).await?;
+    let analyzed = analyze::analyze(&state.db, access.space(), files, None).await?;
     Ok(Json(Preview {
         entries: analyzed.iter().map(entry).collect(),
     }))
 }
 
 /// An expense category that can be assigned.
-async fn check_category(state: &AppState, id: Option<Uuid>) -> Result<(), AppError> {
+async fn check_category(
+    state: &AppState,
+    space: SpaceId,
+    id: Option<Uuid>,
+) -> Result<(), AppError> {
     let Some(id) = id else { return Ok(()) };
-    match category::Entity::find_by_id(id).one(&state.db).await? {
+    let found = category::Entity::find_by_id(id)
+        .filter(category::Column::SpaceId.eq(space))
+        .one(&state.db)
+        .await?;
+    match found {
         Some(c) if c.kind == "expense" && c.active => Ok(()),
         Some(c) if c.kind == "expense" => Err(AppError::field("categoryId", "inactive")),
         _ => Err(AppError::field("categoryId", "invalid")),
@@ -130,9 +142,14 @@ fn entry_options(input: &OptionsInput, r: &Ready) -> Options {
     }
 }
 
-async fn import_one(state: &AppState, r: &Ready, opts: &Options) -> Result<Uuid, Code> {
+async fn import_one(
+    state: &AppState,
+    pdf: &PdfService,
+    r: &Ready,
+    opts: &Options,
+) -> Result<Uuid, Code> {
     let rate = rate(state, r).await?;
-    store::import(&state.db, &state.pdf, &r.plan, r.pdf.clone(), &rate, opts)
+    store::import(&state.db, pdf, &r.plan, r.pdf.clone(), &rate, opts)
         .await
         .map_err(wire::failure)
 }
@@ -141,7 +158,7 @@ async fn import_one(state: &AppState, r: &Ready, opts: &Options) -> Result<Uuid,
     post,
     path = "/api/import/isdoc/confirm",
     tag = "import",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body(content_type = "multipart/form-data", description = "The same `files` as the preview plus an `options` text part holding JSON (`OptionsInput`)"),
     responses(
         (status = 200, body = Confirmed),
@@ -151,13 +168,16 @@ async fn import_one(state: &AppState, r: &Ready, opts: &Options) -> Result<Uuid,
 )]
 pub async fn confirm(
     State(state): State<AppState>,
+    access: Write,
     form: Result<Multipart, MultipartRejection>,
 ) -> Result<Json<Confirmed>, AppError> {
     let (files, raw) = form::read(form, "files").await?;
     let input: OptionsInput = form::options(raw)?;
-    check_category(&state, input.category_id).await?;
+    let space = access.space();
+    check_category(&state, space, input.category_id).await?;
+    let pdf = state.pdf.space(space)?;
     let selected: HashSet<String> = input.selected.iter().cloned().collect();
-    let analyzed = analyze::analyze(&state.db, files, Some(&selected)).await?;
+    let analyzed = analyze::analyze(&state.db, space, files, Some(&selected)).await?;
     let mut todo: Vec<(&str, &Ready)> = analyzed
         .iter()
         .filter(|a| selected.contains(&a.key))
@@ -170,7 +190,7 @@ pub async fn confirm(
     let mut done: HashMap<&str, Result<Uuid, Code>> = HashMap::new();
     for (key, r) in todo {
         let opts = entry_options(&input, r);
-        done.insert(key, import_one(&state, r, &opts).await);
+        done.insert(key, import_one(&state, &pdf, r, &opts).await);
     }
     Ok(Json(wire::confirmed(
         analyzed.iter().map(|a| a.key.as_str()),

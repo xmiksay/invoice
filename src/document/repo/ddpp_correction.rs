@@ -23,6 +23,7 @@ use crate::document::handlers::input::Existing;
 use crate::document::line::{AdvanceRow, Status};
 use crate::error::AppError;
 use crate::settings::doc_type::{DocType, ISSUED};
+use crate::space::SpaceId;
 
 /// An issued (not cancelled) DDPP of ours, imported ones included.
 pub fn correctable(doc: &document::Model) -> Result<bool, AppError> {
@@ -33,8 +34,12 @@ pub fn correctable(doc: &document::Model) -> Result<bool, AppError> {
 
 /// Lock the DDPP, require it correctable and not deducted by a non-cancelled
 /// invoice (`advance_settled` / `advance_in_use`).
-async fn locked_ddpp<C: ConnectionTrait>(txn: &C, id: Uuid) -> Result<(), AppError> {
-    let doc = query::lock(txn, id).await?;
+async fn locked_ddpp<C: ConnectionTrait>(
+    txn: &C,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<(), AppError> {
+    let doc = query::lock(txn, space, id).await?;
     if !correctable(&doc)? {
         return Err(AppError::InvalidState);
     }
@@ -169,16 +174,16 @@ pub async fn create(
         .await?
         .apply(&mut totals, data.params())
         .map_err(exact_error)?;
-    let ddpp_id = ddpp.id;
+    let (space, ddpp_id) = (SpaceId(ddpp.space_id), ddpp.id);
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                locked_ddpp(txn, ddpp_id).await?;
+                locked_ddpp(txn, space, ddpp_id).await?;
                 // Any correction of a fully corrected DDPP would exceed it.
                 if fully_corrected(txn, ddpp_id).await? {
                     return Err(AppError::InvalidState);
                 }
-                write::create_in(txn, data, totals).await
+                write::create_in(txn, space, data, totals).await
             })
         })
         .await?)
@@ -189,12 +194,13 @@ pub async fn create(
 /// other rate), then the exact VAT of a full correction.
 pub async fn check_issue(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     note: Uuid,
     ddpp: Uuid,
     totals: &mut Totals,
     p: Params,
 ) -> Result<(), AppError> {
-    locked_ddpp(txn, ddpp).await?;
+    locked_ddpp(txn, space, ddpp).await?;
     // Read under the DDPP lock: corrections of this DDPP issue serially.
     let basis = basis(txn, ddpp, Some(note)).await?;
     let cap: Vec<_> = basis.ddpp.iter().map(|r| (r.vat_rate, r.base)).collect();
@@ -219,7 +225,7 @@ pub async fn check_linked(
 ) -> Result<(), AppError> {
     match note.related_document_id {
         Some(ddpp) => {
-            query::lock(txn, ddpp).await?;
+            query::lock(txn, SpaceId(note.space_id), ddpp).await?;
             ensure_not_deducted(txn, ddpp).await
         }
         None => Ok(()),

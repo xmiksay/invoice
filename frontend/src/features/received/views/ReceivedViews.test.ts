@@ -6,7 +6,7 @@ import { i18n } from "@/i18n";
 import { document } from "@/features/documents/testData";
 import type { DocumentSummary } from "@/features/documents/types";
 import type { CustomField } from "@/features/settings/types";
-import { calls, mockFetchRoutes, reply } from "@/test-utils";
+import { calls, mockFetchRoutes, reply, signIn } from "@/test-utils";
 import ReceivedDetailView from "./ReceivedDetailView.vue";
 import ReceivedListView from "./ReceivedListView.vue";
 
@@ -43,6 +43,7 @@ const categories = [
 async function mountAt(path: string) {
   const pinia = createPinia();
   setActivePinia(pinia);
+  signIn("owner");
   const stub = { template: "<div />" };
   const router = createRouter({
     history: createMemoryHistory(),

@@ -16,8 +16,10 @@ import { isNativeNewType } from "../docTypes";
 import { formatDate, formatMoney, signed } from "../format";
 import { listDocTypeOf } from "../routes";
 import { useInvoiceListStore, type InvoiceFilters as Filters } from "../store";
+import { useSessionStore } from "@/stores/session";
 
 const { t, locale } = useI18n();
+const session = useSessionStore();
 const route = useRoute();
 const router = useRouter();
 const store = useInvoiceListStore();
@@ -55,10 +57,12 @@ function open(id: string) {
         <IsdocExportButton :query="store.query" />
         <CsvExportButton :query="store.query" />
         <AccountantExportButton />
-        <RouterLink :to="{ name: 'isdoc-import' }" class="btn" data-test="import-isdoc">{{ t("isdoc.import.action") }}</RouterLink>
-        <RouterLink :to="{ name: 'csv-import' }" class="btn" data-test="import-csv">{{ t("csvImport.import.action") }}</RouterLink>
-        <RouterLink :to="importLink" class="btn" data-test="import-document">{{ t("documents.import.action") }}</RouterLink>
-        <RouterLink v-if="newLink" :to="newLink.to" class="btn btn-primary" data-test="new-document">{{ newLink.label }}</RouterLink>
+        <template v-if="session.can('write')">
+          <RouterLink :to="{ name: 'isdoc-import' }" class="btn" data-test="import-isdoc">{{ t("isdoc.import.action") }}</RouterLink>
+          <RouterLink :to="{ name: 'csv-import' }" class="btn" data-test="import-csv">{{ t("csvImport.import.action") }}</RouterLink>
+          <RouterLink :to="importLink" class="btn" data-test="import-document">{{ t("documents.import.action") }}</RouterLink>
+          <RouterLink v-if="newLink" :to="newLink.to" class="btn btn-primary" data-test="new-document">{{ newLink.label }}</RouterLink>
+        </template>
       </div>
     </div>
 

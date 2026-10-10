@@ -1,7 +1,7 @@
 //! OpenAPI document served at `/api/openapi.json`.
 
 use axum::Json;
-use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, Http, HttpAuthScheme, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
 #[derive(OpenApi)]
@@ -9,7 +9,25 @@ use utoipa::{Modify, OpenApi};
     info(title = "Invoice API"),
     paths(
         crate::health::health,
-        crate::auth::check,
+        crate::auth::host::context,
+        crate::auth::handlers::register::register,
+        crate::auth::handlers::register::verify,
+        crate::auth::handlers::register::resend,
+        crate::auth::handlers::login::login,
+        crate::auth::handlers::login::logout,
+        crate::auth::handlers::login::me,
+        crate::auth::handlers::login::revoke_others,
+        crate::auth::handlers::password::change,
+        crate::auth::handlers::password::request_reset,
+        crate::auth::handlers::password::confirm_reset,
+        crate::space::handlers::list,
+        crate::space::handlers::create,
+        crate::space::handlers::get,
+        crate::space::handlers::rename,
+        crate::space::handlers::delete,
+        crate::auth::tokens::list,
+        crate::auth::tokens::create,
+        crate::auth::tokens::revoke,
         crate::settings::handlers::company::get_company,
         crate::settings::handlers::company::put_company,
         crate::settings::handlers::bank_accounts::list,
@@ -100,18 +118,26 @@ use utoipa::{Modify, OpenApi};
         crate::isdoc::import::OptionsInput,
         crate::csvio::handlers::CsvOptionsInput,
     )),
-    modifiers(&BearerAuth)
+    modifiers(&SecuritySchemes)
 )]
 pub struct ApiDoc;
 
-struct BearerAuth;
+/// `cookie`: the `invoice_session` cookie of a browser login; `bearer`: a
+/// personal API token (`inv_…`). Both only on the space's own host.
+struct SecuritySchemes;
 
-impl Modify for BearerAuth {
+impl Modify for SecuritySchemes {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         let components = openapi.components.get_or_insert_with(Default::default);
         components.add_security_scheme(
             "bearer",
             SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
+        );
+        components.add_security_scheme(
+            "cookie",
+            SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::new(
+                crate::auth::session::COOKIE,
+            ))),
         );
     }
 }
@@ -128,8 +154,22 @@ mod tests {
     fn documents_the_routes() {
         let doc = ApiDoc::openapi();
         assert!(doc.paths.paths.contains_key("/api/health"));
-        assert!(doc.paths.paths.contains_key("/api/auth/check"));
         for path in [
+            "/api/context",
+            "/api/auth/register",
+            "/api/auth/verify",
+            "/api/auth/verify/resend",
+            "/api/auth/login",
+            "/api/auth/logout",
+            "/api/auth/me",
+            "/api/auth/sessions/revoke-others",
+            "/api/account/password",
+            "/api/auth/password-reset",
+            "/api/auth/password-reset/confirm",
+            "/api/spaces",
+            "/api/space",
+            "/api/tokens",
+            "/api/tokens/{id}",
             "/api/settings/company",
             "/api/settings/bank-accounts/{id}",
             "/api/settings/vat-rates",
@@ -185,5 +225,6 @@ mod tests {
         }
         let components = doc.components.expect("components");
         assert!(components.security_schemes.contains_key("bearer"));
+        assert!(components.security_schemes.contains_key("cookie"));
     }
 }

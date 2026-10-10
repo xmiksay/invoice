@@ -17,6 +17,21 @@ describe("InvoiceDetailView", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
+  it("shows an accountant the document without any action that changes it", async () => {
+    mockFetchRoutes({
+      "GET /api/documents/d1": issued,
+      "GET /api/documents/d1/payments": [],
+      "GET /api/documents/d1/emails": [],
+      "GET /api/settings/company": company,
+    });
+    const w = (await mountAt("d1", "accountant")).w;
+    expect(w.find("h1").text()).toContain("20260001");
+    for (const test of ["mark-sent", "credit-note", "cancel", "add-payment", "send-email", "save-metadata"]) {
+      expect(w.find(`[data-test="${test}"]`).exists(), test).toBe(false);
+    }
+    expect(w.find('[data-test="payments-panel"]').exists()).toBe(true);
+  });
+
   it("issues a draft and switches to the issued actions", async () => {
     const fetch = mockFetchRoutes({
       "GET /api/documents/d1": document(),

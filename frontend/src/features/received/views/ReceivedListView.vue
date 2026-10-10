@@ -14,8 +14,10 @@ import { formatDate, formatMoney, signed } from "@/features/documents/format";
 import { listDocTypeOf } from "@/features/documents/routes";
 import { useReceivedListStore, type InvoiceFilters as Filters } from "@/features/documents/store";
 import { useCategoriesStore } from "@/features/settings/stores";
+import { useSessionStore } from "@/stores/session";
 
 const { t, locale } = useI18n();
+const session = useSessionStore();
 const route = useRoute();
 const router = useRouter();
 const store = useReceivedListStore();
@@ -43,9 +45,11 @@ function open(id: string) {
       <div class="flex flex-wrap gap-2">
         <CsvExportButton :query="store.query" />
         <AccountantExportButton />
-        <RouterLink :to="{ name: 'isdoc-import', query: { from: 'received' } }" class="btn" data-test="import-isdoc">{{ t("isdoc.import.action") }}</RouterLink>
-        <RouterLink :to="{ name: 'csv-import', query: { from: 'received' } }" class="btn" data-test="import-csv">{{ t("csvImport.import.action") }}</RouterLink>
-        <RouterLink :to="{ name: 'received-new', query: { docType } }" class="btn btn-primary" data-test="new-document">{{ t(`received.newTitle.${docType}`) }}</RouterLink>
+        <template v-if="session.can('write')">
+          <RouterLink :to="{ name: 'isdoc-import', query: { from: 'received' } }" class="btn" data-test="import-isdoc">{{ t("isdoc.import.action") }}</RouterLink>
+          <RouterLink :to="{ name: 'csv-import', query: { from: 'received' } }" class="btn" data-test="import-csv">{{ t("csvImport.import.action") }}</RouterLink>
+          <RouterLink :to="{ name: 'received-new', query: { docType } }" class="btn btn-primary" data-test="new-document">{{ t(`received.newTitle.${docType}`) }}</RouterLink>
+        </template>
       </div>
     </div>
 

@@ -20,6 +20,7 @@ use crate::document::handlers::input::DocumentData;
 use crate::document::line::{LineData, PaymentMethod, Status, VatMode};
 use crate::error::AppError;
 use crate::settings::doc_type::{DocType, ISSUED};
+use crate::space::SpaceId;
 
 /// An issued (not draft, not cancelled) invoice or simplified document of
 /// ours, imported ones included: what credit and debit notes correct.
@@ -34,9 +35,10 @@ pub fn correctable(doc: &document::Model) -> Result<bool, AppError> {
 /// Lock `id` and require a correctable document (else `invalid_state`).
 pub async fn locked_original<C: ConnectionTrait>(
     txn: &C,
+    space: SpaceId,
     id: Uuid,
 ) -> Result<document::Model, AppError> {
-    let doc = query::lock(txn, id).await?;
+    let doc = query::lock(txn, space, id).await?;
     if !correctable(&doc)? {
         return Err(AppError::InvalidState);
     }
@@ -62,7 +64,7 @@ pub async fn draft_from(
         contact_id: orig.contact_id,
         issue_date: today,
         tax_point_date: Some(today),
-        due_date: context::due_date(db, orig.contact_id, today).await?,
+        due_date: context::due_date(db, SpaceId(orig.space_id), orig.contact_id, today).await?,
         exchange_rate: orig.exchange_rate.filter(|_| orig.currency != "CZK"),
         currency: orig.currency.clone(),
         locale: orig.locale.clone(),
@@ -88,11 +90,12 @@ pub async fn draft_from(
 /// (all lines copied, advance lines dropped), or the correction of a DDPP.
 pub async fn create(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     correction_reason: Option<String>,
     today: NaiveDate,
 ) -> Result<Uuid, AppError> {
-    let orig = query::find(db, id).await?;
+    let orig = query::find(db, space, id).await?;
     if ddpp_correction::correctable(&orig)? {
         return ddpp_correction::create(db, &orig, correction_reason, today).await;
     }
@@ -112,11 +115,12 @@ pub async fn create(
 /// additional charge).
 pub async fn create_debit(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     correction_reason: Option<String>,
     today: NaiveDate,
 ) -> Result<Uuid, AppError> {
-    let orig = query::find(db, id).await?;
+    let orig = query::find(db, space, id).await?;
     create_note(
         db,
         orig,
@@ -143,12 +147,12 @@ async fn create_note(
     let totals = compute::evaluate(&data.lines, data.params())
         .map_err(AppError::Validation)?
         .totals;
-    let orig_id = orig.id;
+    let (space, orig_id) = (SpaceId(orig.space_id), orig.id);
     Ok(db
         .transaction(|txn| {
             Box::pin(async move {
-                locked_original(txn, orig_id).await?;
-                write::create_in(txn, data, totals).await
+                locked_original(txn, space, orig_id).await?;
+                write::create_in(txn, space, data, totals).await
             })
         })
         .await?)
@@ -198,11 +202,12 @@ async fn cap<C: ConnectionTrait>(
 /// concurrent credit-note issues queue.
 pub async fn check_cap(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     credit_note_id: Uuid,
     original_id: Uuid,
     own: &Totals,
 ) -> Result<(), AppError> {
-    locked_original(txn, original_id).await?;
+    locked_original(txn, space, original_id).await?;
     let cap = cap(txn, original_id, credit_note_id).await?;
     let credited = issued_notes(txn, original_id, DocType::CreditNote, credit_note_id).await?;
     let credited = credited
@@ -224,7 +229,7 @@ pub async fn check_debit_cancel(
     let Some(original_id) = debit_note.related_document_id else {
         return Ok(());
     };
-    query::lock(txn, original_id).await?;
+    query::lock(txn, SpaceId(debit_note.space_id), original_id).await?;
     let cap = cap(txn, original_id, debit_note.id).await?;
     let credited = issued_notes(txn, original_id, DocType::CreditNote, Uuid::nil()).await?;
     if exceeds_original(&cap, credited) {

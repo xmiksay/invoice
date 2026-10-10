@@ -1,0 +1,48 @@
+{
+  "title": "My spaces",
+  "intro": "A space is one own company with its own documents. Every space has its own address and its own sign-in.",
+  "empty": "You have no space yet.",
+  "open": "Open",
+  "roles": {
+    "accountant": "Accountant",
+    "member": "Member",
+    "admin": "Admin",
+    "owner": "Owner"
+  },
+  "create": {
+    "title": "New space",
+    "name": "Name",
+    "slug": "Address (slug)",
+    "slugHint": "3–30 characters: lowercase letters, digits and dashes (not at the start or end). It cannot be changed later.",
+    "preview": "Space address:",
+    "submit": "Create space",
+    "submitting": "Creating…",
+    "created": "Space {name} is created."
+  },
+  "unverified": "Verify your e-mail before creating a space.",
+  "unverifiedAction": "Verify e-mail",
+  "notFound": {
+    "title": "Space not found",
+    "text": "There is no space at this address. Check the address or go to the home page.",
+    "link": "Go to the home page"
+  },
+  "bootError": {
+    "title": "Server unavailable",
+    "text": "The application could not be loaded. Please try again in a moment.",
+    "retry": "Try again"
+  },
+  "settings": {
+    "intro": "The space name is shown in the application header.",
+    "slug": "Address",
+    "saved": "The name is saved."
+  },
+  "delete": {
+    "title": "Delete space",
+    "warning": "Deleting irreversibly removes every document, contact, setting, API token and stored file of this space. Tax documents must be archived by law (usually 10 years) – export them before deleting.",
+    "exportHint": "Download the documents of a period with the accountant export:",
+    "confirmSlug": "To confirm, type the space address ({slug})",
+    "password": "Your password",
+    "submit": "Delete space irreversibly",
+    "submitting": "Deleting…"
+  }
+}

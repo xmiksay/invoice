@@ -18,6 +18,7 @@ use super::export_load;
 use crate::accounting::export as accounting_export;
 use crate::accounting::settings::Program;
 use crate::app::AppState;
+use crate::auth::Read;
 use crate::document::entity::document::{Column, Entity};
 use crate::document::handlers::dto::ListQuery;
 use crate::document::line::Status;
@@ -26,6 +27,7 @@ use crate::download::attachment;
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::ApiQuery;
 use crate::settings::doc_type::{DocType, ISSUED, RECEIVED};
+use crate::space::SpaceId;
 use crate::time::today;
 
 /// Most documents one export may hold.
@@ -44,8 +46,13 @@ const TAX_DATE: &str = "COALESCE(tax_point_date, received_date)";
 
 /// The ids of the matching issued (non-draft, non-cancelled) documents in
 /// export order; more than [`MAX_ROWS`] → `filter: too_many`.
-async fn ids<C: ConnectionTrait>(db: &C, select: Select<Entity>) -> Result<Vec<Uuid>, AppError> {
+async fn ids<C: ConnectionTrait>(
+    db: &C,
+    space: SpaceId,
+    select: Select<Entity>,
+) -> Result<Vec<Uuid>, AppError> {
     let ids: Vec<Uuid> = select
+        .filter(Column::SpaceId.eq(space))
         .filter(Column::Status.eq(Status::Issued.as_str()))
         .select_only()
         .column(Column::Id)
@@ -88,6 +95,7 @@ enum Format {
 /// chunk agree even while documents change.
 async fn export(
     state: &AppState,
+    space: SpaceId,
     select: Select<Entity>,
     format: Format,
     filename: &str,
@@ -99,7 +107,7 @@ async fn export(
             Some(AccessMode::ReadOnly),
         )
         .await?;
-    let ids = match ids(&txn, select).await {
+    let ids = match ids(&txn, space, select).await {
         Ok(ids) => ids,
         Err(e) => {
             export_load::rollback(txn, "export").await;
@@ -107,14 +115,18 @@ async fn export(
         }
     };
     Ok(match format {
-        Format::Csv(label) => attachment(CSV, filename, export_load::body(txn, ids, label).await?),
+        Format::Csv(label) => attachment(
+            CSV,
+            filename,
+            export_load::body(txn, space, ids, label).await?,
+        ),
         Format::Xml { program, from, to } => attachment(
             match program {
                 Program::Pohoda => POHODA,
                 Program::Money => MONEY,
             },
             filename,
-            accounting_export::file(txn, &ids, program, from, to).await?,
+            accounting_export::file(txn, space, &ids, program, from, to).await?,
         ),
     })
 }
@@ -133,7 +145,7 @@ fn list_direction(d: Option<&str>) -> Result<&'static str, AppError> {
     get,
     path = "/api/export/csv",
     tag = "export",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(ListQuery),
     responses(
         (status = 200, description = "`doklady-{direction}-{yyyy-mm-dd}.csv`: the documents of the list filter without drafts and cancelled ones (`limit` / `offset` ignored), streamed", content_type = "text/csv"),
@@ -142,14 +154,22 @@ fn list_direction(d: Option<&str>) -> Result<&'static str, AppError> {
 )]
 pub async fn list_csv(
     State(state): State<AppState>,
+    access: Read,
     ApiQuery(mut q): ApiQuery<ListQuery>,
 ) -> Result<Response, AppError> {
     let direction = list_direction(q.direction.as_deref().map(str::trim))?;
     q.direction = Some(direction.into());
     let today = today();
-    let select = query::export_select(&q, today);
+    let select = query::export_select(access.space(), &q, today);
     let name = format!("doklady-{direction}-{today}.csv");
-    export(&state, select, Format::Csv("list csv"), &name).await
+    export(
+        &state,
+        access.space(),
+        select,
+        Format::Csv("list csv"),
+        &name,
+    )
+    .await
 }
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
@@ -233,7 +253,7 @@ impl AccountantQuery {
     get,
     path = "/api/export/accountant",
     tag = "export",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(AccountantQuery),
     responses(
         (status = 200, description = "Every non-proforma, non-draft, non-cancelled document whose tax date (received: else the received date) is in the period. `format=csv`: `ucetni-{from}-{to}.csv`, streamed; `format=pohoda`: `pohoda-{from}-{to}.xml` (Windows-1250, Stormware dataPack 2.0); `format=money`: `money-{from}-{to}.xml` (UTF-8, Money S3 `MoneyData`)", content(
@@ -246,6 +266,7 @@ impl AccountantQuery {
 )]
 pub async fn accountant(
     State(state): State<AppState>,
+    access: Read,
     ApiQuery(q): ApiQuery<AccountantQuery>,
 ) -> Result<Response, AppError> {
     let a = q.check()?;
@@ -272,7 +293,7 @@ pub async fn accountant(
             format!("{}-{}-{}.xml", program.key(), a.from, a.to),
         ),
     };
-    export(&state, select, format, &name).await
+    export(&state, access.space(), select, format, &name).await
 }
 
 #[cfg(test)]

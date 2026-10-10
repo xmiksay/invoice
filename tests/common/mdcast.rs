@@ -199,7 +199,7 @@ impl PdfEnv {
         storage: invoice::storage::Storage,
     ) -> Router {
         let pdf = super::pdf_service(url, storage);
-        invoice::app::router(super::state(
+        super::app(super::state(
             db,
             invoice::ares::DEFAULT_ARES_URL,
             invoice::cnb::DEFAULT_CNB_URL,

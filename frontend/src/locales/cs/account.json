@@ -1,0 +1,19 @@
+{
+  "title": "Účet",
+  "name": "Jméno",
+  "email": "E-mail",
+  "password": {
+    "title": "Změna hesla",
+    "current": "Současné heslo",
+    "new": "Nové heslo",
+    "submit": "Změnit heslo",
+    "changed": "Heslo je změněné. Ostatní přihlášení byla ukončena."
+  },
+  "sessions": {
+    "title": "Přihlášení",
+    "intro": "Odhlásí všechna ostatní zařízení a prohlížeče na všech spaces. Toto přihlášení zůstane.",
+    "revoke": "Odhlásit ostatní relace",
+    "confirm": "Opravdu odhlásit všechna ostatní přihlášení?",
+    "revoked": "Ostatní relace byly odhlášeny."
+  }
+}

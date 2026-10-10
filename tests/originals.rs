@@ -47,10 +47,13 @@ async fn upload_replace_serve_delete(storage: TestStorage) {
     assert_eq!(d["original"]["size"], json!(PDF.len()));
     assert_eq!(d["pdf"], Value::Null);
     let sha = invoice::storage::sha256_hex(PDF);
-    let rel = format!("documents/2026/{doc_id}-original-{}.pdf", &sha[..8]);
+    let rel = db.key(&format!(
+        "documents/2026/{doc_id}-original-{}.pdf",
+        &sha[..8]
+    ));
     let originals = || async {
-        let prefix = format!("documents/2026/{doc_id}-original");
-        let keys = env.storage.keys("documents/2026").await;
+        let prefix = db.key(&format!("documents/2026/{doc_id}-original"));
+        let keys = env.storage.keys(&db.key("documents/2026")).await;
         keys.iter().filter(|k| k.starts_with(&prefix)).count()
     };
     assert_eq!(env.storage.bytes(&rel).await.as_deref(), Some(PDF));

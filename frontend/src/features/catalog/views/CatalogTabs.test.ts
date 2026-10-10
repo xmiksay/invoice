@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { i18n } from "@/i18n";
-import { calls, mockFetchRoutes, reply } from "@/test-utils";
+import { calls, mockFetchRoutes, reply, signIn } from "@/test-utils";
 import { vatRates } from "@/features/documents/testData";
 import { catalogGroup, catalogItem } from "../testData";
 import CatalogGroupsTab from "./CatalogGroupsTab.vue";
@@ -11,6 +11,7 @@ import CatalogItemsTab from "./CatalogItemsTab.vue";
 function mountTab(component: typeof CatalogItemsTab | typeof CatalogGroupsTab) {
   const pinia = createPinia();
   setActivePinia(pinia);
+  signIn("owner");
   return mount(component, { global: { plugins: [pinia, i18n] } });
 }
 

@@ -2,19 +2,35 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { createWebHistory } from "vue-router";
 import App from "./App.vue";
+import { loadContext } from "./boot";
 import { createAppRouter } from "./router";
 import { i18n } from "./i18n";
-import { setUnauthorizedHandler } from "./api/client";
+import { setAuthHandlers } from "./api/client";
+import { useSessionStore } from "./stores/session";
 import "./style.css";
 
-const router = createAppRouter(createWebHistory());
+async function main() {
+  const pinia = createPinia();
+  const boot = await loadContext();
+  const session = useSessionStore(pinia);
+  session.applyBoot(boot);
 
-setUnauthorizedHandler(() => {
-  const current = router.currentRoute.value;
-  if (current.name === "login") return;
-  void router.push({ name: "login", query: { redirect: current.fullPath } });
-});
+  const router = createAppRouter(createWebHistory(), boot);
 
-document.documentElement.lang = i18n.global.locale.value;
+  setAuthHandlers({
+    unauthorized: () => {
+      session.clear();
+      const current = router.currentRoute.value;
+      if (current.meta.public) return;
+      void router.push({ name: "login", query: { return: current.fullPath } });
+    },
+    emailUnverified: () => {
+      if (router.hasRoute("verify")) void router.push({ name: "verify" });
+    },
+  });
 
-createApp(App).use(createPinia()).use(router).use(i18n).mount("#app");
+  document.documentElement.lang = i18n.global.locale.value;
+  createApp(App).use(pinia).use(router).use(i18n).mount("#app");
+}
+
+void main();

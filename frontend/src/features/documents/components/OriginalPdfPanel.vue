@@ -10,11 +10,13 @@ import { formatDate } from "../format";
 import { checkOriginalFile } from "../original";
 import { useDocumentStore } from "../store";
 import type { Document } from "../types";
+import { useSessionStore } from "@/stores/session";
 
 /** The uploaded original PDF of a received or imported document: upload / replace / delete, open / download. */
 const props = defineProps<{ doc: Document }>();
 
 const { t, locale } = useI18n();
+const session = useSessionStore();
 const store = useDocumentStore();
 const errorText = useErrorText();
 const pdf = usePdf();
@@ -74,10 +76,12 @@ const downloadPdf = () => void pdf.download(() => documentsApi.pdf(props.doc.id,
         <button type="button" class="btn" :disabled="pdf.busy.value" data-test="original-open" @click="openPdf">{{ t("pdf.open") }}</button>
         <button type="button" class="btn" :disabled="pdf.busy.value" data-test="original-download" @click="downloadPdf">{{ t("pdf.download") }}</button>
       </template>
-      <button type="button" class="btn" :class="{ 'btn-primary': !original }" :disabled="busy" data-test="original-upload" @click="input?.click()">
-        {{ original ? t("original.replace") : t("original.upload") }}
-      </button>
-      <button v-if="original" type="button" class="btn btn-danger" :disabled="busy" data-test="original-delete" @click="remove">{{ t("common.delete") }}</button>
+      <template v-if="session.can('write')">
+        <button type="button" class="btn" :class="{ 'btn-primary': !original }" :disabled="busy" data-test="original-upload" @click="input?.click()">
+          {{ original ? t("original.replace") : t("original.upload") }}
+        </button>
+        <button v-if="original" type="button" class="btn btn-danger" :disabled="busy" data-test="original-delete" @click="remove">{{ t("common.delete") }}</button>
+      </template>
       <span v-if="busy" class="text-sm text-gray-500">{{ t("original.uploading") }}</span>
     </div>
     <p class="text-xs text-gray-500 dark:text-gray-400">{{ t("original.hint") }}</p>

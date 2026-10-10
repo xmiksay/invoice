@@ -8,9 +8,14 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::settings::entity::bank_account::{self, ActiveModel, Column, Entity};
 use crate::settings::handlers::bank_accounts::BankAccountInput;
+use crate::space::SpaceId;
 
-pub async fn list(db: &DatabaseConnection) -> Result<Vec<bank_account::Model>, AppError> {
+pub async fn list(
+    db: &DatabaseConnection,
+    space: SpaceId,
+) -> Result<Vec<bank_account::Model>, AppError> {
     Ok(Entity::find()
+        .filter(Column::SpaceId.eq(space))
         .order_by_asc(Column::Currency)
         .order_by_desc(Column::IsDefault)
         .order_by_asc(Column::Label)
@@ -21,37 +26,43 @@ pub async fn list(db: &DatabaseConnection) -> Result<Vec<bank_account::Model>, A
 
 pub async fn create(
     db: &DatabaseConnection,
+    space: SpaceId,
     input: BankAccountInput,
 ) -> Result<bank_account::Model, AppError> {
     Ok(db
-        .transaction(|txn| Box::pin(create_in(txn, input)))
+        .transaction(|txn| Box::pin(create_in(txn, space, input)))
         .await?)
 }
 
 pub async fn update(
     db: &DatabaseConnection,
+    space: SpaceId,
     id: Uuid,
     input: BankAccountInput,
 ) -> Result<bank_account::Model, AppError> {
     Ok(db
-        .transaction(|txn| Box::pin(update_in(txn, id, input)))
+        .transaction(|txn| Box::pin(update_in(txn, space, id, input)))
         .await?)
 }
 
-pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<(), AppError> {
-    Ok(db.transaction(|txn| Box::pin(delete_in(txn, id))).await?)
+pub async fn delete(db: &DatabaseConnection, space: SpaceId, id: Uuid) -> Result<(), AppError> {
+    Ok(db
+        .transaction(|txn| Box::pin(delete_in(txn, space, id)))
+        .await?)
 }
 
 async fn create_in(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     input: BankAccountInput,
 ) -> Result<bank_account::Model, AppError> {
     if input.is_default {
-        unset_default(txn, &input.currency, None).await?;
+        unset_default(txn, space, &input.currency, None).await?;
     }
     let id = Uuid::new_v4();
     ActiveModel {
         id: Set(id),
+        space_id: Set(space.uuid()),
         label: Set(input.label),
         currency: Set(input.currency.clone()),
         account_number: Set(input.account_number),
@@ -62,18 +73,19 @@ async fn create_in(
     }
     .insert(txn)
     .await?;
-    ensure_default(txn, &input.currency, None).await?;
-    find(txn, id).await
+    ensure_default(txn, space, &input.currency, None).await?;
+    find(txn, space, id).await
 }
 
 async fn update_in(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     id: Uuid,
     input: BankAccountInput,
 ) -> Result<bank_account::Model, AppError> {
-    let old = find(txn, id).await?;
+    let old = find(txn, space, id).await?;
     if input.is_default {
-        unset_default(txn, &input.currency, Some(id)).await?;
+        unset_default(txn, space, &input.currency, Some(id)).await?;
     }
     let mut row: ActiveModel = old.clone().into();
     row.label = Set(input.label);
@@ -83,22 +95,27 @@ async fn update_in(
     row.bic = Set(input.bic);
     row.is_default = Set(input.is_default);
     row.update(txn).await?;
-    ensure_default(txn, &input.currency, Some(id)).await?;
+    ensure_default(txn, space, &input.currency, Some(id)).await?;
     if old.currency != input.currency {
-        ensure_default(txn, &old.currency, None).await?;
+        ensure_default(txn, space, &old.currency, None).await?;
     }
-    find(txn, id).await
+    find(txn, space, id).await
 }
 
-async fn delete_in(txn: &DatabaseTransaction, id: Uuid) -> Result<(), AppError> {
-    let old = find(txn, id).await?;
+async fn delete_in(txn: &DatabaseTransaction, space: SpaceId, id: Uuid) -> Result<(), AppError> {
+    let old = find(txn, space, id).await?;
     Entity::delete_by_id(id).exec(txn).await?;
-    ensure_default(txn, &old.currency, None).await?;
+    ensure_default(txn, space, &old.currency, None).await?;
     Ok(())
 }
 
-async fn find(txn: &DatabaseTransaction, id: Uuid) -> Result<bank_account::Model, AppError> {
+async fn find(
+    txn: &DatabaseTransaction,
+    space: SpaceId,
+    id: Uuid,
+) -> Result<bank_account::Model, AppError> {
     Entity::find_by_id(id)
+        .filter(Column::SpaceId.eq(space))
         .one(txn)
         .await?
         .ok_or(AppError::NotFound)
@@ -106,10 +123,12 @@ async fn find(txn: &DatabaseTransaction, id: Uuid) -> Result<bank_account::Model
 
 async fn unset_default(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     currency: &str,
     except: Option<Uuid>,
 ) -> Result<(), AppError> {
     let mut q = Entity::update_many()
+        .filter(Column::SpaceId.eq(space))
         .col_expr(Column::IsDefault, Expr::value(false))
         .filter(Column::Currency.eq(currency))
         .filter(Column::IsDefault.eq(true));
@@ -125,10 +144,12 @@ async fn unset_default(
 /// just un-flagged).
 async fn ensure_default(
     txn: &DatabaseTransaction,
+    space: SpaceId,
     currency: &str,
     avoid: Option<Uuid>,
 ) -> Result<(), AppError> {
     let rows = Entity::find()
+        .filter(Column::SpaceId.eq(space))
         .filter(Column::Currency.eq(currency))
         .order_by_asc(Column::CreatedAt)
         .order_by_asc(Column::Id)

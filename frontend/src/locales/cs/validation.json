@@ -10,5 +10,11 @@
   "mixed_vat": "Všechny položky skupiny musí mít stejnou sazbu DPH.",
   "unknown": "Neznámé pole.",
   "inactive": "Neaktivní hodnotu nelze nově přiřadit.",
-  "template_invalid": "Šablonu nelze vykreslit."
+  "template_invalid": "Šablonu nelze vykreslit.",
+  "too_short": "Hodnota je příliš krátká.",
+  "reserved": "Tato adresa je rezervovaná.",
+  "taken": "Tato adresa je už obsazená.",
+  "mismatch": "Neodpovídá.",
+  "too_high": "Vyšší než vaše vlastní role.",
+  "wrong_password": "Nesprávné heslo."
 }

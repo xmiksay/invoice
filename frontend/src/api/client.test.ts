@@ -1,34 +1,36 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPinia, setActivePinia } from "pinia";
-import { ApiError, filenameFromDisposition, request, requestBlob, setUnauthorizedHandler } from "./client";
-import { useAuthStore } from "@/stores/auth";
+import { ApiError, filenameFromDisposition, request, requestBlob, setAuthHandlers } from "./client";
 import { mockFetch, mockFetchRoutes, pdfReply, reply, sentHeaders } from "@/test-utils";
 
 describe("api client", () => {
   beforeEach(() => {
     localStorage.clear();
-    setActivePinia(createPinia());
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    setUnauthorizedHandler(() => {});
+    setAuthHandlers({});
   });
 
-  it("adds the stored Bearer token", async () => {
-    useAuthStore().token = "secret";
+  it("relies on the same-origin session cookie, never an Authorization header", async () => {
+    localStorage.setItem("invoice.token", "legacy");
     const fetch = mockFetch(200, { status: "ok", version: "1.0.0" });
 
     const res = await request<{ version: string }>("/api/health");
 
     expect(res.version).toBe("1.0.0");
-    expect(sentHeaders(fetch).get("Authorization")).toBe("Bearer secret");
+    expect(fetch.mock.calls[0]?.[1]?.credentials).toBe("same-origin");
+    expect(sentHeaders(fetch).has("Authorization")).toBe(false);
   });
 
-  it("omits Authorization without a token and returns undefined on 204", async () => {
-    const fetch = mockFetch(204);
+  it("returns undefined on 204", async () => {
+    mockFetch(204);
     await expect(request("/api/x")).resolves.toBeUndefined();
-    expect(sentHeaders(fetch).has("Authorization")).toBe(false);
+  });
+
+  it.each([202, 200, 201])("returns undefined for an empty %i body (e.g. 202 from register)", async (status) => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status, headers: { "Content-Length": "0" } })));
+    await expect(request("/api/auth/register", { method: "POST", body: {} })).resolves.toBeUndefined();
   });
 
   it("serializes a JSON body", async () => {
@@ -67,40 +69,56 @@ describe("api client", () => {
     await expect(request("/api/x")).rejects.toMatchObject({ status: 0, code: "network" });
   });
 
-  it("on 401 clears the token and calls the unauthorized handler", async () => {
-    const auth = useAuthStore();
-    auth.token = "stale";
-    const handler = vi.fn();
-    setUnauthorizedHandler(handler);
+  it("on 401 calls the unauthorized handler", async () => {
+    const unauthorized = vi.fn();
+    const emailUnverified = vi.fn();
+    setAuthHandlers({ unauthorized, emailUnverified });
     mockFetch(401, { code: "unauthorized" });
 
     await expect(request("/api/x")).rejects.toMatchObject({ status: 401, code: "unauthorized" });
-    expect(auth.token).toBeNull();
-    expect(handler).toHaveBeenCalledOnce();
+    expect(unauthorized).toHaveBeenCalledOnce();
+    expect(emailUnverified).not.toHaveBeenCalled();
   });
 
-  it("on 401 with an explicit token leaves the session alone", async () => {
-    const auth = useAuthStore();
-    auth.token = "current";
-    const handler = vi.fn();
-    setUnauthorizedHandler(handler);
-    const fetch = mockFetch(401, { code: "unauthorized" });
+  it("on 401 of a quiet401 request (session probe, login) leaves the handler alone", async () => {
+    const unauthorized = vi.fn();
+    setAuthHandlers({ unauthorized });
+    mockFetch(401, { code: "invalid_credentials" });
 
-    await expect(request("/api/auth/check", { token: "candidate" })).rejects.toBeInstanceOf(ApiError);
-    expect(sentHeaders(fetch).get("Authorization")).toBe("Bearer candidate");
-    expect(auth.token).toBe("current");
-    expect(handler).not.toHaveBeenCalled();
+    await expect(request("/api/auth/login", { method: "POST", quiet401: true })).rejects.toMatchObject({ code: "invalid_credentials" });
+    expect(unauthorized).not.toHaveBeenCalled();
+  });
+
+  it("on 403 email_unverified calls the verify handler", async () => {
+    const unauthorized = vi.fn();
+    const emailUnverified = vi.fn();
+    setAuthHandlers({ unauthorized, emailUnverified });
+    mockFetch(403, { code: "email_unverified" });
+
+    await expect(request("/api/spaces", { method: "POST", body: {} })).rejects.toMatchObject({ status: 403, code: "email_unverified" });
+    expect(emailUnverified).toHaveBeenCalledOnce();
+    expect(unauthorized).not.toHaveBeenCalled();
+  });
+
+  it.each(["forbidden", "csrf"])("on 403 %s only throws (the view shows the message)", async (code) => {
+    const unauthorized = vi.fn();
+    const emailUnverified = vi.fn();
+    setAuthHandlers({ unauthorized, emailUnverified });
+    mockFetch(403, { code });
+
+    await expect(request("/api/x", { method: "PUT", body: {} })).rejects.toEqual(new ApiError(403, code));
+    expect(unauthorized).not.toHaveBeenCalled();
+    expect(emailUnverified).not.toHaveBeenCalled();
   });
 
   describe("requestBlob", () => {
-    it("sends the Bearer token and returns the blob with the filename", async () => {
-      useAuthStore().token = "secret";
+    it("returns the blob with the filename", async () => {
       const fetch = mockFetchRoutes({ "GET /api/documents/d1/pdf": pdfReply("20260001.pdf", "attachment") });
 
       const res = await requestBlob("/api/documents/d1/pdf?download=1");
 
       expect(fetch.mock.calls[0]?.[0]).toBe("/api/documents/d1/pdf?download=1");
-      expect(sentHeaders(fetch).get("Authorization")).toBe("Bearer secret");
+      expect(fetch.mock.calls[0]?.[1]?.credentials).toBe("same-origin");
       expect(sentHeaders(fetch).get("Accept")).toContain("application/pdf");
       expect(res.blob.type).toBe("application/pdf");
       expect(await res.blob.text()).toBe("%PDF-1.7");

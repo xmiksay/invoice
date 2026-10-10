@@ -1,12 +1,12 @@
 use sea_orm::entity::prelude::*;
 
-/// Settings → Accounting: a singleton (`id = 1`, seeded by the migration)
+/// Settings → Accounting: one row per space (created with the space)
 /// holding [`super::settings::AccountingSettings`] as JSON.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "accounting_settings")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: i16,
+    pub space_id: Uuid,
     pub data: Json,
     pub updated_at: DateTimeWithTimeZone,
 }
@@ -15,5 +15,3 @@ pub struct Model {
 pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
-
-pub const SINGLETON_ID: i16 = 1;

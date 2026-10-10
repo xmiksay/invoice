@@ -3,7 +3,8 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { i18n } from "@/i18n";
-import { mockFetchRoutes } from "@/test-utils";
+import type { Role } from "@/features/spaces/types";
+import { mockFetchRoutes, signIn } from "@/test-utils";
 import type { DocumentSummary } from "../types";
 import InvoicesListView from "./InvoicesListView.vue";
 
@@ -28,9 +29,10 @@ const summary = (overrides: Partial<DocumentSummary>): DocumentSummary => ({
   ...overrides,
 });
 
-async function mountList(path = "/invoices") {
+async function mountList(path = "/invoices", role: Role = "owner") {
   const pinia = createPinia();
   setActivePinia(pinia);
+  signIn(role);
   const stub = { template: "<div />" };
   const router = createRouter({
     history: createMemoryHistory(),
@@ -55,6 +57,15 @@ describe("InvoicesListView", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("hides creating and importing from an accountant but keeps the exports", async () => {
+    mockFetchRoutes({ "GET /api/documents": { items: [], total: 0 } });
+    const w = await mountList("/invoices", "accountant");
+    for (const test of ["new-document", "import-isdoc", "import-csv", "import-document"]) {
+      expect(w.find(`[data-test="${test}"]`).exists(), test).toBe(false);
+    }
+    expect(w.find('[data-test="accountant-export"]').exists()).toBe(true);
   });
 
   it("renders rows with badges and formatted amounts", async () => {

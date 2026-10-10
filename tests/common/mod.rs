@@ -3,6 +3,11 @@
 //! Each [`TestDb`] owns a unique throwaway Postgres schema (`test_<n>`) on the
 //! server named by `TEST_DATABASE_URL`, runs every migration into it, and
 //! drops it on teardown — tests are parallel-safe with no shared state.
+//!
+//! Every `TestDb` starts with one space (`acme`, [`TEST_HOST`]) owned by a
+//! verified user holding the owner API token [`TEST_TOKEN`]; the routers
+//! send requests without a `Host` header to that space's host, so a test
+//! written before spaces runs inside it unchanged.
 
 #![allow(dead_code)]
 
@@ -11,16 +16,20 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::Router;
 use axum::body::Body;
-use axum::http::{Method, Request, Response, StatusCode};
+use axum::extract::Request;
+use axum::http::{HeaderValue, Method, Response, StatusCode, header};
 use invoice::app::{self, AppState};
 use invoice::ares::{AresClient, DEFAULT_ARES_URL};
+use invoice::auth::host::PublicUrl;
+use invoice::auth::ratelimit::RateLimiter;
 use invoice::cnb::{CnbClient, DEFAULT_CNB_URL};
 use invoice::migration::{Migrator, MigratorTrait};
-use invoice::pdf::PdfService;
-use invoice::secret::Secret;
+use invoice::pdf::PdfRoot;
+use invoice::space::SpaceId;
 use sea_orm::{ConnectOptions, ConnectionTrait, Database, DatabaseConnection};
 use tower::ServiceExt;
 
+pub mod auth;
 pub mod csv_export;
 pub mod csvio;
 pub mod documents;
@@ -33,7 +42,16 @@ pub mod received;
 pub mod smtp;
 pub mod storage;
 
-pub const TEST_TOKEN: &str = "test-token-0123456789";
+/// Owner token of the default space (API token format `inv_{prefix}_{secret}`).
+pub const TEST_TOKEN: &str = "inv_7e57c0de_dGVzdC10b2tlbi1zZWNyZXQtMDEyMzQ1Njc4OWFiY2RlZg";
+/// `INVOICE__PUBLIC_URL` of every test app.
+pub const PUBLIC_URL: &str = "http://localhost:3000";
+pub const BASE_HOST: &str = "localhost:3000";
+pub const TEST_SLUG: &str = "acme";
+/// The default space's host (what a request without `Host` goes to).
+pub const TEST_HOST: &str = "acme.localhost:3000";
+pub const OWNER_EMAIL: &str = "owner@example.com";
+pub const OWNER_PASSWORD: &str = "correct horse battery staple";
 
 pub fn test_database_url() -> String {
     std::env::var("TEST_DATABASE_URL").expect(
@@ -42,7 +60,7 @@ pub fn test_database_url() -> String {
     )
 }
 
-fn unique_schema() -> String {
+pub fn unique_schema() -> String {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -60,6 +78,10 @@ pub struct TestDb {
     pub conn: DatabaseConnection,
     pub schema: String,
     base_url: String,
+    /// The default space (`acme`).
+    pub space: SpaceId,
+    /// Its owner (holds [`TEST_TOKEN`]).
+    pub user_id: uuid::Uuid,
 }
 
 impl TestDb {
@@ -84,12 +106,21 @@ impl TestDb {
             .await
             .expect("connect to test schema");
         Migrator::up(&conn, None).await.expect("run migrations");
+        let (space, user_id) =
+            auth::seed_space(&conn, TEST_SLUG, OWNER_EMAIL, Some(TEST_TOKEN)).await;
 
         Self {
             conn,
             schema,
             base_url,
+            space,
+            user_id,
         }
+    }
+
+    /// The storage key of `rel` in the default space.
+    pub fn key(&self, rel: &str) -> String {
+        format!("{}/{rel}", self.space.storage_prefix())
     }
 }
 
@@ -142,12 +173,25 @@ pub fn router_with_cnb(db: DatabaseConnection, cnb_url: &str) -> Router {
 /// contain the document id, so tests cannot collide.
 pub fn router_with(db: DatabaseConnection, ares_url: &str, cnb_url: &str) -> Router {
     let (mdcast_url, _) = mdcast::spawn();
-    app::router(state(
+    app(state(
         db,
         ares_url,
         cnb_url,
         pdf_service(&mdcast_url, shared_storage()),
     ))
+}
+
+/// The app of `state`; a request without `Host` goes to [`TEST_HOST`].
+pub fn app(state: AppState) -> Router {
+    app::router(state).layer(axum::middleware::map_request(default_host))
+}
+
+async fn default_host(mut req: Request) -> Request {
+    if !req.headers().contains_key(header::HOST) {
+        req.headers_mut()
+            .insert(header::HOST, HeaderValue::from_static(TEST_HOST));
+    }
+    req
 }
 
 /// One fs storage per test binary; tests never write `design/` into it.
@@ -156,18 +200,32 @@ pub fn shared_storage() -> invoice::storage::Storage {
     invoice::storage::Storage::local(&dir).expect("shared fs storage")
 }
 
-pub fn pdf_service(mdcast_url: &str, storage: invoice::storage::Storage) -> PdfService {
-    PdfService::new(mdcast_url, None, storage).expect("build PDF service")
+pub fn pdf_service(mdcast_url: &str, storage: invoice::storage::Storage) -> PdfRoot {
+    PdfRoot::new(mdcast_url, None, storage).expect("build PDF service")
 }
 
-pub fn state(db: DatabaseConnection, ares_url: &str, cnb_url: &str, pdf: PdfService) -> AppState {
+/// The PDF service of `space` (tests calling the archive / import code directly).
+pub fn space_pdf(
+    mdcast_url: &str,
+    storage: invoice::storage::Storage,
+    space: SpaceId,
+) -> invoice::pdf::PdfService {
+    pdf_service(mdcast_url, storage)
+        .space(space)
+        .expect("space PDF service")
+}
+
+pub fn state(db: DatabaseConnection, ares_url: &str, cnb_url: &str, pdf: PdfRoot) -> AppState {
     AppState {
         db,
-        api_token: Secret::new(TEST_TOKEN.to_string()),
         ares: AresClient::new(ares_url).expect("build ARES client"),
         cnb: CnbClient::new(cnb_url).expect("build ČNB client"),
         pdf,
         email: None,
+        public: PublicUrl::parse(PUBLIC_URL).expect("public URL"),
+        registration: false,
+        trust_forwarded: false,
+        limiter: RateLimiter::default(),
     }
 }
 

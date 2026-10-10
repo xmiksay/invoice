@@ -6,6 +6,7 @@ use axum::http::StatusCode;
 use uuid::Uuid;
 
 use crate::app::AppState;
+use crate::auth::Write;
 use crate::document::repo::original as repo;
 use crate::error::{AppError, ErrorBody};
 use crate::extract::ApiPath;
@@ -51,7 +52,7 @@ pub fn is_pdf(bytes: &[u8]) -> bool {
     put,
     path = "/api/documents/{id}/original",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     request_body(content_type = "multipart/form-data", description = "One part `file`: a PDF (`%PDF-`), at most 20 MiB"),
     responses(
@@ -65,6 +66,7 @@ pub fn is_pdf(bytes: &[u8]) -> bool {
 )]
 pub async fn put(
     State(state): State<AppState>,
+    access: Write,
     ApiPath(id): ApiPath<Uuid>,
     form: Result<Multipart, MultipartRejection>,
 ) -> Result<StatusCode, AppError> {
@@ -75,7 +77,7 @@ pub async fn put(
     if !is_pdf(&bytes) {
         return Err(AppError::field("file", "invalid"));
     }
-    repo::put(&state.db, &state.pdf, id, bytes).await?;
+    repo::put(&state.db, &state.pdf.space(access.space())?, id, bytes).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -83,7 +85,7 @@ pub async fn put(
     delete,
     path = "/api/documents/{id}/original",
     tag = "documents",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("id" = Uuid, Path)),
     responses(
         (status = 204),
@@ -93,9 +95,10 @@ pub async fn put(
 )]
 pub async fn delete(
     State(state): State<AppState>,
+    access: Write,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    repo::delete(&state.db, &state.pdf, id).await?;
+    repo::delete(&state.db, &state.pdf.space(access.space())?, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

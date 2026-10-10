@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::app::AppState;
+use crate::auth::{Manage, Read};
 use crate::error::{AppError, ErrorBody, FieldErrors};
 use crate::extract::ApiJson;
 use crate::settings::entity::company;
@@ -109,18 +110,23 @@ impl From<company::Model> for Company {
     get,
     path = "/api/settings/company",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     responses((status = 200, body = Company))
 )]
-pub async fn get_company(State(state): State<AppState>) -> Result<Json<Company>, AppError> {
-    Ok(Json(repo::company::get(&state.db).await?.into()))
+pub async fn get_company(
+    State(state): State<AppState>,
+    access: Read,
+) -> Result<Json<Company>, AppError> {
+    Ok(Json(
+        repo::company::get(&state.db, access.space()).await?.into(),
+    ))
 }
 
 #[utoipa::path(
     put,
     path = "/api/settings/company",
     tag = "settings",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body = Company,
     responses(
         (status = 200, body = Company),
@@ -129,8 +135,13 @@ pub async fn get_company(State(state): State<AppState>) -> Result<Json<Company>,
 )]
 pub async fn put_company(
     State(state): State<AppState>,
+    access: Manage,
     ApiJson(input): ApiJson<Company>,
 ) -> Result<Json<Company>, AppError> {
     let input = input.validate()?;
-    Ok(Json(repo::company::update(&state.db, input).await?.into()))
+    Ok(Json(
+        repo::company::update(&state.db, access.space(), input)
+            .await?
+            .into(),
+    ))
 }

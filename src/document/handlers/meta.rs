@@ -153,6 +153,7 @@ mod tests {
         let now = chrono::Utc::now().into();
         category::Model {
             id: Uuid::from_u128(7),
+            space_id: Uuid::nil(),
             name: "Software".into(),
             kind: kind.into(),
             active,

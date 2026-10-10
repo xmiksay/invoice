@@ -15,8 +15,10 @@ import { useDocumentStore } from "@/features/documents/store";
 import MetadataCard from "@/features/metadata/components/MetadataCard.vue";
 import { useCompanyStore } from "@/features/settings/stores";
 import ReceivedInfoCard from "../components/ReceivedInfoCard.vue";
+import { useSessionStore } from "@/stores/session";
 
 const { t } = useI18n();
+const session = useSessionStore();
 const route = useRoute();
 const router = useRouter();
 const store = useDocumentStore();
@@ -71,8 +73,10 @@ function remove() {
       </div>
 
       <div class="flex flex-wrap gap-2">
-        <RouterLink :to="editLocation(doc.id, 'received')" class="btn" data-test="edit">{{ t("common.edit") }}</RouterLink>
-        <button type="button" class="btn btn-danger" data-test="delete" @click="remove">{{ t("common.delete") }}</button>
+        <template v-if="session.can('write')">
+          <RouterLink :to="editLocation(doc.id, 'received')" class="btn" data-test="edit">{{ t("common.edit") }}</RouterLink>
+          <button type="button" class="btn btn-danger" data-test="delete" @click="remove">{{ t("common.delete") }}</button>
+        </template>
       </div>
       <p v-if="actionError" role="alert" class="alert-error" data-test="action-error">{{ actionError }}</p>
 

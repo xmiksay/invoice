@@ -9,6 +9,7 @@ use utoipa::ToSchema;
 
 use super::{mailer, reply_to, sample_contexts};
 use crate::app::AppState;
+use crate::auth::{Manage, Read, Write};
 use crate::email::input::parse_address;
 use crate::email::sender::Outgoing;
 use crate::email::templates::{self, Rendered, Template};
@@ -16,6 +17,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::extract::{ApiJson, ApiPath, optional_json};
 use crate::pdf::format::Locale;
 use crate::settings::repo::company;
+use crate::space::SpaceId;
 
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -62,9 +64,14 @@ fn path_locale(s: &str) -> Result<Locale, AppError> {
 }
 
 /// Limits, then compile + strict render on both samples.
-async fn validate(state: &AppState, locale: Locale, t: &Template) -> Result<Rendered, AppError> {
+async fn validate(
+    state: &AppState,
+    space: SpaceId,
+    locale: Locale,
+    t: &Template,
+) -> Result<Rendered, AppError> {
     templates::check_limits(t)?;
-    let company = company::get(&state.db).await?;
+    let company = company::get(&state.db, space).await?;
     templates::validate(t, &sample_contexts(&state.db, &company, locale).await?)
 }
 
@@ -72,11 +79,14 @@ async fn validate(state: &AppState, locale: Locale, t: &Template) -> Result<Rend
     get,
     path = "/api/settings/email",
     tag = "email",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     responses((status = 200, body = EmailStatus))
 )]
-pub async fn status(State(state): State<AppState>) -> Result<Json<EmailStatus>, AppError> {
-    let company = company::get(&state.db).await?;
+pub async fn status(
+    State(state): State<AppState>,
+    access: Read,
+) -> Result<Json<EmailStatus>, AppError> {
+    let company = company::get(&state.db, access.space()).await?;
     Ok(Json(EmailStatus {
         configured: state.email.is_some(),
         from: state.email.as_ref().map(|m| m.from().to_string()),
@@ -88,7 +98,7 @@ pub async fn status(State(state): State<AppState>) -> Result<Json<EmailStatus>, 
     post,
     path = "/api/settings/email/test",
     tag = "email",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     request_body = TestInput,
     responses(
         (status = 204, description = "Sent"),
@@ -97,10 +107,14 @@ pub async fn status(State(state): State<AppState>) -> Result<Json<EmailStatus>, 
         (status = 503, description = "`smtp_not_configured`", body = ErrorBody),
     )
 )]
-pub async fn test(State(state): State<AppState>, body: Bytes) -> Result<StatusCode, AppError> {
+pub async fn test(
+    State(state): State<AppState>,
+    access: Manage,
+    body: Bytes,
+) -> Result<StatusCode, AppError> {
     let input: TestInput = optional_json(&body)?;
     let mailer = mailer(&state)?;
-    let company = company::get(&state.db).await?;
+    let company = company::get(&state.db, access.space()).await?;
     let to = input
         .to
         .filter(|t| !t.trim().is_empty())
@@ -134,16 +148,20 @@ pub async fn test(State(state): State<AppState>, body: Bytes) -> Result<StatusCo
     get,
     path = "/api/settings/email/templates",
     tag = "email",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     responses(
         (status = 200, body = TemplateList),
         (status = 503, description = "`storage_unavailable`", body = ErrorBody),
     )
 )]
-pub async fn list_templates(State(state): State<AppState>) -> Result<Json<TemplateList>, AppError> {
+pub async fn list_templates(
+    State(state): State<AppState>,
+    access: Read,
+) -> Result<Json<TemplateList>, AppError> {
+    let pdf = state.pdf.space(access.space())?;
     let mut out = Vec::new();
     for locale in [Locale::Cs, Locale::En] {
-        let (t, custom) = templates::load(state.pdf.storage(), locale).await?;
+        let (t, custom) = templates::load(pdf.storage(), locale).await?;
         out.push(entry(locale, t, custom));
     }
     Ok(Json(TemplateList { templates: out }))
@@ -153,7 +171,7 @@ pub async fn list_templates(State(state): State<AppState>) -> Result<Json<Templa
     put,
     path = "/api/settings/email/templates/{locale}",
     tag = "email",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("locale" = String, Path, description = "`cs` | `en`")),
     request_body = Template,
     responses(
@@ -165,12 +183,14 @@ pub async fn list_templates(State(state): State<AppState>) -> Result<Json<Templa
 )]
 pub async fn put_template(
     State(state): State<AppState>,
+    access: Manage,
     ApiPath(locale): ApiPath<String>,
     ApiJson(t): ApiJson<Template>,
 ) -> Result<Json<TemplateEntry>, AppError> {
     let locale = path_locale(&locale)?;
-    validate(&state, locale, &t).await?;
-    templates::save(state.pdf.storage(), locale, &t).await?;
+    validate(&state, access.space(), locale, &t).await?;
+    let pdf = state.pdf.space(access.space())?;
+    templates::save(pdf.storage(), locale, &t).await?;
     Ok(Json(entry(locale, t, true)))
 }
 
@@ -178,7 +198,7 @@ pub async fn put_template(
     delete,
     path = "/api/settings/email/templates/{locale}",
     tag = "email",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("locale" = String, Path, description = "`cs` | `en`")),
     responses(
         (status = 200, description = "The default template", body = TemplateEntry),
@@ -188,10 +208,12 @@ pub async fn put_template(
 )]
 pub async fn delete_template(
     State(state): State<AppState>,
+    access: Manage,
     ApiPath(locale): ApiPath<String>,
 ) -> Result<Json<TemplateEntry>, AppError> {
     let locale = path_locale(&locale)?;
-    templates::remove(state.pdf.storage(), locale).await?;
+    let pdf = state.pdf.space(access.space())?;
+    templates::remove(pdf.storage(), locale).await?;
     Ok(Json(entry(locale, templates::default(locale), false)))
 }
 
@@ -199,7 +221,7 @@ pub async fn delete_template(
     post,
     path = "/api/settings/email/templates/{locale}/preview",
     tag = "email",
-    security(("bearer" = [])),
+    security(("cookie" = []), ("bearer" = [])),
     params(("locale" = String, Path, description = "`cs` | `en`")),
     request_body = Template,
     responses(
@@ -210,9 +232,10 @@ pub async fn delete_template(
 )]
 pub async fn preview(
     State(state): State<AppState>,
+    access: Write,
     ApiPath(locale): ApiPath<String>,
     ApiJson(t): ApiJson<Template>,
 ) -> Result<Json<Rendered>, AppError> {
     let locale = path_locale(&locale)?;
-    Ok(Json(validate(&state, locale, &t).await?))
+    Ok(Json(validate(&state, access.space(), locale, &t).await?))
 }

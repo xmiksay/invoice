@@ -2,10 +2,9 @@
 //! document mapped inside the snapshot before anything is sent, so the
 //! accountant never gets a file with documents silently missing.
 
-use anyhow::Context as _;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
-use sea_orm::{ConnectionTrait, DatabaseTransaction, EntityTrait};
+use sea_orm::{ConnectionTrait, DatabaseTransaction};
 use uuid::Uuid;
 
 use super::doc::shown_number;
@@ -15,8 +14,8 @@ use super::{money, pohoda};
 use crate::csvio::export_load::{CHUNK, Loaded, rollback};
 use crate::csvio::export_row::Source;
 use crate::error::AppError;
-use crate::settings::entity::company;
-use crate::settings::repo::vat_rates;
+use crate::settings::repo::{company, vat_rates};
+use crate::space::SpaceId;
 use crate::time::today;
 
 /// Longest `detail` of an `unexportable` error, in characters.
@@ -44,18 +43,16 @@ fn label(program: Program) -> &'static str {
 
 async fn ctx<C: ConnectionTrait>(
     db: &C,
+    space: SpaceId,
     program: Program,
     from: NaiveDate,
     to: NaiveDate,
 ) -> Result<Ctx, AppError> {
-    let settings = super::repo::get(db).await?;
-    let company = company::Entity::find_by_id(company::SINGLETON_ID)
-        .one(db)
-        .await?
-        .context("company singleton row missing (migration seeds it)")?;
+    let settings = super::repo::get(db, space).await?;
+    let company = company::get(db, space).await?;
     let third = match program {
         Program::Pohoda => {
-            let rates: Vec<(Decimal, bool)> = vat_rates::list(db)
+            let rates: Vec<(Decimal, bool)> = vat_rates::list(db, space)
                 .await?
                 .into_iter()
                 .map(|r| (r.rate, r.active))
@@ -157,6 +154,7 @@ async fn build(
 /// [`unexportable`].
 pub async fn file(
     txn: DatabaseTransaction,
+    space: SpaceId,
     ids: &[Uuid],
     program: Program,
     from: NaiveDate,
@@ -166,7 +164,7 @@ pub async fn file(
         rollback(txn, label(program)).await;
         return Err(AppError::field("from", "empty"));
     }
-    let built = match ctx(&txn, program, from, to).await {
+    let built = match ctx(&txn, space, program, from, to).await {
         Ok(c) => build(&txn, ids, &c, program).await,
         Err(e) => Err(e),
     };
