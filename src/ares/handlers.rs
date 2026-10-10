@@ -24,9 +24,14 @@ pub async fn lookup(
     State(state): State<AppState>,
     ApiPath(ico): ApiPath<String>,
 ) -> Result<Json<AresSubject>, AppError> {
-    let ico = opt_ico(Some(&ico))
+    Ok(Json(lookup_ico(&state, &ico).await?))
+}
+
+/// ARES lookup of a (normalized) IČO; a malformed one → `ico: invalid_ico`.
+pub async fn lookup_ico(state: &AppState, ico: &str) -> Result<AresSubject, AppError> {
+    let ico = opt_ico(Some(ico))
         .ok()
         .flatten()
         .ok_or_else(|| AppError::field("ico", "invalid_ico"))?;
-    Ok(Json(state.ares.lookup(&ico).await?))
+    state.ares.lookup(&ico).await
 }

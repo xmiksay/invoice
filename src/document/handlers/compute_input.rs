@@ -17,7 +17,7 @@ use crate::error::{AppError, FieldErrors};
 use crate::settings::doc_type::DocType;
 use crate::validation as v;
 
-#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Default, Deserialize, ToSchema, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ComputeInput {
     pub lines: Vec<LineInput>,
@@ -25,6 +25,8 @@ pub struct ComputeInput {
     pub vat_mode: Option<String>,
     /// Default `CZK`.
     pub currency: Option<String>,
+    #[serde(deserialize_with = "crate::num_text::opt_decimal")]
+    #[schemars(with = "Option<crate::num_text::DecimalText>")]
     pub exchange_rate: Option<String>,
     pub round_total: bool,
     /// For `advance` lines: the draft being edited (its type, related

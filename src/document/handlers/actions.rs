@@ -2,6 +2,7 @@ use axum::Json;
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::StatusCode;
+use chrono::{DateTime, FixedOffset};
 use uuid::Uuid;
 
 use super::dto::{CancelInput, CreditNoteInput, Document, InternalNoteInput, MarkSentInput};
@@ -87,11 +88,18 @@ pub async fn mark_sent(
     body: Bytes,
 ) -> Result<Json<Document>, AppError> {
     let input: MarkSentInput = optional_json(&body)?;
-    let sent_at = input
-        .sent_at
-        .unwrap_or_else(|| chrono::Utc::now().fixed_offset());
-    lifecycle::mark_sent(&state.db, id, sent_at).await?;
+    mark_sent_at(&state, id, input.sent_at).await?;
     Ok(Json(fetch(&state, id).await?))
+}
+
+/// Set `sentAt` of an issued document (default now).
+pub async fn mark_sent_at(
+    state: &AppState,
+    id: Uuid,
+    sent_at: Option<DateTime<FixedOffset>>,
+) -> Result<(), AppError> {
+    let sent_at = sent_at.unwrap_or_else(|| chrono::Utc::now().fixed_offset());
+    lifecycle::mark_sent(&state.db, id, sent_at).await
 }
 
 #[utoipa::path(

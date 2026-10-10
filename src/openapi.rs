@@ -88,6 +88,7 @@ use utoipa::{Modify, OpenApi};
         crate::email::handlers::document::prefill,
         crate::email::handlers::document::send,
         crate::email::handlers::document::history,
+        crate::mcp::openapi_mcp,
     ),
     components(schemas(
         crate::health::HealthResponse,
@@ -175,6 +176,7 @@ mod tests {
             "/api/settings/email/templates/{locale}/preview",
             "/api/documents/{id}/email",
             "/api/documents/{id}/emails",
+            "/api/mcp",
         ] {
             assert!(doc.paths.paths.contains_key(path), "{path}");
         }

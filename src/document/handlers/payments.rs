@@ -94,11 +94,17 @@ pub async fn create(
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<PaymentInput>,
 ) -> Result<(StatusCode, Json<Payment>), AppError> {
+    Ok((StatusCode::CREATED, Json(add(&state, id, input).await?)))
+}
+
+/// Record a payment; on a VAT payer's proforma this issues its DDPP, whose
+/// PDF is archived in the background (never failing the payment).
+pub async fn add(state: &AppState, id: Uuid, input: PaymentInput) -> Result<Payment, AppError> {
     let row = repo::create(&state.db, &state.cnb, id, input.validate()?, today()).await?;
     if let Some(ddpp) = row.1 {
         archive::spawn_archive_ddpp(state.db.clone(), state.pdf.clone(), ddpp);
     }
-    Ok((StatusCode::CREATED, Json(row.into())))
+    Ok(row.into())
 }
 
 #[utoipa::path(

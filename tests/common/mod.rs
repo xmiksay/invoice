@@ -25,6 +25,7 @@ pub mod csv_export;
 pub mod csvio;
 pub mod documents;
 pub mod isdoc;
+pub mod mcp;
 pub mod mdcast;
 pub mod received;
 pub mod smtp;

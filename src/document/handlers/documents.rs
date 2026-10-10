@@ -9,6 +9,7 @@ use super::input::DocumentInput;
 use super::{fetch, received};
 use crate::app::AppState;
 use crate::contact::handlers::dto::ListQuery as Paging;
+use crate::document::entity::document;
 use crate::document::line::Status;
 use crate::document::repo::{
     advance_sources, context, ddpp_correction, query, received as received_repo, view, write,
@@ -37,12 +38,25 @@ pub async fn list(
         offset: query.offset,
     }
     .normalized();
+    Ok(Json(
+        list_page(&state, &query, q.as_deref(), limit, offset).await?,
+    ))
+}
+
+/// One page of the document list; `term` / `limit` / `offset` already normalized.
+pub async fn list_page(
+    state: &AppState,
+    query: &ListQuery,
+    term: Option<&str>,
+    limit: u64,
+    offset: u64,
+) -> Result<DocumentList, AppError> {
     let today = today();
-    let (docs, total) = query::list(&state.db, &query, q.as_deref(), limit, offset, today).await?;
-    Ok(Json(DocumentList {
+    let (docs, total) = query::list(&state.db, query, term, limit, offset, today).await?;
+    Ok(DocumentList {
         items: view::summaries(&state.db, docs, today).await?,
         total,
-    }))
+    })
 }
 
 #[utoipa::path(
@@ -68,13 +82,17 @@ pub async fn create(
     let id = if direction == Some(RECEIVED) {
         received::create(&state, body).await?
     } else {
-        let input: DocumentInput = from_value(body)?;
-        let ctx = context::load(&state.db, &input, today(), None).await?;
-        let (mut data, evaluated) = input.validate(&ctx)?;
-        context::resolve_bank(&state.db, &mut data, true).await?;
-        write::create(&state.db, data, evaluated.totals).await?
+        create_draft(&state, from_value(body)?).await?
     };
     Ok((StatusCode::CREATED, Json(fetch(&state, id).await?)))
+}
+
+/// Create an issued-direction draft; omitted fields get the contact / company defaults.
+pub async fn create_draft(state: &AppState, input: DocumentInput) -> Result<Uuid, AppError> {
+    let ctx = context::load(&state.db, &input, today(), None).await?;
+    let (mut data, evaluated) = input.validate(&ctx)?;
+    context::resolve_bank(&state.db, &mut data, true).await?;
+    write::create(&state.db, data, evaluated.totals).await
 }
 
 #[utoipa::path(
@@ -116,15 +134,23 @@ pub async fn update(
         received::update(&state, &doc, body).await?;
         return Ok(Json(fetch(&state, id).await?));
     }
-    if view::status(&doc)? != Status::Draft {
+    update_draft(&state, &doc, from_value(body)?).await?;
+    Ok(Json(fetch(&state, id).await?))
+}
+
+/// Replace every field of an issued-direction draft (`document_locked` otherwise).
+pub async fn update_draft(
+    state: &AppState,
+    doc: &document::Model,
+    input: DocumentInput,
+) -> Result<(), AppError> {
+    if view::status(doc)? != Status::Draft {
         return Err(AppError::DocumentLocked);
     }
-    let input: DocumentInput = from_value(body)?;
-    let ctx = context::load(&state.db, &input, today(), Some(&doc)).await?;
+    let ctx = context::load(&state.db, &input, today(), Some(doc)).await?;
     let (mut data, evaluated) = input.validate(&ctx)?;
     context::resolve_bank(&state.db, &mut data, false).await?;
-    write::update(&state.db, id, data, evaluated.totals).await?;
-    Ok(Json(fetch(&state, id).await?))
+    write::update(&state.db, doc.id, data, evaluated.totals).await
 }
 
 #[utoipa::path(
@@ -171,6 +197,11 @@ pub async fn compute(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<ComputeInput>,
 ) -> Result<Json<Computed>, AppError> {
+    Ok(Json(compute_totals(&state, input).await?))
+}
+
+/// Live lines + totals of an unsaved document, no writes.
+pub async fn compute_totals(state: &AppState, input: ComputeInput) -> Result<Computed, AppError> {
     let company = company::get(&state.db).await?;
     let existing = match input.document_id {
         Some(id) => match query::find(&state.db, id).await {
@@ -190,8 +221,8 @@ pub async fn compute(
         exact,
     };
     let (lines, evaluated) = input.validate(&ctx)?;
-    Ok(Json(Computed {
+    Ok(Computed {
         lines: lines_out(&lines, &evaluated.lines),
         totals: evaluated.totals.into(),
-    }))
+    })
 }

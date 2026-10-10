@@ -312,10 +312,12 @@ pub struct Payment {
 pub struct PaymentInput {
     pub date: Option<NaiveDate>,
     /// Decimal string > 0, at most 2 dp, document currency.
+    #[serde(deserialize_with = "crate::num_text::decimal")]
     pub amount: String,
     pub note: Option<String>,
     /// Foreign-currency proforma of a VAT payer: CZK per unit for the DDPP
     /// (default: ČNB for the payment date). Ignored otherwise.
+    #[serde(deserialize_with = "crate::num_text::opt_decimal")]
     pub exchange_rate: Option<String>,
 }
 

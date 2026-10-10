@@ -13,7 +13,7 @@ use crate::error::AppError;
 use crate::pdf::PdfService;
 use crate::secret::Secret;
 use crate::{
-    ares, auth, catalog, cnb, contact, csvio, document, email, health, isdoc, openapi, pdf,
+    ares, auth, catalog, cnb, contact, csvio, document, email, health, isdoc, mcp, openapi, pdf,
     settings, spa,
 };
 
@@ -45,6 +45,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/export", csvio::export_router())
         .nest("/pdf", pdf::router())
         .route("/exchange-rates/{currency}", get(cnb::handlers::get_rate))
+        .nest("/mcp", mcp::router(state.clone()))
         .fallback(api_not_found)
         .layer(middleware::from_fn_with_state(
             state.clone(),

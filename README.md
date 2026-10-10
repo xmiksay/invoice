@@ -1,7 +1,7 @@
 # invoice
 
 Single-user invoice management: issued and received invoices, Czech VAT, ISDOC,
-CSV / XLSX import and CSV export for the accountant,
+CSV / XLSX import and CSV export for the accountant, an MCP endpoint for AI clients,
 PDF rendering through [mdcast](https://github.com/xmiksay/mdcast) with a
 per-instance design. Rust (Axum + SeaORM/Postgres) with an embedded Vue 3 SPA.
 
@@ -35,6 +35,21 @@ Open the SPA and log in with the API token.
 | `make migrate` / `make migrate-status` | Apply / show migrations |
 | `make docker-build` | Build the Docker image (`IMAGE=...` to override the tag) |
 | `make clean` | Remove build artifacts |
+
+## MCP (AI clients)
+
+`POST /api/mcp` is a stateless [Model Context Protocol](https://modelcontextprotocol.io) server (Streamable HTTP)
+behind the same Bearer token: read documents, contacts, ARES, catalog and settings, create contacts and drafts,
+issue, record payments, mark sent. Tools and rules: [docs/api/mcp.md](docs/api/mcp.md). PDFs are not sent over
+MCP — results carry `pdfUrl` for a download with the same token.
+
+```sh
+# Claude Code
+claude mcp add --transport http invoice https://invoice.example.com/api/mcp \
+  --header "Authorization: Bearer $INVOICE_API_TOKEN"
+```
+
+Other clients: an "HTTP" / "Streamable HTTP" server with that URL and the `Authorization` header.
 
 ## Configuration
 

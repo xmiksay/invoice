@@ -19,20 +19,28 @@ pub const MAX_LINES: usize = 1000;
 /// `item` (description, quantity, unit, unitPrice, discountPct, vatRate),
 /// `text` (description), `subtotal` (description, refs, collapse),
 /// `advance` (advanceDocumentId; description and amounts come from the server).
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", default)]
 pub struct LineInput {
     /// `item` | `text` | `subtotal` | `advance`.
     pub kind: String,
     pub description: String,
     /// Decimal string, at most 4 dp, non-zero.
+    #[serde(deserialize_with = "crate::num_text::opt_decimal")]
+    #[schemars(with = "Option<crate::num_text::DecimalText>")]
     pub quantity: Option<String>,
     pub unit: Option<String>,
     /// Excl. VAT, decimal string, at most 4 dp, may be negative.
+    #[serde(deserialize_with = "crate::num_text::opt_decimal")]
+    #[schemars(with = "Option<crate::num_text::DecimalText>")]
     pub unit_price: Option<String>,
     /// `"0"`..`"100"`, at most 2 dp; default `"0"`.
+    #[serde(deserialize_with = "crate::num_text::opt_decimal")]
+    #[schemars(with = "Option<crate::num_text::DecimalText>")]
     pub discount_pct: Option<String>,
     /// Percent; default = the default VAT rate (`"0"` for `non_payer`).
+    #[serde(deserialize_with = "crate::num_text::opt_decimal")]
+    #[schemars(with = "Option<crate::num_text::DecimalText>")]
     pub vat_rate: Option<String>,
     /// 1-based positions of the lines a subtotal sums.
     pub refs: Vec<i32>,

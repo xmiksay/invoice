@@ -44,7 +44,7 @@ pub struct CounterInput {
 }
 
 impl NumberSeries {
-    fn build(s: Series, year: i32) -> Self {
+    pub fn build(s: Series, year: i32) -> Self {
         let last = s
             .counters
             .iter()
