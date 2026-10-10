@@ -106,22 +106,9 @@ pub fn unzip(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
 
 /// `xmllint --schema` against the vendored ISDOC schema (`schema` file name).
 pub fn assert_valid(xml: &[u8], schema: &str) {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let file = dir.path().join("doc.xml");
-    std::fs::write(&file, xml).expect("write xml");
-    let xsd = format!(
-        "{}/tests/fixtures/isdoc/schema/{schema}",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    let out = std::process::Command::new("xmllint")
-        .args(["--noout", "--schema", &xsd])
-        .arg(&file)
-        .output()
-        .expect("run xmllint (libxml2-utils) — needed for the ISDOC schema check");
-    assert!(
-        out.status.success(),
-        "{}\n{}",
-        String::from_utf8_lossy(&out.stderr),
-        String::from_utf8_lossy(xml)
+    super::assert_xsd(
+        xml,
+        &format!("isdoc/schema/{schema}"),
+        &String::from_utf8_lossy(xml),
     );
 }

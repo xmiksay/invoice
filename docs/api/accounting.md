@@ -29,7 +29,7 @@ AccountingSettings {
 }
 ```
 - `GET` → the full object, every direction × type row present (missing rows → all null).
-- `PUT` → replaces; each code ≤ 20 chars, trimmed, `""` → null; unknown direction / docType or a duplicate row → 422
+- `PUT` → replaces each section present in the body, keeps an absent one (3c, [money.md](money.md#settings--accounting)); each code ≤ 19 chars for Pohoda (see Clarifications), ≤ 10 for Money (series ≤ 5, see money.md), trimmed, `""` → null; unknown direction / docType or a duplicate row → 422
   (`pohoda.codes.N.docType: invalid` / `duplicate`). Stored as one JSON settings row (migration).
 
 ## Pohoda XML (3b)
@@ -94,8 +94,8 @@ against the official version 2 XSDs (vendored in `tests/fixtures/pohoda/schema/`
 `https://www.stormware.cz/xml/schema/version_2/`).
 
 Route
-- `format`: `csv` (default) | `pohoda`. Anything else, `money` included until 3c, → 422 `format: invalid`. It is
-  reported together with the other query errors.
+- `format`: `csv` (default) | `pohoda` | `money` (3c). Anything else → 422 `format: invalid`. It is reported
+  together with the other query errors.
 - `Content-Type: application/xml; charset=windows-1250`, `Cache-Control: no-store`. It uses the 2c document set,
   order, 10 000 cap and snapshot transaction. Documents are loaded 500 at a time without payments or categories.
   Unlike the CSV, **the whole file is built inside the snapshot before anything is sent**: the accountant never
@@ -129,13 +129,13 @@ Settings
   `N` is the index in the request. Invalid input is the wrong value inside a valid JSON shape; a wrong JSON type is
   400 `bad_request`.
 - PUT takes any subset of rows. The stored value and both responses always hold the 12 rows: issued first, types in
-  the order invoice, credit_note, debit_note, advance_tax_doc, advance_credit_note, simplified. `{}` clears
-  everything.
+  the order invoice, credit_note, debit_note, advance_tax_doc, advance_credit_note, simplified. Since 3c a PUT
+  replaces only the sections it holds: `{"pohoda": {}}` clears the Pohoda codes, `{}` changes nothing.
 - **Additive field** `classificationVatNonDeductible: string | null` on every code row (received rows only;
   always null on issued rows): the členění DPH of a received document without the VAT deduction
   (`vatDeductible` false).
-- **Money S3:** the `money` section is omitted until 3c. A `money` key in a PUT is ignored. (3c adds it and changes
-  PUT to replace only the sections present: [money.md](money.md#settings--accounting).)
+- **Money S3:** the `money` section (same shape, own limits) came with 3c:
+  [money.md](money.md#settings--accounting).
 - Storage: table `accounting_settings` (singleton `id = 1`, `data jsonb`), migration
   `m20261015_000001_accounting_settings`.
 

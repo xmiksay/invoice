@@ -1,6 +1,7 @@
 //! Pohoda XML export: requests, XSD validation against the vendored
-//! Stormware schemas, and a fixture of every exported type in both
-//! directions (fictitious parties: 44444443 / 12345679 / 87654326).
+//! Stormware schemas, and the fixture of every exported type in both
+//! directions shared with the Money S3 tests (fictitious parties:
+//! 44444443 / 12345679 / 87654326).
 
 use axum::Router;
 use axum::http::StatusCode;
@@ -12,24 +13,7 @@ pub const JANUARY: &str = "/api/export/accountant?from=2026-01-01&to=2026-01-31&
 
 /// `xmllint --schema data.xsd` (the vendored Pohoda schemas, version 2).
 pub fn assert_valid(xml: &[u8]) {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let file = dir.path().join("pohoda.xml");
-    std::fs::write(&file, xml).expect("write xml");
-    let xsd = format!(
-        "{}/tests/fixtures/pohoda/schema/data.xsd",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    let out = std::process::Command::new("xmllint")
-        .args(["--noout", "--schema", &xsd])
-        .arg(&file)
-        .output()
-        .expect("run xmllint (libxml2-utils) — needed for the Pohoda schema check");
-    assert!(
-        out.status.success(),
-        "{}\n{}",
-        String::from_utf8_lossy(&out.stderr),
-        decode(xml)
-    );
+    super::assert_xsd(xml, "pohoda/schema/data.xsd", &decode(xml));
 }
 
 /// The file as text (it is Windows-1250).
@@ -71,7 +55,8 @@ pub fn item<'a>(xml: &'a str, text: &str) -> &'a str {
         .unwrap_or_else(|| panic!("no item {text} in\n{xml}"))
 }
 
-const HEADER: &str = "direction;doc_type;number;supplier_number;related_number;issue_date;\
+/// The columns of [`fixture`] (and of extra rows built with `row_in`).
+pub const HEADER: &str = "direction;doc_type;number;supplier_number;related_number;issue_date;\
 tax_date;due_date;received_date;counterparty_name;counterparty_ico;counterparty_dic;\
 counterparty_street;counterparty_city;counterparty_zip;counterparty_country;currency;\
 exchange_rate;vat_mode;base_21;vat_21;base_12;vat_12;base_10;vat_10;base_0;rounding;total;\

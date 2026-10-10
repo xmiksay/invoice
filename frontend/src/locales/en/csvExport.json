@@ -24,11 +24,13 @@
     "format": "Format",
     "formats": {
       "csv": "CSV",
-      "pohoda": "Pohoda XML"
+      "pohoda": "Pohoda XML",
+      "money": "Money S3 XML"
     },
     "formatHints": {
       "csv": "Document header and VAT summary in CZK; the file can be imported back.",
-      "pohoda": "Pohoda XML uses the accounting codes, VAT classifications and number series from Settings → Accounting."
+      "pohoda": "Pohoda XML uses the accounting codes, VAT classifications and number series from Settings → Accounting.",
+      "money": "Money S3 XML uses the accounting codes, VAT classifications and number series from Settings → Accounting."
     }
   }
 }

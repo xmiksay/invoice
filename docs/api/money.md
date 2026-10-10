@@ -93,4 +93,71 @@ money: {
   one section keeps the other).
 
 ## Clarifications (as implemented)
-(filled during the 3c implementation)
+Additive details and deviations settled during the Phase 3c backend. Element names, order and lengths were checked
+against the vendored XSDs (`tests/fixtures/money/schema/`, see its README), not taken from the text above.
+
+Route
+- `Content-Type: application/xml; charset=utf-8`, `Cache-Control: no-store`. The pipeline is the 3b one
+  (`accounting::export`, shared with Pohoda): 2c document set, order and cap, the whole file built inside the
+  snapshot. An empty `MoneyData` would pass the XSD, but an empty period is still 422 `from: empty`, as for Pohoda.
+- **Unexportable** → 422 `documents: unexportable` with the 3b `detail` (`<number>: <reason>; …`, our number for
+  issued, the supplier number for received, ≤ 2000 chars, logged at `warn` as `accountant money`). Reasons:
+  - `variable symbol longer than 20`; `number` / `supplier number longer than 50` (our numbers are ≤ 40, so this
+    is a guard only); `currency longer than 4`;
+  - more than 4 rates other than 0 / 12 / 21 % (`5 VAT rates other than 0 / 12 / 21 %, Money S3 takes at most 4`;
+    the XSD annotation of `SeznamDalsiSazby` says "standardně max. 4 sazby");
+  - a foreign recap with neither a CZK amount nor a rate, an undecodable snapshot, an unknown stored value (3b).
+  - A rate never makes a document unexportable otherwise: Pohoda's third-rate setting is not used (nor loaded)
+    by the Money export.
+
+Settings
+- `GET` returns both sections, each with the 12 rows. A stored 3b row (no `money`) reads as an empty Money section.
+- `PUT` body (OpenAPI `AccountingUpdate`): `pohoda` / `money` optional; a section that is absent **or `null`** is
+  kept; `{}` changes nothing. The errors of both sections are reported together. The read-modify-write runs in
+  one transaction with the row locked, so two saves of different sections never lose one.
+- Both sections share one shape (OpenAPI `ProgramSettings`, formerly `PohodaSettings`). Money limits come from the
+  XSD: `PredKontac` / `KodDPH` are `zkratkaType` (`maxLength` 10), `Rada` is `maxLength` 5.
+
+Money S3 XML
+- **Root:** `MoneyData` with `ICAgendy` (the settings IČO, else the company IČO, else left out), `description`,
+  `ExpDate` = the export day (Prague). **Deviation: no `JazykVerze`** — `_Document.xsd` does not declare it and
+  `xmllint` rejects the file with it.
+- `MoneyData` and `fakturaType` are `xs:all` (any order); everything is still written in XSD order. Lists:
+  `SeznamFaktPrij`, `SeznamFaktVyd`, `SeznamFaktPrij_DPP`, `SeznamFaktVyd_DPP` (empty ones left out), each in the
+  2c export order. Item elements: `Doklad`, `EvCisDokl`, `Rada`, `Popis`, `Vystaveno`, `DatUcPr`, `PlnenoDPH`,
+  `Splatno`, `Doruceno`, `KodDPH`, `ZjednD`, `VarSymbol`, `PrijatDokl`, `Druh`, `Dobropis`, `Uhrada`,
+  `PredKontac`, `SazbaDPH1`, `SazbaDPH2`, `SouhrnDPH`, `Celkem`, `Valuty`, `DodOdb`.
+- `Doklad` of a received document = our internal number (e.g. `P20260001`) when it fits. `EvCisDokl` is written
+  for issued documents only and `PrijatDokl` for received ones only (the XSD marks them "pouze faktury vydané /
+  přijaté").
+- `Druh` is always written; `ZjednD` and `Dobropis` only when true (the XSD default is false).
+- **Linked original:** the CZ schema has no element for it (`PuvDoklad` is "pouze SK verze", `SeznamVazeb`
+  needs the original inside Money), so it stays in `Popis` (` k {original}`), as in Pohoda's `text`.
+- `Uhrada` is free text (≤ 20, Money's default `převodem`).
+- **`DodOdb`:** `ObchNazev` (no XSD limit, not cut); `ObchAdresa` (only when a part is set): `Ulice` ≤ 50,
+  `Misto` ≤ 40, `PSC` ≤ 10 (cut), and **`KodStatu`** (ISO 3166-1, exactly 2) instead of `Stat`, which is the
+  country *name* (≤ 20); a country that is not 2 letters is left out. `ICO` ≤ 10, `DIC` ≤ 20 (cut; blank → left
+  out, never an empty element), `PlatceDPH` from the snapshot's `vatPayer` when known.
+- **Summary:** `Zaklad0`, `Zaklad5`, `Zaklad22`, `DPH5`, `DPH22`, `SeznamDalsiSazby` (XSD order).
+  - `DalsiSazba` holds `HladinaDPH` (0 = 0 %, 2 = a rate ≥ 20 %, else 1 = snížená), `Sazba`, `Zaklad`, `DPH` (no
+    `Popis`); one per rate, the recap rows of one rate merged.
+  - **Whenever `SeznamDalsiSazby` is written, `Zaklad0` is written too** (`0.00` when there is nothing at 0 %).
+    Per the `SeznamDalsiSazby` annotation, a summary with none of `Zaklad0` / `Zaklad5` / `Zaklad22` makes Money
+    take the zero and standard rates from the list itself; the always-present `Zaklad0` keeps that path off.
+  - Amounts are `castkaType` (decimal, ≤ 4 dp), written with 2.
+  - `Celkem` is required by the XSD (header and `Valuty`) but "IMPORT: NE": Money computes the total itself. It is
+    written as the sum of the summary amounts just written.
+- **Rounding (haléřové vyrovnání):** neither `fakturaType` nor `souhrnDPHType` has a rounding element, and Money
+  sums the summary on import (`Celkem` is ignored). So the document's `rounding` (signed like the amounts) is
+  **added to `Zaklad0`** (the 0 % / non-VAT slot; written even when it is the only amount there). Money's total
+  then equals our payable: `ZJ-1` 100 + 12.40 rounded to 112 → `Zaklad0` -0.40, `Celkem` 112.00. The accountant
+  sees the rounding in the 0 % column.
+- **Foreign currency:** `Valuty`: `Mena/Kod`, `Mnozstvi` 1, `Kurs`, `SouhrnDPH` = the recap in the currency with
+  the rounding in its `Zaklad0`, `Celkem` = total + rounding in the currency.
+  - `Kurs` = the stored rate **rounded to 4 dp** (`castkaType`; `24.335125` → `24.3351`). Without a stored rate
+    (but with CZK recap amounts) it is the **implied rate** = CZK recap total / currency recap total, 4 dp, so
+    Money never applies a rate of its own. Neither → unexportable (a zero total leaves it out).
+  - The header `SouhrnDPH` is the CZK recap **plus the rounding converted at that `Kurs`** (rounding × `Kurs` /
+    `Mnozstvi`, 2 dp, half away from zero) in its `Zaklad0`, so both summaries describe the same payable. The
+    header `Celkem` (CZK) can differ from the stored `total_czk` by the per-row rounding of the CZK recap.
+- VAT modes as 3b: exempt / non-payer → every base in `Zaklad0`; reverse charge keeps the rate slot with VAT 0.

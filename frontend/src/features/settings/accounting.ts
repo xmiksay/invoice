@@ -1,31 +1,43 @@
 import type { FieldErrors } from "@/api/types";
 import type { Direction } from "@/features/documents/types";
 import { nullIfEmpty, textRule } from "@/lib/formErrors";
-import { ACCOUNTING_DIRECTIONS, ACCOUNTING_DOC_TYPES, type AccountingSettings, type PohodaCodes } from "./types";
+import {
+  ACCOUNTING_DIRECTIONS,
+  ACCOUNTING_DOC_TYPES,
+  ACCOUNTING_PROGRAMS,
+  type AccountingCodes,
+  type AccountingProgram,
+  type AccountingProgramSettings,
+  type AccountingSettings,
+} from "./types";
 
-/** The code columns of the Pohoda table, in display order. */
-export const POHODA_CODE_FIELDS = ["accounting", "classificationVat", "classificationVatNonDeductible", "numberSeries"] as const;
-export type PohodaCodeField = (typeof POHODA_CODE_FIELDS)[number];
+/** The code columns of the codes table, in display order. */
+export const CODE_FIELDS = ["accounting", "classificationVat", "classificationVatNonDeductible", "numberSeries"] as const;
+export type CodeField = (typeof CODE_FIELDS)[number];
 
 /** Whether the column has an input in a row of that direction (VAT deduction exists only for received documents). */
-export const codeApplies = (field: PohodaCodeField, direction: Direction): boolean =>
+export const codeApplies = (field: CodeField, direction: Direction): boolean =>
   field !== "classificationVatNonDeductible" || direction === "received";
-/** Server limit per code (after trim): Pohoda `typ:idsType` maxLength. */
-export const CODE_MAX_LENGTH = 19;
 
-export type PohodaRowDraft = Pick<PohodaCodes, "direction" | "docType"> & Record<PohodaCodeField, string>;
+/** Server limits per code (after trim): Pohoda `typ:idsType` maxLength 19; Money S3 per element (`Rada` ≤ 5). */
+export const CODE_MAX_LENGTH: Record<AccountingProgram, Record<CodeField, number>> = {
+  pohoda: { accounting: 19, classificationVat: 19, classificationVatNonDeductible: 19, numberSeries: 19 },
+  money: { accounting: 10, classificationVat: 10, classificationVatNonDeductible: 10, numberSeries: 5 },
+};
 
-export interface AccountingDraft {
+export type CodeRowDraft = Pick<AccountingCodes, "direction" | "docType"> & Record<CodeField, string>;
+
+export interface ProgramDraft {
   ico: string;
-  /** Every direction × doc type in display order; the index is the `N` of the 422 keys `pohoda.codes.N.*`. */
-  rows: PohodaRowDraft[];
-  /** Absent until 3c (the server omits it); passed back only when loaded. */
-  money?: AccountingSettings["money"];
+  /** Every direction × doc type in display order; the index is the `N` of the 422 keys `<program>.codes.N.*`. */
+  rows: CodeRowDraft[];
 }
 
+export type AccountingDraft = Record<AccountingProgram, ProgramDraft>;
+
 /** Rows are rebuilt in display order rather than taken as sent, so a missing row still gets its inputs. */
-export function toAccountingDraft(settings: AccountingSettings | null): AccountingDraft {
-  const codes = settings?.pohoda.codes ?? [];
+function toProgramDraft(section: AccountingProgramSettings | undefined): ProgramDraft {
+  const codes = section?.codes ?? [];
   const rows = ACCOUNTING_DIRECTIONS.flatMap((direction) =>
     ACCOUNTING_DOC_TYPES.map((docType) => {
       const row = codes.find((c) => c.direction === direction && c.docType === docType);
@@ -39,37 +51,45 @@ export function toAccountingDraft(settings: AccountingSettings | null): Accounti
       };
     }),
   );
-  return { ico: settings?.pohoda.ico ?? "", rows, money: settings?.money };
+  return { ico: section?.ico ?? "", rows };
 }
 
-/** `""` → null; `money` goes back exactly as loaded (edited in 3c), and is left out when it was absent. */
-export function toAccountingSettings(draft: AccountingDraft): AccountingSettings {
+export function toAccountingDraft(settings: AccountingSettings | null): AccountingDraft {
+  return { pohoda: toProgramDraft(settings?.pohoda), money: toProgramDraft(settings?.money) };
+}
+
+/** `""` → null. */
+function toProgramSettings(draft: ProgramDraft): AccountingProgramSettings {
   return {
-    ...(draft.money ? { money: draft.money } : {}),
-    pohoda: {
-      ico: nullIfEmpty(draft.ico),
-      codes: draft.rows.map((r) => ({
-        direction: r.direction,
-        docType: r.docType,
-        accounting: nullIfEmpty(r.accounting),
-        classificationVat: nullIfEmpty(r.classificationVat),
-        numberSeries: nullIfEmpty(r.numberSeries),
-        classificationVatNonDeductible: codeApplies("classificationVatNonDeductible", r.direction)
-          ? nullIfEmpty(r.classificationVatNonDeductible)
-          : null,
-      })),
-    },
+    ico: nullIfEmpty(draft.ico),
+    codes: draft.rows.map((r) => ({
+      direction: r.direction,
+      docType: r.docType,
+      accounting: nullIfEmpty(r.accounting),
+      classificationVat: nullIfEmpty(r.classificationVat),
+      numberSeries: nullIfEmpty(r.numberSeries),
+      classificationVatNonDeductible: codeApplies("classificationVatNonDeductible", r.direction)
+        ? nullIfEmpty(r.classificationVatNonDeductible)
+        : null,
+    })),
   };
 }
 
-/** Client mirror of the server's length check (≤ 19), keyed like its 422 (`pohoda.codes.N.<field>`). */
+/** Always both sections: the server keeps a section absent from the PUT, so sending both makes Save authoritative. */
+export function toAccountingSettings(draft: AccountingDraft): AccountingSettings {
+  return { pohoda: toProgramSettings(draft.pohoda), money: toProgramSettings(draft.money) };
+}
+
+/** Client mirror of the server's length checks, keyed like its 422 (`<program>.codes.N.<field>`). */
 export function validateAccounting(draft: AccountingDraft): FieldErrors {
   const errors: FieldErrors = {};
-  draft.rows.forEach((row, i) => {
-    for (const field of POHODA_CODE_FIELDS) {
-      const reason = textRule(row[field], { max: CODE_MAX_LENGTH });
-      if (reason) errors[`pohoda.codes.${i}.${field}`] = reason;
-    }
-  });
+  for (const program of ACCOUNTING_PROGRAMS) {
+    draft[program].rows.forEach((row, i) => {
+      for (const field of CODE_FIELDS) {
+        const reason = textRule(row[field], { max: CODE_MAX_LENGTH[program][field] });
+        if (reason) errors[`${program}.codes.${i}.${field}`] = reason;
+      }
+    });
+  }
   return errors;
 }

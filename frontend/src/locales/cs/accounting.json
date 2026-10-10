@@ -15,13 +15,19 @@
     "title": "Pohoda",
     "intro": "Kódy pro export Pohoda XML (Export pro účetní). Zadejte zkratky tak, jak je máte v Pohodě. Prázdné pole se do exportu nezapíše a účetní ho doplní v programu.",
     "ico": "IČO účetní jednotky",
-    "icoHint": "IČO, do jehož účetnictví se doklady importují. Prázdné = IČO firmy.",
-    "document": "Doklad",
-    "columns": {
-      "accounting": "Předkontace",
-      "classificationVat": "Členění DPH",
-      "classificationVatNonDeductible": "Členění DPH – bez nároku na odpočet",
-      "numberSeries": "Číselná řada"
-    }
+    "icoHint": "IČO, do jehož účetnictví se doklady importují. Prázdné = IČO firmy."
+  },
+  "document": "Doklad",
+  "columns": {
+    "accounting": "Předkontace",
+    "classificationVat": "Členění DPH",
+    "classificationVatNonDeductible": "Členění DPH – bez nároku na odpočet",
+    "numberSeries": "Číselná řada"
+  },
+  "money": {
+    "title": "Money S3",
+    "intro": "Kódy pro export Money S3 XML (Export pro účetní). Zadejte zkratky tak, jak je máte v Money S3 (předkontace, členění DPH a členění bez nároku do 10 znaků, číselná řada do 5). Prázdné pole se do exportu nezapíše a účetní ho doplní v programu.",
+    "ico": "IČO agendy",
+    "icoHint": "IČO agendy Money S3, do které se doklady importují. Prázdné = IČO firmy."
   }
 }

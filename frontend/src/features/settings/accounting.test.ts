@@ -7,13 +7,16 @@ const settings: AccountingSettings = {
     ico: "12345678",
     codes: [{ direction: "received", docType: "credit_note", accounting: "3Pd", classificationVat: "PD", numberSeries: null, classificationVatNonDeductible: "PN" }],
   },
-  money: { codes: [{ direction: "issued", docType: "invoice", future: "x" }] },
+  money: {
+    ico: "27074358",
+    codes: [{ direction: "issued", docType: "simplified", accounting: "1Zj", classificationVat: "U", numberSeries: "ZD", classificationVatNonDeductible: null }],
+  },
 };
 
 describe("accounting draft", () => {
   it("lays out every direction × doc type in display order, missing rows empty", () => {
     const draft = toAccountingDraft(settings);
-    expect(draft.rows.map((r) => `${r.direction}/${r.docType}`)).toEqual([
+    const expected = [
       "issued/invoice",
       "issued/credit_note",
       "issued/debit_note",
@@ -26,8 +29,10 @@ describe("accounting draft", () => {
       "received/advance_tax_doc",
       "received/advance_credit_note",
       "received/simplified",
-    ]);
-    expect(draft.rows[7]).toEqual({
+    ];
+    expect(draft.pohoda.rows.map((r) => `${r.direction}/${r.docType}`)).toEqual(expected);
+    expect(draft.money.rows.map((r) => `${r.direction}/${r.docType}`)).toEqual(expected);
+    expect(draft.pohoda.rows[7]).toEqual({
       direction: "received",
       docType: "credit_note",
       accounting: "3Pd",
@@ -35,34 +40,58 @@ describe("accounting draft", () => {
       numberSeries: "",
       classificationVatNonDeductible: "PN",
     });
-    expect(draft.rows[0]).toMatchObject({ accounting: "", classificationVat: "", numberSeries: "" });
-    expect(draft.ico).toBe("12345678");
+    expect(draft.money.rows[5]).toMatchObject({ accounting: "1Zj", classificationVat: "U", numberSeries: "ZD" });
+    expect(draft.pohoda.rows[0]).toMatchObject({ accounting: "", classificationVat: "", numberSeries: "" });
+    expect(draft.pohoda.ico).toBe("12345678");
+    expect(draft.money.ico).toBe("27074358");
   });
 
-  it("trims, sends empty as null and passes money back untouched", () => {
+  it("starts both sections empty without settings", () => {
+    const draft = toAccountingDraft(null);
+    expect(draft.money.ico).toBe("");
+    expect(draft.money.rows).toHaveLength(12);
+  });
+
+  it("trims, sends empty as null and always sends both sections", () => {
     const draft = toAccountingDraft(settings);
-    draft.ico = "  ";
-    draft.rows[0]!.numberSeries = " FV ";
+    draft.pohoda.ico = "  ";
+    draft.pohoda.rows[0]!.numberSeries = " FV ";
     // Not editable on issued rows; a stray value is never sent.
-    draft.rows[0]!.classificationVatNonDeductible = "X";
+    draft.pohoda.rows[0]!.classificationVatNonDeductible = "X";
+    draft.money.rows[0]!.classificationVatNonDeductible = "X";
+    draft.money.rows[6]!.classificationVatNonDeductible = " PN ";
+    draft.money.rows[5]!.numberSeries = "";
     const out = toAccountingSettings(draft);
+    expect(Object.keys(out)).toEqual(["pohoda", "money"]);
     expect(out.pohoda.ico).toBeNull();
     expect(out.pohoda.codes).toHaveLength(12);
     expect(out.pohoda.codes[0]).toEqual({ direction: "issued", docType: "invoice", accounting: null, classificationVat: null, numberSeries: "FV", classificationVatNonDeductible: null });
     expect(out.pohoda.codes[7]!.classificationVatNonDeductible).toBe("PN");
-    expect(out.money).toEqual(settings.money);
+    expect(out.money.ico).toBe("27074358");
+    expect(out.money.codes).toHaveLength(12);
+    expect(out.money.codes[0]!.classificationVatNonDeductible).toBeNull();
+    expect(out.money.codes[5]).toEqual({ direction: "issued", docType: "simplified", accounting: "1Zj", classificationVat: "U", numberSeries: null, classificationVatNonDeductible: null });
+    expect(out.money.codes[6]!.classificationVatNonDeductible).toBe("PN");
   });
 
-  it("leaves money out when the server did not send it", () => {
-    const { money: _money, ...withoutMoney } = settings;
-    const out = toAccountingSettings(toAccountingDraft(withoutMoney));
-    expect("money" in out).toBe(false);
-  });
-
-  it("flags codes over 19 characters under the server's keys", () => {
+  it("flags Pohoda codes over 19 characters under the server's keys", () => {
     const draft = toAccountingDraft(null);
-    draft.rows[3]!.classificationVat = "x".repeat(20);
-    draft.rows[4]!.accounting = ` ${"y".repeat(19)} `;
+    draft.pohoda.rows[3]!.classificationVat = "x".repeat(20);
+    draft.pohoda.rows[4]!.accounting = ` ${"y".repeat(19)} `;
     expect(validateAccounting(draft)).toEqual({ "pohoda.codes.3.classificationVat": "too_long" });
+  });
+
+  it("flags Money codes over 10 characters and number series over 5", () => {
+    const draft = toAccountingDraft(null);
+    draft.money.rows[0]!.accounting = "x".repeat(10);
+    draft.money.rows[1]!.classificationVat = "x".repeat(11);
+    draft.money.rows[7]!.classificationVatNonDeductible = "x".repeat(11);
+    draft.money.rows[2]!.numberSeries = "x".repeat(5);
+    draft.money.rows[3]!.numberSeries = "x".repeat(6);
+    expect(validateAccounting(draft)).toEqual({
+      "money.codes.1.classificationVat": "too_long",
+      "money.codes.7.classificationVatNonDeductible": "too_long",
+      "money.codes.3.numberSeries": "too_long",
+    });
   });
 });
