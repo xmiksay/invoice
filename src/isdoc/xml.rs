@@ -2,7 +2,7 @@
 
 pub struct Xml {
     out: String,
-    open: Vec<&'static str>,
+    open: Vec<String>,
 }
 
 fn escape(s: &str, out: &mut String) {
@@ -33,6 +33,20 @@ impl Xml {
         }
     }
 
+    /// No XML declaration: a piece of a larger document.
+    pub fn fragment() -> Self {
+        Self {
+            out: String::new(),
+            open: Vec::new(),
+        }
+    }
+
+    /// The text so far, elements still open left open (a streamed document
+    /// whose end is written later).
+    pub fn unclosed(self) -> String {
+        self.out
+    }
+
     fn start(&mut self, name: &str, attrs: &[(&str, &str)]) {
         self.out.push('<');
         self.out.push_str(name);
@@ -46,16 +60,16 @@ impl Xml {
         self.out.push('>');
     }
 
-    pub fn open(&mut self, name: &'static str, attrs: &[(&str, &str)]) -> &mut Self {
+    pub fn open(&mut self, name: &str, attrs: &[(&str, &str)]) -> &mut Self {
         self.start(name, attrs);
-        self.open.push(name);
+        self.open.push(name.to_string());
         self
     }
 
     pub fn close(&mut self) -> &mut Self {
         if let Some(name) = self.open.pop() {
             self.out.push_str("</");
-            self.out.push_str(name);
+            self.out.push_str(&name);
             self.out.push('>');
         }
         self
@@ -108,5 +122,12 @@ mod tests {
             s.ends_with("<a k=\"1&quot;2\"><b>x &lt; y &amp; z</b><d u=\"ks\"></d><e>bell</e></a>")
         );
         assert!(roxmltree::Document::parse(&s).is_ok());
+    }
+
+    #[test]
+    fn fragment_left_open() {
+        let mut x = Xml::fragment();
+        x.open("a", &[]).leaf("b", "1");
+        assert_eq!(x.unclosed(), "<a><b>1</b>");
     }
 }

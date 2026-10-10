@@ -8,7 +8,8 @@
     "design": "Design",
     "categories": "Kategorie",
     "customFields": "Vlastní pole",
-    "email": "E-mail"
+    "email": "E-mail",
+    "accounting": "Účetnictví"
   },
   "company": {
     "vatPayer": "Plátce DPH",

@@ -1,3 +1,4 @@
+pub mod accounting;
 pub mod app;
 pub mod ares;
 pub mod auth;

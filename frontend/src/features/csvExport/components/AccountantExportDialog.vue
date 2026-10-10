@@ -2,13 +2,14 @@
 import { onMounted, reactive, ref, useTemplateRef } from "vue";
 import { useI18n } from "vue-i18n";
 import type { FieldErrors } from "@/api/types";
+import ErrorDetail from "@/components/ErrorDetail.vue";
 import FormField from "@/components/form/FormField.vue";
 import { useErrorText } from "@/composables/useAction";
-import { fieldErrorsOf } from "@/lib/formErrors";
+import { errorDetailOf, fieldErrorsOf } from "@/lib/formErrors";
 import { downloadPdf } from "@/lib/pdf";
 import { csvExportApi } from "../api";
-import { exportErrorKey, periodErrors, previousMonth } from "../period";
-import type { AccountantDirection, AccountantQuery } from "../types";
+import { accountantFallbackName, exportErrorKey, periodErrors, previousMonth } from "../period";
+import { ACCOUNTANT_FORMATS, type AccountantDirection, type AccountantQuery } from "../types";
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -16,15 +17,17 @@ const { t } = useI18n();
 const errorText = useErrorText();
 
 const DIRECTIONS: AccountantDirection[] = ["both", "issued", "received"];
-const form = reactive<AccountantQuery>({ ...previousMonth(), direction: "both" });
+const form = reactive<AccountantQuery>({ ...previousMonth(), direction: "both", format: "csv" });
 const busy = ref(false);
 const error = ref<string | null>(null);
 const fieldErrors = ref<FieldErrors>({});
+const detail = ref<string | null>(null);
 
 function fail(err: unknown): void {
   const key = exportErrorKey(err);
   if (key) {
     error.value = t(key);
+    detail.value = errorDetailOf(err);
     return;
   }
   const fields = fieldErrorsOf(err);
@@ -35,6 +38,7 @@ function fail(err: unknown): void {
 async function download(): Promise<void> {
   if (busy.value) return;
   error.value = null;
+  detail.value = null;
   fieldErrors.value = periodErrors(form.from, form.to);
   if (Object.keys(fieldErrors.value).length > 0) {
     error.value = t("errors.validation");
@@ -43,7 +47,7 @@ async function download(): Promise<void> {
   busy.value = true;
   const query = { ...form };
   try {
-    await downloadPdf(() => csvExportApi.accountant(query), `ucetni-${query.from}-${query.to}.csv`);
+    await downloadPdf(() => csvExportApi.accountant(query), accountantFallbackName(query));
     emit("close");
   } catch (err) {
     fail(err);
@@ -86,14 +90,22 @@ onMounted(() => panel.value?.focus());
             <option v-for="d in DIRECTIONS" :key="d" :value="d">{{ t(`csvExport.accountant.directions.${d}`) }}</option>
           </select>
         </FormField>
+        <FormField :label="t('csvExport.accountant.format')" for="accountant-format" :error="fieldErrors.format" :hint="t(`csvExport.accountant.formatHints.${form.format}`)">
+          <select id="accountant-format" v-model="form.format" class="input" :class="{ 'input-error': fieldErrors.format }" data-test="accountant-format">
+            <option v-for="f in ACCOUNTANT_FORMATS" :key="f.format" :value="f.format">{{ t(`csvExport.accountant.formats.${f.format}`) }}</option>
+          </select>
+        </FormField>
       </form>
 
-      <p v-if="error" role="alert" class="alert-error" data-test="accountant-export-error">{{ error }}</p>
+      <div v-if="error" role="alert" class="alert-error" data-test="accountant-export-error">
+        <p>{{ error }}</p>
+        <ErrorDetail :detail="detail" open />
+      </div>
 
       <div class="flex justify-end gap-2">
         <button type="button" class="btn" data-test="accountant-cancel" @click="emit('close')">{{ t("common.cancel") }}</button>
         <button type="button" class="btn btn-primary" :disabled="busy" data-test="accountant-download" @click="download">
-          {{ busy ? t("csvExport.preparing") : t("csvExport.accountant.download") }}
+          {{ busy ? t("csvExport.preparing") : t("csvExport.accountant.download", { format: t(`csvExport.accountant.formats.${form.format}`) }) }}
         </button>
       </div>
     </div>

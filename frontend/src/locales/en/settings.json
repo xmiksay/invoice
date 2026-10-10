@@ -8,7 +8,8 @@
     "design": "Design",
     "categories": "Categories",
     "customFields": "Custom fields",
-    "email": "E-mail"
+    "email": "E-mail",
+    "accounting": "Accounting"
   },
   "company": {
     "vatPayer": "VAT payer",

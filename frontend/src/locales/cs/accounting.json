@@ -1,0 +1,27 @@
+{
+  "directions": {
+    "issued": "Vydané doklady",
+    "received": "Přijaté doklady"
+  },
+  "docTypes": {
+    "invoice": "Faktura",
+    "credit_note": "Dobropis",
+    "debit_note": "Vrubopis",
+    "advance_tax_doc": "Daňový doklad k platbě",
+    "advance_credit_note": "Opravný daňový doklad k platbě",
+    "simplified": "Zjednodušený daňový doklad"
+  },
+  "pohoda": {
+    "title": "Pohoda",
+    "intro": "Kódy pro export Pohoda XML (Export pro účetní). Zadejte zkratky tak, jak je máte v Pohodě. Prázdné pole se do exportu nezapíše a účetní ho doplní v programu.",
+    "ico": "IČO účetní jednotky",
+    "icoHint": "IČO, do jehož účetnictví se doklady importují. Prázdné = IČO firmy.",
+    "document": "Doklad",
+    "columns": {
+      "accounting": "Předkontace",
+      "classificationVat": "Členění DPH",
+      "classificationVatNonDeductible": "Členění DPH – bez nároku na odpočet",
+      "numberSeries": "Číselná řada"
+    }
+  }
+}

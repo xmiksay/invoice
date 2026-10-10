@@ -125,9 +125,11 @@ describe("CSV export", () => {
       expect(value(w, "accountant-from")).toBe("2026-09-01");
       expect(value(w, "accountant-to")).toBe("2026-09-30");
       expect(value(w, "accountant-direction")).toBe("both");
+      expect(value(w, "accountant-format")).toBe("csv");
+      expect(w.find('[data-test="accountant-download"]').text()).toBe("Download CSV");
       await w.find('[data-test="accountant-download"]').trigger("click");
       await flushPromises();
-      expect(calls(fetch)).toEqual(["GET /api/export/accountant?from=2026-09-01&to=2026-09-30&direction=both"]);
+      expect(calls(fetch)).toEqual(["GET /api/export/accountant?from=2026-09-01&to=2026-09-30&direction=both&format=csv"]);
       expect(downloads).toEqual(["ucetni-2026-09-01-2026-09-30.csv"]);
       expect(w.find('[data-test="accountant-export-dialog"]').exists()).toBe(false);
       w.unmount();
@@ -142,8 +144,72 @@ describe("CSV export", () => {
       await w.find('[data-test="accountant-direction"]').setValue("received");
       await w.find('[data-test="accountant-download"]').trigger("click");
       await flushPromises();
-      expect(calls(fetch)).toEqual(["GET /api/export/accountant?from=2026-12-01&to=2026-12-31&direction=received"]);
+      expect(calls(fetch)).toEqual(["GET /api/export/accountant?from=2026-12-01&to=2026-12-31&direction=received&format=csv"]);
       expect(downloads).toEqual(["ucetni-2026-12-01-2026-12-31.csv"]);
+      w.unmount();
+    });
+
+    it("exports Pohoda XML under the server filename, else pohoda-{from}-{to}.xml", async () => {
+      let filename: string | undefined = "pohoda-2026-09-01-2026-09-30.xml";
+      const xmlReply = () =>
+        new Response("<dat:dataPack/>", {
+          status: 200,
+          headers: { "Content-Type": "application/xml; charset=windows-1250", ...(filename ? { "Content-Disposition": `attachment; filename="${filename}"` } : {}) },
+        });
+      const fetch = mockFetchRoutes({ "GET /api/export/accountant": xmlReply });
+      let w = await openDialog();
+      expect(w.findAll('[data-test="accountant-format"] option').map((o) => o.text())).toEqual(["CSV", "Pohoda XML"]);
+      await w.find('[data-test="accountant-format"]').setValue("pohoda");
+      expect(w.find('[data-test="accountant-download"]').text()).toBe("Download Pohoda XML");
+      expect(w.text()).toContain("Settings → Accounting");
+      await w.find('[data-test="accountant-download"]').trigger("click");
+      await flushPromises();
+      w.unmount();
+
+      filename = undefined;
+      w = await openDialog();
+      await w.find('[data-test="accountant-direction"]').setValue("issued");
+      await w.find('[data-test="accountant-format"]').setValue("pohoda");
+      await w.find('[data-test="accountant-download"]').trigger("click");
+      await flushPromises();
+      expect(calls(fetch)).toEqual([
+        "GET /api/export/accountant?from=2026-09-01&to=2026-09-30&direction=both&format=pohoda",
+        "GET /api/export/accountant?from=2026-09-01&to=2026-09-30&direction=issued&format=pohoda",
+      ]);
+      expect(downloads).toEqual(["pohoda-2026-09-01-2026-09-30.xml", "pohoda-2026-09-01-2026-09-30.xml"]);
+      w.unmount();
+    });
+
+    it("explains an unexportable document with the server's detail, and an empty period", async () => {
+      let answer: unknown = reply(422, { code: "validation", fields: { documents: "unexportable" }, detail: "FV2026-0007: VAT rate 15 % has no Pohoda slot" });
+      mockFetchRoutes({ "GET /api/export/accountant": () => answer });
+      const w = await openDialog();
+      await w.find('[data-test="accountant-format"]').setValue("pohoda");
+      await w.find('[data-test="accountant-download"]').trigger("click");
+      await flushPromises();
+      const alert = w.find('[data-test="accountant-export-error"]');
+      expect(alert.text()).toContain("A document cannot be exported");
+      expect(alert.find("pre").text()).toBe("FV2026-0007: VAT rate 15 % has no Pohoda slot");
+      expect(w.findAll('[data-test="field-error"]')).toHaveLength(0);
+
+      answer = reply(422, { code: "validation", fields: { from: "empty" } });
+      await w.find('[data-test="accountant-download"]').trigger("click");
+      await flushPromises();
+      expect(w.find('[data-test="accountant-export-error"]').text()).toBe("There are no documents in the period.");
+      expect(w.find('[data-test="error-detail"]').exists()).toBe(false);
+      expect(w.findAll('[data-test="field-error"]')).toHaveLength(0);
+      expect(downloads).toEqual([]);
+      w.unmount();
+    });
+
+    it("shows the server's format rejection at the format field", async () => {
+      mockFetchRoutes({ "GET /api/export/accountant": reply(422, { code: "validation", fields: { format: "invalid" } }) });
+      const w = await openDialog();
+      await w.find('[data-test="accountant-download"]').trigger("click");
+      await flushPromises();
+      expect(w.findAll('[data-test="field-error"]').map((e) => e.text())).toEqual(["Invalid value."]);
+      expect(w.find("#accountant-format").classes()).toContain("input-error");
+      expect(w.find('[data-test="accountant-export-dialog"]').exists()).toBe(true);
       w.unmount();
     });
 

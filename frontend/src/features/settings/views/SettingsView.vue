@@ -12,6 +12,7 @@ const tabs = [
   { name: "settings-custom-fields", label: "settings.tabs.customFields" },
   { name: "settings-design", label: "settings.tabs.design" },
   { name: "settings-email", label: "settings.tabs.email" },
+  { name: "settings-accounting", label: "settings.tabs.accounting" },
 ] as const;
 </script>
 

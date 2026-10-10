@@ -119,7 +119,12 @@ pub fn doc_id(results: &[Value], key: &str) -> String {
 
 /// One row under [`HEADER`] from `column → value` pairs (others empty).
 pub fn row(pairs: &[(&str, &str)]) -> String {
-    HEADER
+    row_in(HEADER, pairs)
+}
+
+/// One row under `header` from `column → value` pairs (others empty).
+pub fn row_in(header: &str, pairs: &[(&str, &str)]) -> String {
+    header
         .split(';')
         .map(|h| pairs.iter().find(|(k, _)| *k == h).map_or("", |(_, v)| *v))
         .collect::<Vec<_>>()

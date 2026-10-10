@@ -1,6 +1,7 @@
 import { request, requestBlob } from "@/api/client";
 import type { DocLocale } from "@/api/types";
 import type {
+  AccountingSettings,
   BankAccount,
   BankAccountInput,
   Category,
@@ -38,6 +39,11 @@ function crudApi<T, I>(path: string): CrudApi<T, I> {
 export const companyApi = {
   get: () => request<Company>(`${BASE}/company`),
   update: (company: Company) => request<Company>(`${BASE}/company`, { method: "PUT", body: company }),
+};
+
+export const accountingApi = {
+  get: () => request<AccountingSettings>(`${BASE}/accounting`),
+  update: (settings: AccountingSettings) => request<AccountingSettings>(`${BASE}/accounting`, { method: "PUT", body: settings }),
 };
 
 export const bankAccountsApi = crudApi<BankAccount, BankAccountInput>("bank-accounts");

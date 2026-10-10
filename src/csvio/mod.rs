@@ -15,6 +15,9 @@ pub mod read;
 pub mod row;
 pub mod write;
 
+#[cfg(test)]
+pub mod test_doc;
+
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};

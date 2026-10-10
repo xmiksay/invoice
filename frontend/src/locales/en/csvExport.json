@@ -1,6 +1,8 @@
 {
   "preparing": "Preparing the export…",
   "tooMany": "More than 10,000 documents match. Narrow the filter or the period down.",
+  "unexportable": "A document cannot be exported to the accounting program. Fix it or narrow the export down (period, documents).",
+  "empty": "There are no documents in the period.",
   "list": {
     "action": "Export CSV",
     "hint": "Every document of the current tab and filters, without drafts and cancelled ones. The file can be imported back."
@@ -8,7 +10,7 @@
   "accountant": {
     "action": "Export for the accountant",
     "title": "Export for the accountant",
-    "intro": "Issued and received tax documents (no proformas) whose tax date falls in the period, as one CSV file. Drafts and cancelled documents are left out.",
+    "intro": "Issued and received tax documents (no proformas) whose tax date falls in the period, as one file — CSV, or XML for import into an accounting program. Drafts and cancelled documents are left out.",
     "from": "From",
     "to": "To",
     "periodHint": "Tax date (received: tax date, else received date); at most 366 days.",
@@ -18,6 +20,15 @@
       "issued": "Issued only",
       "received": "Received only"
     },
-    "download": "Download CSV"
+    "download": "Download {format}",
+    "format": "Format",
+    "formats": {
+      "csv": "CSV",
+      "pohoda": "Pohoda XML"
+    },
+    "formatHints": {
+      "csv": "Document header and VAT summary in CZK; the file can be imported back.",
+      "pohoda": "Pohoda XML uses the accounting codes, VAT classifications and number series from Settings → Accounting."
+    }
   }
 }

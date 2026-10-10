@@ -15,6 +15,7 @@ mod m20261011_000001_pdf_archive;
 mod m20261012_000001_received_import;
 mod m20261013_000001_doc_types;
 mod m20261014_000001_document_emails;
+mod m20261015_000001_accounting_settings;
 
 pub struct Migrator;
 
@@ -30,6 +31,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261012_000001_received_import::Migration),
             Box::new(m20261013_000001_doc_types::Migration),
             Box::new(m20261014_000001_document_emails::Migration),
+            Box::new(m20261015_000001_accounting_settings::Migration),
         ]
     }
 }

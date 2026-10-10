@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/api/client";
-import { exportErrorKey, periodErrors, previousMonth } from "./period";
+import { accountantFallbackName, exportErrorKey, periodErrors, previousMonth } from "./period";
 
 describe("previousMonth", () => {
   it("is the whole previous calendar month", () => {
@@ -27,10 +27,20 @@ describe("periodErrors", () => {
 });
 
 describe("exportErrorKey", () => {
-  it("explains only 422 filter too_many", () => {
+  it("explains 422 too_many, unexportable and an empty period, nothing else", () => {
     expect(exportErrorKey(new ApiError(422, "validation", { filter: "too_many" }))).toBe("csvExport.tooMany");
+    expect(exportErrorKey(new ApiError(422, "validation", { documents: "unexportable" }, "FV-1"))).toBe("csvExport.unexportable");
+    expect(exportErrorKey(new ApiError(422, "validation", { from: "empty" }))).toBe("csvExport.empty");
     expect(exportErrorKey(new ApiError(422, "validation", { from: "invalid" }))).toBeNull();
     expect(exportErrorKey(new ApiError(500, "internal"))).toBeNull();
     expect(exportErrorKey(new Error("x"))).toBeNull();
+  });
+});
+
+describe("accountantFallbackName", () => {
+  it("names the file per format", () => {
+    const period = { from: "2026-09-01", to: "2026-09-30", direction: "both" as const };
+    expect(accountantFallbackName({ ...period, format: "csv" })).toBe("ucetni-2026-09-01-2026-09-30.csv");
+    expect(accountantFallbackName({ ...period, format: "pohoda" })).toBe("pohoda-2026-09-01-2026-09-30.xml");
   });
 });
