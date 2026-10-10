@@ -36,6 +36,7 @@ pub mod documents;
 pub mod isdoc;
 pub mod mcp;
 pub mod mdcast;
+pub mod members;
 pub mod money;
 pub mod pohoda;
 pub mod received;

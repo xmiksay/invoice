@@ -72,8 +72,9 @@ pub async fn store_token(
     .expect("store token");
 }
 
-/// A member `email` of `space` with `role` (4a has no invitations: the row
-/// is written directly) and a token of that role; returns the token.
+/// A member `email` of `space` with `role` (the row is written directly —
+/// simpler than the invitation flow, which `tests/invites*.rs` cover) and a
+/// token of that role; returns the token.
 pub async fn member(conn: &DatabaseConnection, space: SpaceId, email: &str, role: Role) -> String {
     let id = user(conn, email).await;
     invoice::space::entity::member::ActiveModel {

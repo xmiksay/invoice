@@ -186,6 +186,12 @@ defaults; #3 comments) → 4f per-space design versions / preview (rest of #10).
   global. Storage keys and the mdcast design overlay per space under `spaces/{id}/`. No default space, no data
   migration (no existing data). Owner deletes a space (slug + password), DB rows and storage prefix.
   Contracts: [`docs/api/spaces.md`](api/spaces.md), [`docs/api/auth.md`](api/auth.md).
+- 4b grill: admin and owner manage members (admin up to `admin`, only an owner grants / changes `owner`; the last
+  owner cannot be demoted, removed or leave). Invitations bound to the e-mail, 7 days, single use, sent by e-mail and
+  shown as a copyable link; a pending one for the same e-mail is replaced; inviting a member → 422. Accept in one step
+  on the space host (existing account: password; new account: name + password, verified, works with registration
+  off) → membership + session. Members list admin+ only; anyone may leave. Removal / leave deletes the member's
+  sessions and tokens in that space at once. Contract: [`docs/api/members.md`](api/members.md).
 - As implemented (4a): migration `m20261016_000001_spaces` (refuses existing data), modules `src/auth/` (hosts,
   sessions, tokens, CSRF, rate limits) and `src/space/` (`SpaceId`, roles, per-space seeds), storage scoped to
   `spaces/{id}/`; details in the Clarifications of [spaces.md](api/spaces.md) and [auth.md](api/auth.md).

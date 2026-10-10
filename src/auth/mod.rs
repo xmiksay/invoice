@@ -56,7 +56,7 @@ pub fn account_router() -> Router<AppState> {
         .route("/account/password", post(password::change))
 }
 
-async fn origin_if_present(req: Request, next: Next) -> Result<Response, AppError> {
+pub async fn origin_if_present(req: Request, next: Next) -> Result<Response, AppError> {
     let host = req
         .extensions()
         .get::<HostCtx>()

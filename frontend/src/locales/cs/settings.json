@@ -10,7 +10,8 @@
     "customFields": "Vlastní pole",
     "email": "E-mail",
     "accounting": "Účetnictví",
-    "space": "Space"
+    "space": "Space",
+    "members": "Členové"
   },
   "company": {
     "vatPayer": "Plátce DPH",

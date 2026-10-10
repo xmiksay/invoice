@@ -1,0 +1,58 @@
+{
+  "intro": "Who has access to this space. A removed member loses access at once, API tokens included; the documents they created stay.",
+  "you": "(you)",
+  "columns": {
+    "name": "Name",
+    "email": "E-mail",
+    "role": "Role",
+    "joined": "Member since"
+  },
+  "remove": "Remove",
+  "confirmRemove": "Really remove {name} from the space? They lose access and their API tokens in this space at once.",
+  "removed": "The member is removed.",
+  "roleChanged": "The role is changed.",
+  "confirmOwnRole": "Really change your own role? You may lose rights you have now.",
+  "invite": {
+    "title": "Invite",
+    "email": "E-mail",
+    "role": "Role",
+    "submit": "Invite",
+    "submitting": "Inviting…"
+  },
+  "link": {
+    "label": "Invitation link for {email}",
+    "copy": "Copy",
+    "copied": "Copied.",
+    "emailSent": "E-mail sent.",
+    "emailNotSent": "E-mail not sent (SMTP is not configured) – pass the link on yourself.",
+    "hint": "The link is valid for 7 days and works once. It is not shown again; if it gets lost, resend the invitation."
+  },
+  "pending": {
+    "title": "Pending invitations",
+    "empty": "No pending invitations.",
+    "invitedBy": "Invited by",
+    "expires": "Valid until",
+    "resend": "Resend",
+    "revoke": "Revoke",
+    "confirmRevoke": "Really revoke the invitation for {email}? The link stops working.",
+    "revoked": "The invitation is revoked."
+  },
+  "leave": {
+    "title": "Leave space",
+    "intro": "You lose access to the space {name}; your sessions and API tokens in it are revoked. The documents you created stay.",
+    "submit": "Leave space",
+    "confirm": "Really leave the space {name}? Only a new invitation brings you back.",
+    "lastOwner": "You are the only owner of this space, so you cannot leave it. First make another member an owner in Settings → Members, or delete the space."
+  },
+  "accept": {
+    "title": "Space invitation",
+    "intro": "You have been invited to the space {name} as {role}.",
+    "existing": "An account with this e-mail already exists. Accept the invitation with its password.",
+    "new": "There is no account with this e-mail yet. Create one with your name and a password.",
+    "submitExisting": "Accept invitation",
+    "submitNew": "Create account and accept",
+    "submitting": "Accepting…",
+    "invalid": "The invitation is invalid, already used, replaced by a newer one or expired. Ask for a new one.",
+    "toBase": "Go to the home page"
+  }
+}

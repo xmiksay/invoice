@@ -16,6 +16,7 @@ pub mod health;
 pub mod import;
 pub mod isdoc;
 pub mod mcp;
+pub mod members;
 pub mod migration;
 pub mod num_text;
 pub mod openapi;

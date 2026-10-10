@@ -81,6 +81,7 @@ fn maps_variants_to_status_and_code() {
             "category_in_use",
         ),
         (AppError::NumberTaken, StatusCode::CONFLICT, "number_taken"),
+        (AppError::LastOwner, StatusCode::CONFLICT, "last_owner"),
         (
             AppError::ExceedsOriginal,
             StatusCode::CONFLICT,

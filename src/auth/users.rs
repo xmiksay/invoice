@@ -57,7 +57,7 @@ pub async fn find_by_email(
 /// A new unverified user; `None` when the e-mail is taken (a concurrent
 /// registration lost the race).
 pub async fn create(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     email: &str,
     display_name: &str,
     password_hash: String,

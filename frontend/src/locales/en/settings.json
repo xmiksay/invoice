@@ -10,7 +10,8 @@
     "customFields": "Custom fields",
     "email": "E-mail",
     "accounting": "Accounting",
-    "space": "Space"
+    "space": "Space",
+    "members": "Members"
   },
   "company": {
     "vatPayer": "VAT payer",

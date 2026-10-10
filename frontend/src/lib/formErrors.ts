@@ -20,6 +20,8 @@ export const REASON_CODES = [
   "mismatch",
   "too_high",
   "wrong_password",
+  "already_member",
+  "last_owner",
 ] as const;
 
 /** Field errors of a 422 `validation` response, or null for any other failure. */
@@ -70,6 +72,8 @@ const KNOWN_CODES: Record<string, string> = {
   rate_limited: "errors.rateLimited",
   email_unverified: "errors.emailUnverified",
   invalid_credentials: "errors.invalidCredentials",
+  // 409 on removing / the leave of the last owner (the 422 field reason is `validation.last_owner`).
+  last_owner: "errors.lastOwner",
 };
 
 /** i18n key + params for a non-field error message. */

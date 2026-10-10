@@ -17,6 +17,7 @@ mod m20261013_000001_doc_types;
 mod m20261014_000001_document_emails;
 mod m20261015_000001_accounting_settings;
 mod m20261016_000001_spaces;
+mod m20261017_000001_space_invites;
 
 pub struct Migrator;
 
@@ -34,6 +35,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261014_000001_document_emails::Migration),
             Box::new(m20261015_000001_accounting_settings::Migration),
             Box::new(m20261016_000001_spaces::Migration),
+            Box::new(m20261017_000001_space_invites::Migration),
         ]
     }
 }
