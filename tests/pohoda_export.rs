@@ -256,7 +256,7 @@ async fn formats_and_an_empty_period() {
     let db = TestDb::new().await;
     let app = router(db.conn.clone());
     set_company(&app, true).await;
-    let (status, body) = export_error(&app, &JANUARY.replace("pohoda", "money")).await;
+    let (status, body) = export_error(&app, &JANUARY.replace("pohoda", "abra")).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["fields"]["format"], "invalid");
     let (status, headers, _) =

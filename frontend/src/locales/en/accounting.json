@@ -15,13 +15,19 @@
     "title": "Pohoda",
     "intro": "Codes for the Pohoda XML export (Export for the accountant). Enter the abbreviations as defined in Pohoda. An empty field is left out of the export and the accountant fills it in the program.",
     "ico": "Accounting unit IČO",
-    "icoHint": "The IČO whose accounts the documents are imported into. Empty = the company IČO.",
-    "document": "Document",
-    "columns": {
-      "accounting": "Accounting code (předkontace)",
-      "classificationVat": "VAT classification (členění DPH)",
-      "classificationVatNonDeductible": "VAT classification, no deduction (členění DPH – bez nároku na odpočet)",
-      "numberSeries": "Number series"
-    }
+    "icoHint": "The IČO whose accounts the documents are imported into. Empty = the company IČO."
+  },
+  "document": "Document",
+  "columns": {
+    "accounting": "Accounting code (předkontace)",
+    "classificationVat": "VAT classification (členění DPH)",
+    "classificationVatNonDeductible": "VAT classification, no deduction (členění DPH – bez nároku na odpočet)",
+    "numberSeries": "Number series"
+  },
+  "money": {
+    "title": "Money S3",
+    "intro": "Codes for the Money S3 XML export (Export for the accountant). Enter the abbreviations as defined in Money S3 (accounting code, VAT classification and no-deduction classification up to 10 characters, number series up to 5). An empty field is left out of the export and the accountant fills it in the program.",
+    "ico": "Agenda IČO",
+    "icoHint": "The IČO of the Money S3 agenda the documents are imported into. Empty = the company IČO."
   }
 }

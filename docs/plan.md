@@ -165,6 +165,12 @@ Order (3 grill): 3a MCP → 3b Pohoda XML → 3c Money S3 XML, one PR each.
   proformas; summary per VAT rate in CZK, no lines); DDPPs and their corrections are exported as advance tax
   documents; accounting codes per direction × document type in Settings → Accounting, empty by default.
   Contract: [`docs/api/accounting.md`](api/accounting.md).
+- 3c grill: Money S3 native XML (UTF-8, `MoneyData`), validated against the Money S3 XSDs (vendored from the public
+  WeblateOrg/website copy). DDPPs and their corrections → Money's own `SeznamFaktVyd_DPP` / `SeznamFaktPrij_DPP`
+  lists. A number longer than Money's 10-char `Doklad` → `Doklad` omitted (Money numbers it from the series), ours
+  kept in `EvCisDokl` / `PrijatDokl`. Codes: own `money` section shaped like Pohoda (≤ 10, series ≤ 5, agenda IČO).
+  Non-deductible received document with no code → `KodDPH` left out. Any VAT rate maps (`SeznamDalsiSazby`).
+  Contract: [`docs/api/money.md`](api/money.md).
 
 ## Out of scope (for now)
 Deployment manifests, VAT return / control statement XML (EPO), automatic payment

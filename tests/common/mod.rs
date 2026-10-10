@@ -27,6 +27,7 @@ pub mod documents;
 pub mod isdoc;
 pub mod mcp;
 pub mod mdcast;
+pub mod money;
 pub mod pohoda;
 pub mod received;
 pub mod smtp;
@@ -223,4 +224,24 @@ pub async fn call(
         serde_json::from_slice(&bytes).expect("JSON body")
     };
     (status, json)
+}
+
+/// `xmllint --noout --schema tests/fixtures/{xsd}` over `xml` (the vendored
+/// ISDOC / Pohoda / Money S3 schemas); a failure shows the errors and
+/// `shown` (the document as text).
+pub fn assert_xsd(xml: &[u8], xsd: &str, shown: &str) {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let file = dir.path().join("doc.xml");
+    std::fs::write(&file, xml).expect("write xml");
+    let xsd = format!("{}/tests/fixtures/{xsd}", env!("CARGO_MANIFEST_DIR"));
+    let out = std::process::Command::new("xmllint")
+        .args(["--noout", "--schema", &xsd])
+        .arg(&file)
+        .output()
+        .expect("run xmllint (libxml2-utils) — needed for the XML schema checks");
+    assert!(
+        out.status.success(),
+        "{}\n{shown}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }

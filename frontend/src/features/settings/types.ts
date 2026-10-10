@@ -131,27 +131,30 @@ export const ACCOUNTING_DOC_TYPES = ["invoice", "credit_note", "debit_note", "ad
 export type AccountingDocType = (typeof ACCOUNTING_DOC_TYPES)[number];
 export const ACCOUNTING_DIRECTIONS = ["issued", "received"] as const satisfies readonly Direction[];
 
-/** One direction × doc type row of Pohoda codes; null = the element is not written. */
-export interface PohodaCodes {
+/** Accounting programs with their own codes in Settings → Accounting, in display order. */
+export const ACCOUNTING_PROGRAMS = ["pohoda", "money"] as const;
+export type AccountingProgram = (typeof ACCOUNTING_PROGRAMS)[number];
+
+/** One direction × doc type row of an accounting program's codes; null = the element is not written. */
+export interface AccountingCodes {
   direction: Direction;
   docType: AccountingDocType;
-  /** Předkontace (`typ:ids`). */
+  /** Předkontace (Pohoda `typ:ids`, Money `PredKontac`). */
   accounting: string | null;
-  /** Členění DPH (`typ:ids`). */
+  /** Členění DPH (Pohoda `typ:ids`, Money `KodDPH`). */
   classificationVat: string | null;
-  /** Číselná řada (`typ:ids`). */
+  /** Číselná řada (Pohoda `typ:ids`, Money `Rada`). */
   numberSeries: string | null;
   /** Členění DPH of a received document without VAT deduction (`vatDeductible` false); received rows only. */
   classificationVatNonDeductible: string | null;
 }
 
-/** `GET/PUT /api/settings/accounting` — GET returns every direction × doc type row. */
-export interface AccountingSettings {
-  pohoda: {
-    /** `dataPack/@ico`; null → the company IČO. */
-    ico: string | null;
-    codes: PohodaCodes[];
-  };
-  /** Money S3 codes (3c); omitted by the server until then, passed back unchanged when present. */
-  money?: { codes: unknown[] };
+/** One program's section: the accounting unit override and every direction × doc type row. */
+export interface AccountingProgramSettings {
+  /** Pohoda `dataPack/@ico`, Money `MoneyData/@ICAgendy`; null → the company IČO. */
+  ico: string | null;
+  codes: AccountingCodes[];
 }
+
+/** `GET/PUT /api/settings/accounting` — GET returns both sections with every direction × doc type row. */
+export type AccountingSettings = Record<AccountingProgram, AccountingProgramSettings>;

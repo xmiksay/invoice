@@ -3,16 +3,17 @@
 //! loads the [`Source`]s and streams what this writes.
 
 use anyhow::Context as _;
-use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
+use super::doc::{cut, dates, fits, shown_number, text};
+use super::export::Ctx;
 use super::pohoda_summary::{self as summary, Foreign, Ns};
-use super::settings::{AccountingSettings, CodeRow};
+use super::settings::CodeRow;
 use crate::csvio::export_row::{Kind, Source, czk_recap, party};
 use crate::document::handlers::dto::BankSnapshot;
 use crate::document::line::{PaymentMethod, VatMode};
 use crate::isdoc::xml::Xml;
-use crate::settings::doc_type::{DocType, ISSUED};
+use crate::settings::doc_type::DocType;
 
 const NS_DAT: &str = "http://www.stormware.cz/schema/version_2/data.xsd";
 const NS_INV: &str = "http://www.stormware.cz/schema/version_2/invoice.xsd";
@@ -21,17 +22,6 @@ const NS_TYP: &str = "http://www.stormware.cz/schema/version_2/type.xsd";
 
 /// The end of the file, after the last item.
 pub const TAIL: &str = "</dat:dataPack>\n";
-
-/// What every item of one export shares.
-pub struct Ctx {
-    /// `dataPack/@ico`: the settings override, else the company IČO.
-    pub ico: Option<String>,
-    pub settings: AccountingSettings,
-    /// The `price3` rate: the first active Settings rate other than 0 / 12 / 21.
-    pub third: Option<Decimal>,
-    pub from: NaiveDate,
-    pub to: NaiveDate,
-}
 
 /// The text in Windows-1250; a character outside it becomes a numeric
 /// character reference (`&#8364;`), which is valid in XML text and
@@ -82,37 +72,6 @@ fn agenda(doc_type: DocType, issued: bool) -> anyhow::Result<(Ns, Option<&'stati
         (other, _) => anyhow::bail!("{} is not exported to Pohoda", other.as_str()),
     };
     Ok((Ns::Inv, Some(t)))
-}
-
-/// The label in `text` (Czech, as the UI names the types).
-pub fn label(doc_type: DocType, issued: bool) -> &'static str {
-    match (doc_type, issued) {
-        (DocType::Invoice, true) => "Faktura",
-        (DocType::Invoice, false) => "Přijatá faktura",
-        (DocType::CreditNote, true) => "Dobropis",
-        (DocType::CreditNote, false) => "Přijatý dobropis",
-        (DocType::DebitNote, true) => "Vrubopis",
-        (DocType::DebitNote, false) => "Přijatý vrubopis",
-        (DocType::AdvanceTaxDoc, true) => "Daňový doklad k platbě",
-        (DocType::AdvanceTaxDoc, false) => "Přijatý daňový doklad k platbě",
-        (DocType::AdvanceCreditNote, true) => "Opravný daňový doklad k platbě",
-        (DocType::AdvanceCreditNote, false) => "Přijatý opravný doklad k platbě",
-        (DocType::Simplified, true) => "Zjednodušený daňový doklad",
-        (DocType::Simplified, false) => "Přijatý zjednodušený daňový doklad",
-        _ => "Doklad",
-    }
-}
-
-/// `s` when it fits `max` characters (an XSD `maxLength`), else an error:
-/// a number is never cut.
-fn fits<'a>(what: &str, s: &'a str, max: usize) -> anyhow::Result<&'a str> {
-    anyhow::ensure!(s.chars().count() <= max, "{what} longer than {max}: {s}");
-    Ok(s)
-}
-
-/// The first `max` characters (address lines Pohoda keeps shorter).
-fn cut(s: &str, max: usize) -> String {
-    s.trim().chars().take(max).collect()
 }
 
 fn ids(x: &mut Xml, name: &str, code: Option<&String>) {
@@ -200,15 +159,6 @@ fn classification(x: &mut Xml, ns: Ns, codes: Option<&CodeRow>, non_deductible: 
     }
 }
 
-/// The number the file names a document by (issued: ours, received: the
-/// supplier's), for messages.
-pub fn shown_number(doc: &crate::document::entity::document::Model) -> Option<&str> {
-    match doc.direction.as_str() {
-        ISSUED => doc.number.as_deref(),
-        _ => doc.supplier_number.as_deref().or(doc.number.as_deref()),
-    }
-}
-
 /// One `dat:dataPackItem` (UTF-8 text, [`encode`]d by the caller). An
 /// error makes the document unexportable (an unmappable rate, a number too
 /// long for Pohoda, an undecodable snapshot…).
@@ -223,25 +173,11 @@ pub fn item(s: &Source, ctx: &Ctx) -> anyhow::Result<String> {
     let (ns, invoice_type) = agenda(doc_type, issued)?;
     let vat_free = matches!(vat_mode, VatMode::Exempt | VatMode::NonPayer);
     let slots = summary::slots(&czk_recap(doc, s.recap)?, vat_free, ctx.third)?;
-    let codes: Option<&CodeRow> = ctx.settings.pohoda_codes(&doc.direction, doc_type);
+    let codes: Option<&CodeRow> = ctx.settings.pohoda.row(&doc.direction, doc_type);
     let code = |f: fn(&CodeRow) -> &Option<String>| codes.and_then(|c| f(c).as_ref());
-    let tax_date = doc.tax_point_date.or(doc.received_date.filter(|_| !issued));
-    let accounting_date = match issued {
-        true => tax_date,
-        false => doc.received_date.or(tax_date),
-    };
+    let (tax_date, accounting_date) = dates(doc, issued);
     let shown = shown_number(doc);
-    let original = s.parent.and_then(|p| match issued {
-        true => p.number.as_deref(),
-        false => p.supplier_number.as_deref().or(p.number.as_deref()),
-    });
-    let mut text = label(doc_type, issued).to_string();
-    for (sep, n) in [(" ", shown), (" k ", original)] {
-        if let Some(n) = n {
-            text.push_str(sep);
-            text.push_str(n);
-        }
-    }
+    let text = text(s, doc_type, issued);
 
     let id = doc.id.to_string();
     let mut x = Xml::fragment();

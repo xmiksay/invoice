@@ -4,11 +4,8 @@
 
 use rust_decimal::{Decimal, RoundingStrategy};
 
+use super::doc::{HIGH, LOW, Rates, amount, rates};
 use crate::isdoc::xml::Xml;
-
-/// The rates of Pohoda's fixed slots.
-const HIGH: Decimal = Decimal::from_parts(21, 0, 0, false, 0);
-const LOW: Decimal = Decimal::from_parts(12, 0, 0, false, 0);
 
 /// `(base, VAT)` per slot, in CZK, positive as stored.
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -19,35 +16,34 @@ pub struct Slots {
     pub third: Option<(Decimal, Decimal)>,
 }
 
-fn add(slot: &mut Option<(Decimal, Decimal)>, base: Decimal, vat: Decimal) {
-    let (b, v) = slot.get_or_insert((Decimal::ZERO, Decimal::ZERO));
-    *b += base;
-    *v += vat;
-}
-
-/// The recap `(rate, base CZK, VAT CZK)` in slots: 21 % high, 12 % low,
-/// 0 % none, `third` (the first other active Settings rate) `price3`; any
-/// other rate → error (the document is skipped). `vat_free` (exempt /
-/// non-payer): every base goes to `priceNone`, there is no VAT to place.
+/// The recap `(rate, base CZK, VAT CZK)` in slots: the standard classes
+/// ([`rates`]: 21 % high, 12 % low, 0 % / VAT-free none) and `third` (the
+/// first other active Settings rate) `price3`; any other rate → error (the
+/// document is unexportable).
 pub fn slots(
     recap: &[(Decimal, Decimal, Decimal)],
     vat_free: bool,
     third: Option<Decimal>,
 ) -> anyhow::Result<Slots> {
-    let mut s = Slots::default();
-    for &(rate, base, vat) in recap {
-        let rate = rate.normalize();
-        if vat_free || rate.is_zero() {
-            *s.none.get_or_insert(Decimal::ZERO) += base + vat;
-        } else if rate == HIGH {
-            add(&mut s.high, base, vat);
-        } else if rate == LOW {
-            add(&mut s.low, base, vat);
-        } else if third.map(|t| t.normalize()) == Some(rate) {
-            add(&mut s.third, base, vat);
-        } else {
-            anyhow::bail!("VAT rate {rate} % maps to no Pohoda rate slot");
-        }
+    let Rates {
+        none,
+        low,
+        high,
+        other,
+    } = rates(recap, vat_free);
+    let third = third.map(|t| t.normalize());
+    let mut s = Slots {
+        none,
+        low,
+        high,
+        third: None,
+    };
+    for (rate, base, vat) in other {
+        anyhow::ensure!(
+            Some(rate) == third,
+            "VAT rate {rate} % maps to no Pohoda rate slot"
+        );
+        s.third = Some((base, vat));
     }
     Ok(s)
 }
@@ -92,16 +88,6 @@ pub fn rounding_document(total: Decimal, rounding: Decimal) -> Option<&'static s
     .into_iter()
     .find(|(_, step)| rounded(*step) == rounding)
     .map(|(mode, _)| mode)
-}
-
-/// An amount as `xsd:double`, two decimals.
-pub fn amount(x: Decimal) -> String {
-    let x = x.round_dp(2);
-    if x.is_zero() {
-        "0.00".into()
-    } else {
-        format!("{x:.2}")
-    }
 }
 
 /// The foreign currency block (`typ:typeCurrencyForeign`).
@@ -255,13 +241,6 @@ mod tests {
             None,
             "no mode rounds up by 0.60"
         );
-    }
-
-    #[test]
-    fn amounts() {
-        assert_eq!(amount(d("1210")), "1210.00");
-        assert_eq!(amount(d("-121.5")), "-121.50");
-        assert_eq!(amount(d("0") * d("-1")), "0.00");
     }
 
     #[test]
