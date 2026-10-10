@@ -45,7 +45,7 @@ Space context:
 
 ## Memberships and roles
 Table `space_members` (space_id, user_id, role, created_at; unique pair). The creator is `owner`. Invitations and
-member management are phase 4b; in 4a a space has exactly its creator.
+member management: [members.md](members.md) (4b).
 
 | role | may |
 |---|---|
